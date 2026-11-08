@@ -1,13 +1,20 @@
 <?php
 session_start();
 require("db.php");
+require("google_config.php");
 
 if (isset($_SESSION['username'])) {
-    header("Location: dashboard.php");
+    header("Location: dashboard");
     exit();
 }
 
 $message = "";
+
+// errors sent back from google-callback.php
+if (isset($_SESSION['login_error'])) {
+    $message = $_SESSION['login_error'];
+    unset($_SESSION['login_error']);
+}
 
 if (isset($_POST['login'])) {
 
@@ -24,7 +31,10 @@ if (isset($_POST['login'])) {
 
         $user = mysqli_fetch_assoc($result);
 
-        if (password_verify($password, $user['password'])) {
+        if (empty($user['password'])) {
+            $message = "This account uses Google sign-in. Please use Continue with Google.";
+
+        } elseif (password_verify($password, $user['password'])) {
 
             session_regenerate_id(true);
 
@@ -36,7 +46,7 @@ if (isset($_POST['login'])) {
                 setcookie(session_name(), session_id(), time() + 60 * 60 * 24 * 30, "/");
             }
 
-            header("Location: dashboard.php");
+            header("Location: dashboard");
             exit();
 
         } else {
@@ -133,18 +143,34 @@ if (isset($_POST['login'])) {
 
             <div class="divider">or</div>
 
-            <button type="button" class="btn-google">
-                <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.9 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
-                Continue with Google
-            </button>
+            <div id="google-btn" class="google-wrap"></div>
 
-            <p class="switch">New to Camigo? <a href="register.php">Create an account</a></p>
+            <p class="switch">New to Camigo? <a href="register">Create an account</a></p>
 
         </div>
     </main>
 
 </div>
 
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+window.addEventListener("load", function () {
+    if (!window.google || !google.accounts) return;
+    google.accounts.id.initialize({
+        client_id: "<?php echo GOOGLE_CLIENT_ID; ?>",
+        ux_mode: "redirect",
+        login_uri: "<?php echo htmlspecialchars(google_login_uri()); ?>"
+    });
+    var el = document.getElementById("google-btn");
+    google.accounts.id.renderButton(el, {
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        shape: "rectangular",
+        width: Math.min(el.offsetWidth, 400)
+    });
+});
+</script>
 <script src="script.js"></script>
 </body>
 </html>

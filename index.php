@@ -3,7 +3,7 @@ session_start();
 
 // already logged in? skip the splash
 if (isset($_SESSION['username'])) {
-    header("Location: dashboard.php");
+    header("Location: dashboard");
     exit();
 }
 ?>
@@ -13,7 +13,7 @@ if (isset($_SESSION['username'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Camigo</title>
-    <noscript><meta http-equiv="refresh" content="2;url=login.php"></noscript>
+    <noscript><meta http-equiv="refresh" content="2;url=login"></noscript>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Instrument+Sans:wght@400;500&display=swap" rel="stylesheet">
@@ -255,7 +255,7 @@ if (isset($_SESSION['username'])) {
 <script>
     var go = function () {
         document.body.classList.add("leave");
-        setTimeout(function () { window.location.href = "login.php"; }, 550);
+        setTimeout(function () { window.location.href = "login"; }, 550);
     };
 
     var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

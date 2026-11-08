@@ -1,4 +1,4 @@
-<a class="logo" href="login.php" aria-label="Camigo home">
+<a class="logo" href="login" aria-label="Camigo home">
     <svg viewBox="0 0 48 48" aria-hidden="true">
         <defs>
             <linearGradient id="cg" x1="0" y1="0" x2="1" y2="1">

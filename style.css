@@ -285,6 +285,8 @@ input:focus {
 .btn-google:hover { background: #fbfbfe; border-color: #c2c5e0; }
 .btn-google svg { width: 18px; height: 18px; }
 
+.google-wrap { display: flex; justify-content: center; min-height: 46px; }
+
 .switch { margin-top: 20px; text-align: center; font-size: 13px; color: var(--muted); }
 
 /* messages */

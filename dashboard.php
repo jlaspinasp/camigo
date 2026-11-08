@@ -2,7 +2,13 @@
 session_start();
 
 if (!isset($_SESSION['username'])) {
-    header("Location: login.php");
+    header("Location: login");
+    exit();
+}
+
+// Google sign-ups must finish their profile first
+if (!empty($_SESSION['needs_profile'])) {
+    header("Location: complete-profile");
     exit();
 }
 
