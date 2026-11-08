@@ -12,6 +12,13 @@ if (!empty($_SESSION['needs_profile'])) {
     exit();
 }
 
+require("db.php");
+require("auth.php");
+$me = current_user($conn);
+$isAdmin = $me && ($me['role'] ?? 'user') === 'admin';
+
+$urow = get_user_row($conn, $_SESSION['username']);
+
 $first = $_SESSION['first_name'];
 $initial = strtoupper(substr($first, 0, 1));
 ?>
@@ -32,9 +39,12 @@ $initial = strtoupper(substr($first, 0, 1));
     <?php include("logo.php"); ?>
 
     <div class="user">
-        <span class="avatar"><?php echo htmlspecialchars($initial); ?></span>
-        <span class="name"><?php echo htmlspecialchars($first); ?></span>
-        <a href="logout.php" class="out">Log out</a>
+        <?php if ($isAdmin) { ?><a href="admin-clubs" class="out">Admin</a><?php } ?>
+        <a href="profile" class="me-link" title="Your profile">
+            <span class="avatar"><?php echo $urow ? avatar_inner($urow) : htmlspecialchars($initial); ?></span>
+            <span class="name"><?php echo htmlspecialchars($first); ?></span>
+        </a>
+        <a href="logout" class="out">Log out</a>
     </div>
 </header>
 

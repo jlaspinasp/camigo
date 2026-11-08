@@ -9,12 +9,20 @@ if (isset($_POST['register'])) {
     $first_name = trim($_POST['first_name']);
     $last_name = trim($_POST['last_name']);
     $middle_initial = trim($_POST['middle_initial']);
+    if ($middle_initial !== "") {
+        $middle_initial = function_exists('mb_strtoupper') ? mb_strtoupper($middle_initial, 'UTF-8') : strtoupper($middle_initial);
+    }
     $birthday = $_POST['birthday'];
     $username = trim($_POST['username']);
 
     if ($_POST['password'] !== $_POST['confirm_password']) {
 
         $message = "Your passwords do not match.";
+        $message_class = "error";
+
+    } elseif ($middle_initial !== "" && !preg_match('/^\p{L}$/u', $middle_initial)) {
+
+        $message = "Middle initial must be a single letter.";
         $message_class = "error";
 
     } elseif (strlen($_POST['password']) < 8) {
@@ -107,8 +115,8 @@ function old($name) {
                             <input type="text" name="last_name" id="last_name" required value="<?php echo old('last_name'); ?>">
                         </div>
                         <div>
-                            <label for="middle_initial">M.I.</label>
-                            <input type="text" name="middle_initial" id="middle_initial" maxlength="5" value="<?php echo old('middle_initial'); ?>">
+                            <label for="middle_initial">M.I. <span class="opt">(opt.)</span></label>
+                            <input type="text" name="middle_initial" id="middle_initial" maxlength="1" autocomplete="off" value="<?php echo old('middle_initial'); ?>">
                         </div>
                     </div>
                 </div>

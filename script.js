@@ -35,3 +35,11 @@ if (pw && cpw && hint) {
     pw.addEventListener("input", check);
     cpw.addEventListener("input", check);
 }
+
+// middle initial: one letter only, always uppercase
+var mi = document.getElementById("middle_initial");
+if (mi) {
+    mi.addEventListener("input", function () {
+        mi.value = mi.value.replace(/[^\p{L}]/gu, "").slice(0, 1).toUpperCase();
+    });
+}

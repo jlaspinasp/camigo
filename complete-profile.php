@@ -34,12 +34,17 @@ if (isset($_POST['save'])) {
     $username       = trim($_POST['username']);
     $middle_initial = trim($_POST['middle_initial']);
     $birthday       = $_POST['birthday'];
+    if ($middle_initial !== "") {
+        $middle_initial = function_exists('mb_strtoupper') ? mb_strtoupper($middle_initial, 'UTF-8') : strtoupper($middle_initial);
+    }
 
     $d = DateTime::createFromFormat('Y-m-d', $birthday);
     $validDate = $d && $d->format('Y-m-d') === $birthday && $birthday <= date('Y-m-d');
 
     if (!preg_match('/^[A-Za-z0-9._]{3,30}$/', $username)) {
         $message = "Usernames need 3 to 30 letters, numbers, dots or underscores.";
+    } elseif ($middle_initial !== "" && !preg_match('/^\p{L}$/u', $middle_initial)) {
+        $message = "Middle initial must be a single letter.";
     } elseif (!$validDate) {
         $message = "Please enter a valid birthday.";
     } else {
@@ -112,7 +117,7 @@ function val($post, $fallback) {
 
                 <div class="field">
                     <label for="middle_initial">Middle initial <span class="opt">(optional)</span></label>
-                    <input type="text" name="middle_initial" id="middle_initial" maxlength="5"
+                    <input type="text" name="middle_initial" id="middle_initial" maxlength="1" autocomplete="off"
                            value="<?php echo val('middle_initial', $user['middle_initial']); ?>">
                 </div>
 
@@ -134,5 +139,6 @@ function val($post, $fallback) {
 
 </div>
 
+<script src="script.js"></script>
 </body>
 </html>
