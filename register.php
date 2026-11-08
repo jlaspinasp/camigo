@@ -89,7 +89,7 @@ function old($name) {
                 <div class="msg <?php echo $message_class; ?>">
                     <?php echo htmlspecialchars($message); ?>
                     <?php if ($message_class == "success") { ?>
-                        <a href="index.php">Go to log in</a>
+                        <a href="login.php">Go to log in</a>
                     <?php } ?>
                 </div>
             <?php } ?>
@@ -148,7 +148,7 @@ function old($name) {
 
             </form>
 
-            <p class="switch">Already have an account? <a href="index.php">Log in</a></p>
+            <p class="switch">Already have an account? <a href="login.php">Log in</a></p>
 
         </div>
     </main>
