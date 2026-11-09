@@ -5,9 +5,9 @@
         <?php if (($me['role'] ?? 'user') === 'admin') { ?><a href="admin-clubs" class="out">Admin</a><?php } ?>
         <a href="students" class="out">Students</a>
         <a href="clubs" class="out">Clubs</a>
+        <a href="events" class="out">Events</a>
         <?php $unreadMsg = unread_messages($conn, $me['id']); include("msg-icon.php"); ?>
         <?php $unread = unread_count($conn, $me['id']); include("bell.php"); ?>
-        <a href="dashboard" class="out">Dashboard</a>
         <a href="profile" class="me-link">
             <span class="avatar"><?php echo avatar_inner($me); ?></span>
             <span class="name"><?php echo e($me['first_name']); ?></span>

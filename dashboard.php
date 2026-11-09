@@ -14,6 +14,7 @@ if (!empty($_SESSION['needs_profile'])) {
 
 require("db.php");
 require("auth.php");
+require("events-lib.php");
 $me = current_user($conn);
 $isAdmin = $me && ($me['role'] ?? 'user') === 'admin';
 
@@ -38,6 +39,14 @@ if ($urow) {
         "ii", array($urow['id'], $urow['id']))['rows'];
 }
 
+// next events happening on campus
+$soon = events_query($conn, $urow ? $urow['id'] : 0, EVENT_END_SQL . " >= ?", "s", array(event_now_sql()), "e.start_at ASC", 3);
+$upcoming = $soon['rows'];
+
+$flash = flash_get();
+$flashText = $flash ? $flash[0] : "";
+$flashClass = $flash ? $flash[1] : "";
+
 $first = $_SESSION['first_name'];
 $initial = strtoupper(substr($first, 0, 1));
 ?>
@@ -61,6 +70,7 @@ $initial = strtoupper(substr($first, 0, 1));
         <?php if ($isAdmin) { ?><a href="admin-clubs" class="out">Admin</a><?php } ?>
         <a href="students" class="out">Students</a>
         <a href="clubs" class="out">Clubs</a>
+        <a href="events" class="out">Events</a>
         <?php include("msg-icon.php"); ?>
         <?php include("bell.php"); ?>
         <a href="profile" class="me-link" title="Your profile">
@@ -74,9 +84,13 @@ $initial = strtoupper(substr($first, 0, 1));
 
 <main class="main">
 
+    <?php if ($flashText != "") { ?>
+        <div class="msg <?php echo e($flashClass); ?>" style="margin-bottom:20px"><?php echo e($flashText); ?></div>
+    <?php } ?>
+
     <section class="hero">
         <h1>Welcome, <?php echo htmlspecialchars($first); ?>.</h1>
-        <p>You're in. Clubs, student projects and campus events will show up here as Camigo grows.</p>
+        <p>You're in. Clubs, events and student projects will show up here as Camigo grows.</p>
     </section>
 
     <?php if ($know) { ?>
@@ -101,6 +115,16 @@ $initial = strtoupper(substr($first, 0, 1));
     </section>
     <?php } ?>
 
+    <?php if ($upcoming) { ?>
+    <div class="strip-head">
+        <h2 class="section-title">Upcoming events</h2>
+        <a href="events">See all events</a>
+    </div>
+    <div class="ev-list">
+        <?php foreach ($upcoming as $ue) { render_event_card($ue, 'dashboard'); } ?>
+    </div>
+    <?php } ?>
+
     <h2 class="section-title">What's coming</h2>
 
     <section class="tiles">
@@ -120,7 +144,7 @@ $initial = strtoupper(substr($first, 0, 1));
             <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>
             <h3>Events</h3>
             <p>See what's happening on campus this week.</p>
-            <span class="soon">Coming soon</span>
+            <a href="events" class="go">Browse events</a>
         </div>
     </section>
 

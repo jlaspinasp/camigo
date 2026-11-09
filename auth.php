@@ -448,6 +448,8 @@ function notif_look($type) {
     $userp = '<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5M19 8v6M16 11h6"/>';
     $bell  = '<path d="M6 16v-5a6 6 0 0112 0v5l1.5 2h-15L6 16zM10 21h4"/>';
     $mail  = '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7.5l8 6 8-6"/>';
+    $chat  = '<path d="M5 4.5h14a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-8L6.5 20.5V16.5H5A1.5 1.5 0 013.5 15V6A1.5 1.5 0 015 4.5z"/>';
+    $cal   = '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>';
 
     switch ($type) {
         case 'club_approved':
@@ -457,6 +459,10 @@ function notif_look($type) {
         case 'removed':       return array('bad', $cross);
         case 'join_request':  return array('info', $userp);
         case 'club_invite':   return array('invite', $mail);
+        case 'club_update':   return array('info', $chat);
+        case 'event_new':
+        case 'event_update':  return array('info', $cal);
+        case 'event_cancelled': return array('bad', $cal);
         default:              return array('info', $bell);
     }
 }
