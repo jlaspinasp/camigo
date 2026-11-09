@@ -11,6 +11,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id     = (int)($_POST['club_id'] ?? 0);
     $action = $_POST['action'] ?? '';
 
+    // needed to tell the creator what happened
+    $cbRows = ($id > 0) ? db_run($conn, "SELECT name, created_by FROM clubs WHERE id = ? LIMIT 1", "i", array($id))['rows'] : array();
+    $cb = $cbRows ? $cbRows[0] : null;
+
     if (!csrf_ok() || $id <= 0) {
         flash_set("Your session expired. Please try again.", "error");
 
@@ -20,6 +24,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             "UPDATE clubs SET status = 'approved', review_note = NULL, reviewed_by = ?, reviewed_at = NOW() WHERE id = ? AND status = 'pending'",
             "ii", array($me['id'], $id));
         if ($r['ok'] && $r['affected'] > 0) {
+            // the person who created the club becomes its owner
+            db_run($conn,
+                "INSERT IGNORE INTO club_members (club_id, user_id, role) SELECT id, created_by, 'owner' FROM clubs WHERE id = ?",
+                "i", array($id));
+            if ($cb) {
+                notify($conn, $cb['created_by'], 'club_approved',
+                    'Your club "' . $cb['name'] . '" was approved. You are now its owner.', 'club?id=' . $id);
+            }
             flash_set("Club approved.", "success");
         } else {
             flash_set("That request was already reviewed.", "error");
@@ -35,6 +47,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             "UPDATE clubs SET status = 'rejected', name_key = NULL, review_note = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ? AND status = 'pending'",
             "sii", array($note, $me['id'], $id));
         if ($r['ok'] && $r['affected'] > 0) {
+            if ($cb) {
+                notify($conn, $cb['created_by'], 'club_rejected',
+                    'Your club request "' . $cb['name'] . '" was not approved.' . ($note !== '' ? ' Reason: ' . $note : ''), 'create-club');
+            }
             flash_set("Club rejected.", "success");
         } else {
             flash_set("That request was already reviewed.", "error");
@@ -89,15 +105,7 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
 </head>
 <body>
 
-<header class="topbar">
-    <?php include("logo.php"); ?>
-    <div class="user">
-        <a href="dashboard" class="out">Dashboard</a>
-        <span class="avatar"><?php echo e($initial); ?></span>
-        <span class="name"><?php echo e($me['first_name']); ?></span>
-        <a href="logout" class="out">Log out</a>
-    </div>
-</header>
+<?php include("topbar.php"); ?>
 
 <main class="main narrow">
 

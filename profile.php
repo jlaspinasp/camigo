@@ -26,6 +26,7 @@ $meta = array();
 $interests = array();
 $links = array();
 $pct = 0;
+$myClubs = array();
 
 if ($row && !$hidden) {
     $full = trim($row['first_name']
@@ -55,6 +56,13 @@ if ($row && !$hidden) {
         count($links) > 0,
     );
     $pct = (int)round(count(array_filter($done)) / count($done) * 100);
+
+    // clubs this person belongs to
+    $cr = db_run($conn,
+        "SELECT c.id, c.name, m.role FROM club_members m JOIN clubs c ON c.id = m.club_id
+         WHERE m.user_id = ? AND m.status = 'active' AND c.status = 'approved' ORDER BY m.joined_at DESC",
+        "i", array($row['id']));
+    $myClubs = $cr['rows'];
 }
 ?>
 <!DOCTYPE html>
@@ -92,7 +100,8 @@ if ($row && !$hidden) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="3"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
             </div>
             <h2>This profile is private</h2>
-            <p class="empty">This student hasn't made their profile visible to others.</p>
+            <p class="empty">@<?php echo e($row['username']); ?> has set their profile to private, so only they can see it.</p>
+            <p class="empty" style="margin-top:14px"><a href="javascript:history.back()">&larr; Go back</a></p>
         </section>
 
     <?php } else { ?>
@@ -157,7 +166,17 @@ if ($row && !$hidden) {
 
         <section class="panel">
             <h2>Clubs</h2>
-            <p class="empty"><?php echo $isOwn ? "You haven't joined any clubs yet." : "No clubs to show yet."; ?> Clubs you join will appear here.</p>
+            <?php if ($myClubs) { ?>
+                <div class="chip-row">
+                    <?php foreach ($myClubs as $mc) { ?>
+                        <a class="chip" href="club?id=<?php echo (int)$mc['id']; ?>"><?php echo e($mc['name']); ?><?php if ($mc['role'] === 'owner') { ?> <small>&middot; Owner</small><?php } ?></a>
+                    <?php } ?>
+                </div>
+            <?php } elseif ($isOwn) { ?>
+                <p class="empty">You haven't joined any clubs yet. <a href="clubs">Browse clubs</a></p>
+            <?php } else { ?>
+                <p class="empty">No clubs to show yet.</p>
+            <?php } ?>
         </section>
 
         <?php if ($links || $isOwn) { ?>

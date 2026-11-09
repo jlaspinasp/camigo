@@ -536,6 +536,149 @@ textarea:focus, select:focus { outline: none; border-color: var(--indigo); box-s
     .p-name { font-size: 24px; }
 }
 
+/* ---------- CLUB BROWSING ---------- */
+.page-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.tile .go {
+    display: inline-block; margin-top: 16px;
+    padding: 4px 12px; border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+    color: var(--indigo-dark); background: #eceefd;
+}
+.tile .go:hover { background: #dfe2fb; text-decoration: none; }
+
+.tabs { display: flex; gap: 6px; margin-top: 24px; }
+.tabs a {
+    padding: 8px 16px; border-radius: 999px;
+    font-size: 14px; font-weight: 600; color: var(--muted);
+}
+.tabs a:hover { background: #f0f1fb; text-decoration: none; }
+.tabs a.active { color: var(--indigo-dark); background: #eceefd; }
+
+.filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 16px 0 22px; }
+.filters input[type="text"] { flex: 1; min-width: 200px; }
+.filters select { width: auto; min-width: 170px; }
+.filters .cancel { font-size: 14px; color: var(--muted); }
+
+.club-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.club-card {
+    display: flex; flex-direction: column;
+    padding: 20px;
+    background: var(--white);
+    border: 1px solid var(--line); border-radius: 18px;
+}
+.club-top { display: flex; align-items: center; gap: 14px; }
+.club-tile {
+    flex: none; width: 48px; height: 48px;
+    display: grid; place-items: center;
+    border-radius: 14px;
+    font-family: var(--display); font-weight: 700; font-size: 20px;
+    color: var(--midnight);
+    background: linear-gradient(135deg, #ffc857, #ff9d6b);
+}
+.club-tile.t1 { background: linear-gradient(135deg, #9fb0ff, #6f7bff); }
+.club-tile.t2 { background: linear-gradient(135deg, #ff9db5, #ff6b6b); }
+.club-info { min-width: 0; }
+.club-info h3 { margin-bottom: 4px; font-family: var(--display); font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.club-text {
+    flex: 1; margin-top: 14px;
+    font-size: 14px; line-height: 1.55; color: var(--ink);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+}
+.club-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.btn-ghost { color: var(--ink); background: var(--white); border: 1px solid var(--line); }
+.btn-ghost:hover { background: #f0f1fb; }
+.chip small { font-size: 11px; opacity: 0.8; }
+
+@media (max-width: 700px) {
+    .club-grid { grid-template-columns: 1fr; }
+}
+
+/* ---------- JOIN REQUESTS ---------- */
+.top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.btn-sm .count {
+    min-width: 20px; margin-left: 8px; padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 12px; text-align: center;
+    color: #fff; background: var(--coral);
+}
+.foot-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+a.badge:hover { text-decoration: none; filter: brightness(0.96); }
+
+.req { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.req-who { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.req-who strong { font-size: 15px; }
+.req-actions { display: flex; gap: 8px; }
+.p-avatar.tiny { width: 46px; height: 46px; margin: 0; flex: none; font-size: 18px; border-width: 2px; }
+
+/* ---------- CLUB PAGE ---------- */
+.crumb { margin-bottom: 14px; font-size: 14px; }
+.club-info h3 a { color: inherit; }
+.club-info h3 a:hover { text-decoration: underline; }
+a.chip:hover { text-decoration: none; background: #dfe2fb; }
+
+.club-tile.big {
+    width: 88px; height: 88px; margin-top: -44px;
+    border: 4px solid var(--white); border-radius: 24px;
+    font-size: 36px;
+}
+
+.member-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.member { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; }
+.member .grow { flex: 1; min-width: 0; }
+.member strong { font-size: 14px; overflow-wrap: anywhere; }
+.member a.plain { color: var(--ink); }
+.member a.plain:hover { color: var(--indigo); }
+
+@media (max-width: 700px) {
+    .member-list { grid-template-columns: 1fr; }
+}
+
+/* ---------- NOTIFICATIONS ---------- */
+.bell {
+    position: relative;
+    width: 38px; height: 38px;
+    display: grid; place-items: center;
+    border: 1px solid var(--line); border-radius: 50%;
+    color: var(--ink);
+}
+.bell:hover { background: #f0f1fb; text-decoration: none; }
+.bell svg { width: 19px; height: 19px; }
+.bell .dot {
+    position: absolute; top: -5px; right: -5px;
+    min-width: 18px; height: 18px; padding: 0 5px;
+    display: grid; place-items: center;
+    border-radius: 999px;
+    font-size: 11px; font-weight: 700; line-height: 1;
+    color: #fff; background: var(--coral);
+    box-shadow: 0 0 0 2px var(--white);
+}
+
+.notif-list { display: grid; gap: 10px; margin-top: 24px; }
+.notif {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px;
+    color: var(--ink);
+    background: var(--white);
+    border: 1px solid var(--line); border-radius: 14px;
+    font-weight: 400;
+}
+.notif:hover { text-decoration: none; border-color: #c2c5e0; }
+.notif.unread { background: #f4f5ff; border-color: #d5d8f7; }
+.n-ic { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; }
+.n-ic svg { width: 19px; height: 19px; }
+.n-ic.good { color: #176b40; background: #effaf3; }
+.n-ic.bad  { color: #a82d2d; background: #fff1f1; }
+.n-ic.info { color: var(--indigo-dark); background: #eceefd; }
+.n-text { flex: 1; min-width: 0; }
+.n-msg { display: block; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.notif.unread .n-msg { font-weight: 600; }
+.n-time { display: block; margin-top: 3px; font-size: 12.5px; color: var(--muted); }
+.u-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--indigo); }
+
 /* ---------- RESPONSIVE ---------- */
 @media (max-width: 960px) {
     .auth, .auth.flip { grid-template-columns: 1fr; gap: 0; padding: 0 20px 40px; align-content: start; }

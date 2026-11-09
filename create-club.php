@@ -100,16 +100,7 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
 </head>
 <body>
 
-<header class="topbar">
-    <?php include("logo.php"); ?>
-    <div class="user">
-        <?php if (($me['role'] ?? 'user') === 'admin') { ?><a href="admin-clubs" class="out">Admin</a><?php } ?>
-        <a href="dashboard" class="out">Dashboard</a>
-        <span class="avatar"><?php echo e($initial); ?></span>
-        <span class="name"><?php echo e($me['first_name']); ?></span>
-        <a href="logout" class="out">Log out</a>
-    </div>
-</header>
+<?php include("topbar.php"); ?>
 
 <main class="main narrow">
 

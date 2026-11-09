@@ -152,7 +152,7 @@ if (isset($_POST['login'])) {
 
 </div>
 
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://accounts.google.com/gsi/client?hl=en" async defer></script>
 <script>
 window.addEventListener("load", function () {
     if (!window.google || !google.accounts) return;
@@ -167,6 +167,7 @@ window.addEventListener("load", function () {
         size: "large",
         text: "continue_with",
         shape: "rectangular",
+        locale: "en",
         width: Math.min(el.offsetWidth, 400)
     });
 });

@@ -3,6 +3,8 @@
     <?php include("logo.php"); ?>
     <div class="user">
         <?php if (($me['role'] ?? 'user') === 'admin') { ?><a href="admin-clubs" class="out">Admin</a><?php } ?>
+        <a href="clubs" class="out">Clubs</a>
+        <?php $unread = unread_count($conn, $me['id']); include("bell.php"); ?>
         <a href="dashboard" class="out">Dashboard</a>
         <a href="profile" class="me-link">
             <span class="avatar"><?php echo avatar_inner($me); ?></span>

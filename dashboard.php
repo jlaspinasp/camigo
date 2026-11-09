@@ -18,6 +18,7 @@ $me = current_user($conn);
 $isAdmin = $me && ($me['role'] ?? 'user') === 'admin';
 
 $urow = get_user_row($conn, $_SESSION['username']);
+$unread = $urow ? unread_count($conn, $urow['id']) : 0;
 
 $first = $_SESSION['first_name'];
 $initial = strtoupper(substr($first, 0, 1));
@@ -40,6 +41,8 @@ $initial = strtoupper(substr($first, 0, 1));
 
     <div class="user">
         <?php if ($isAdmin) { ?><a href="admin-clubs" class="out">Admin</a><?php } ?>
+        <a href="clubs" class="out">Clubs</a>
+        <?php include("bell.php"); ?>
         <a href="profile" class="me-link" title="Your profile">
             <span class="avatar"><?php echo $urow ? avatar_inner($urow) : htmlspecialchars($initial); ?></span>
             <span class="name"><?php echo htmlspecialchars($first); ?></span>
@@ -61,8 +64,8 @@ $initial = strtoupper(substr($first, 0, 1));
         <div class="tile">
             <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M17.5 14.5c2.5 0 4 1.5 4 4"/></svg></div>
             <h3>Clubs</h3>
-            <p>Discover student organizations and follow the ones you like.</p>
-            <span class="soon">Coming soon</span>
+            <p>Discover student organizations and join the ones you like.</p>
+            <a href="clubs" class="go">Browse clubs</a>
         </div>
         <div class="tile">
             <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 10l2.5 2.5L16 8"/></svg></div>

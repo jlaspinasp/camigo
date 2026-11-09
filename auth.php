@@ -42,7 +42,7 @@ function current_user($conn) {
     if (!isset($_SESSION['username'])) {
         return null;
     }
-    $r = db_run($conn, "SELECT id, username, first_name, last_name, role FROM users WHERE username = ? LIMIT 1", "s", array($_SESSION['username']));
+    $r = db_run($conn, "SELECT * FROM users WHERE username = ? LIMIT 1", "s", array($_SESSION['username']));
     return $r['rows'] ? $r['rows'][0] : null;
 }
 
@@ -279,6 +279,14 @@ function save_avatar($tmpPath, &$error) {
         @mkdir($dir, 0755, true);
     }
 
+    if (!is_dir($dir) || !is_writable($dir)) {
+        imagedestroy($src);
+        imagedestroy($dst);
+        error_log("Avatar folder missing or not writable: " . $dir);
+        $error = "The photo folder isn't writable. Create uploads/avatars next to profile.php and allow writing to it.";
+        return null;
+    }
+
     $name = bin2hex(random_bytes(12)) . '.jpg';
     $ok = @imagejpeg($dst, $dir . '/' . $name, 85);
 
@@ -295,5 +303,147 @@ function save_avatar($tmpPath, &$error) {
 function delete_avatar($name) {
     if ($name && preg_match('/^[a-f0-9]{24}\.jpg$/', $name)) {
         @unlink(avatar_dir() . '/' . $name);
+    }
+}
+
+// ---- Google profile picture ----
+// Downloads the picture Google gives us and stores it like any uploaded photo.
+// Only accepts https addresses on googleusercontent.com.
+function import_google_photo($url) {
+    if (!function_exists('curl_init')) return null;
+
+    $scheme = parse_url($url, PHP_URL_SCHEME);
+    $host   = strtolower((string)parse_url($url, PHP_URL_HOST));
+    $suffix = '.googleusercontent.com';
+    if ($scheme !== 'https' || ($host !== 'googleusercontent.com' && substr($host, -strlen($suffix)) !== $suffix)) {
+        return null;
+    }
+
+    // ask for a larger version (…=s96-c becomes …=s400-c)
+    $url = preg_replace('/=s\d+-c$/', '=s400-c', $url);
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, array(
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_MAXFILESIZE    => 3 * 1024 * 1024,
+        CURLOPT_SSL_VERIFYPEER => true,
+    ));
+    $data = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    if ($data === false) {
+        error_log("Google photo download failed: " . curl_error($ch));
+    }
+    curl_close($ch);
+
+    if ($data === false || $code !== 200 || strlen($data) > 3 * 1024 * 1024) {
+        return null;
+    }
+
+    $tmp = tempnam(sys_get_temp_dir(), 'gph');
+    if ($tmp === false || file_put_contents($tmp, $data) === false) {
+        return null;
+    }
+
+    $err = "";
+    $name = save_avatar($tmp, $err);
+    @unlink($tmp);
+    return $name;
+}
+
+// Sets the Google photo only if the user has no photo yet. Never overwrites one they chose.
+function set_google_photo($conn, $username, $pictureUrl) {
+    if (!$pictureUrl) return false;
+
+    $name = import_google_photo($pictureUrl);
+    if (!$name) return false;
+
+    $r = db_run($conn,
+        "UPDATE users SET photo = ? WHERE username = ? AND (photo IS NULL OR photo = '')",
+        "ss", array($name, $username));
+
+    if (!$r['ok'] || $r['affected'] < 1) {
+        delete_avatar($name);
+        return false;
+    }
+    return true;
+}
+
+// ---- clubs ----
+function club_categories() {
+    return array("Academic", "Arts & Culture", "Sports", "Technology", "Community Service", "Other");
+}
+
+// ================= NOTIFICATIONS =================
+
+function full_name($row) {
+    return trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
+}
+
+function str_cut($s, $max) {
+    $s = (string)$s;
+    return function_exists('mb_substr') ? mb_substr($s, 0, $max, 'UTF-8') : substr($s, 0, $max);
+}
+
+// Sends one notification. Never breaks the page if the table doesn't exist yet.
+function notify($conn, $userId, $type, $message, $link = null) {
+    if (!$userId) return false;
+    $r = db_run($conn,
+        "INSERT INTO notifications (user_id, type, message, link) VALUES (?, ?, ?, ?)",
+        "isss", array((int)$userId, $type, str_cut($message, 255), $link));
+    return $r['ok'];
+}
+
+function unread_count($conn, $userId) {
+    $r = db_run($conn, "SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND is_read = 0", "i", array((int)$userId));
+    return ($r['ok'] && $r['rows']) ? (int)$r['rows'][0]['n'] : 0;
+}
+
+// Tells the owner(s) of a club that someone asked to join
+function notify_join_request($conn, $clubId, $requesterRow) {
+    $c = db_run($conn, "SELECT name FROM clubs WHERE id = ? LIMIT 1", "i", array((int)$clubId));
+    if (!$c['rows']) return;
+    $msg = str_cut(full_name($requesterRow) . ' requested to join ' . $c['rows'][0]['name'] . '.', 255);
+    db_run($conn,
+        "INSERT INTO notifications (user_id, type, message, link)
+         SELECT user_id, 'join_request', ?, ? FROM club_members
+         WHERE club_id = ? AND role = 'owner' AND status = 'active'",
+        "ssi", array($msg, 'club?id=' . (int)$clubId, (int)$clubId));
+}
+
+// Who a membership row belongs to, and which club it's for
+function member_info($conn, $memberId) {
+    $r = db_run($conn,
+        "SELECT m.user_id, m.club_id, c.name AS club_name
+         FROM club_members m JOIN clubs c ON c.id = m.club_id WHERE m.id = ? LIMIT 1",
+        "i", array((int)$memberId));
+    return $r['rows'] ? $r['rows'][0] : null;
+}
+
+function time_ago($ts) {
+    $d = time() - (int)$ts;
+    if ($d < 60)     return "Just now";
+    if ($d < 3600)   { $m = (int)floor($d / 60);   return $m . " min ago"; }
+    if ($d < 86400)  { $h = (int)floor($d / 3600); return $h . " hour" . ($h === 1 ? "" : "s") . " ago"; }
+    if ($d < 604800) { $x = (int)floor($d / 86400); return $x . " day" . ($x === 1 ? "" : "s") . " ago"; }
+    return date('M j, Y', (int)$ts);
+}
+
+// style + icon for each kind of notification
+function notif_look($type) {
+    $check = '<path d="M5 12.5l4.5 4.5L19 7.5"/>';
+    $cross = '<path d="M6 6l12 12M18 6L6 18"/>';
+    $userp = '<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5M19 8v6M16 11h6"/>';
+    $bell  = '<path d="M6 16v-5a6 6 0 0112 0v5l1.5 2h-15L6 16zM10 21h4"/>';
+
+    switch ($type) {
+        case 'club_approved':
+        case 'join_accepted': return array('good', $check);
+        case 'club_rejected':
+        case 'join_declined':
+        case 'removed':       return array('bad', $cross);
+        case 'join_request':  return array('info', $userp);
+        default:              return array('info', $bell);
     }
 }

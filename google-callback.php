@@ -2,6 +2,7 @@
 session_start();
 require("db.php");
 require("google_config.php");
+require("auth.php");
 
 function fail($msg) {
     $_SESSION['login_error'] = $msg;
@@ -66,6 +67,7 @@ $email    = strtolower($data['email']);
 $given    = trim($data['given_name'] ?? '');
 $family   = trim($data['family_name'] ?? '');
 $full     = trim($data['name'] ?? '');
+$picture  = $data['picture'] ?? '';
 
 // 3. Find the user: by Google ID first, then by email (links an existing account)
 $user = null;
@@ -91,6 +93,11 @@ if (!$user) {
         mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);
         $user = $byEmail;
+
+        // use their Google picture if they have no photo yet
+        if (empty($byEmail['photo'])) {
+            set_google_photo($conn, $byEmail['username'], $picture);
+        }
     }
 }
 
@@ -131,6 +138,9 @@ if (!$user) {
         fail("We couldn't create your account. Please try again.");
     }
     mysqli_stmt_close($stmt);
+
+    // new account: start with their Google picture (ignored if it can't be fetched)
+    set_google_photo($conn, $username, $picture);
 
     $user = [
         'username'   => $username,
