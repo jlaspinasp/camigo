@@ -129,15 +129,16 @@ if ($club && $_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $r = db_run($conn, "INSERT INTO club_posts (club_id, user_id, title, kind, visibility, body) VALUES (?, ?, ?, ?, ?, ?)", "iissss", array($cid, $me['id'], $c[0], $c[1], $c[2], $c[3]));
                 if ($r['ok']) {
+                    $newPostId = (int)mysqli_insert_id($conn);
                     if (!empty($_POST['notify'])) {
-                        $lead = ($c[2] === 'members') ? ' posted a members-only announcement: ' : ' posted an announcement: ';
+                        $lead = ($c[2] === 'members') ? ' posted a members-only announcement in ' : ' posted an announcement in ';
                         $what = ($c[0] !== null) ? $c[0] : str_cut(preg_replace('/\s+/', ' ', $c[3]), 90);
-                        $note = str_cut($club['name'] . $lead . $what, 255);
+                        $note = str_cut(full_name($me) . $lead . $club['name'] . ': ' . $what, 255);
                         db_run($conn,
                             "INSERT INTO notifications (user_id, type, message, link)
                              SELECT user_id, 'club_update', ?, ? FROM club_members
                              WHERE club_id = ? AND status = 'active' AND user_id <> ?",
-                            "ssii", array($note, 'club?id=' . $cid . '#updates', $cid, (int)$me['id']));
+                            "ssii", array($note, 'club?id=' . $cid . ($newPostId > 0 ? '&more=1#post-' . $newPostId : '#updates'), $cid, (int)$me['id']));
                     }
                     flash_set($c[2] === 'members' ? "Announcement posted. Only your club members can see it." : "Announcement posted.", "success");
                 } else {
@@ -511,7 +512,7 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
                         $plink    = ($p['username'] === $me['username']) ? 'profile' : 'profile?u=' . urlencode($p['username']);
                         $fullDate = (new DateTime('@' . (int)$p['ts']))->setTimezone(event_tz())->format('M j, Y \a\t g:i A');
                     ?>
-                        <article class="ann k-<?php echo e($kind); ?><?php echo $isPinned ? ' pinned' : ''; ?><?php echo $vis === 'members' ? ' is-members' : ''; ?>">
+                        <article id="post-<?php echo (int)$p['id']; ?>" class="ann k-<?php echo e($kind); ?><?php echo $isPinned ? ' pinned' : ''; ?><?php echo $vis === 'members' ? ' is-members' : ''; ?>">
                             <div class="ann-top">
                                 <span class="ann-kind k-<?php echo e($kind); ?>"><?php echo event_icon($kinds[$kind][1]); ?><?php echo e($kinds[$kind][0]); ?></span>
                                 <?php if ($vis === 'members') { ?><span class="badge members"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>

@@ -430,8 +430,42 @@ function notify($conn, $userId, $type, $message, $link = null) {
     return $r['ok'];
 }
 
+// Notification categories people can switch off (label, description, types inside it)
+function notif_categories() {
+    return array(
+        'clubs' => array('Clubs', 'Join requests, invites, approvals and officer changes.',
+            array('club_approved','club_rejected','join_request','join_accepted','join_declined','club_invite','club_update','officer_promoted','officer_removed','removed')),
+        'events' => array('Events', 'New events, changes, cancellations and reminders.',
+            array('event_new','event_update','event_cancelled','event_reminder')),
+        'projects' => array('Projects', 'Applications, team updates and new projects.',
+            array('project_new','project_update','project_apply','project_accepted','project_declined','project_removed')),
+    );
+}
+
+// Types this person has switched off. Empty if the preferences table doesn't exist yet.
+function notif_muted_types($conn, $userId) {
+    $r = db_run($conn, "SELECT category FROM notification_prefs WHERE user_id = ? AND enabled = 0", "i", array((int)$userId));
+    $cats = notif_categories();
+    $types = array();
+    if ($r['ok']) {
+        foreach ($r['rows'] as $row) {
+            if (isset($cats[$row['category']])) $types = array_merge($types, $cats[$row['category']][2]);
+        }
+    }
+    return $types;
+}
+
+// SQL piece that hides muted types: returns array(sql, types, params)
+function notif_mute_sql($conn, $userId) {
+    $m = notif_muted_types($conn, $userId);
+    if (!$m) return array('', '', array());
+    return array(' AND type NOT IN (' . implode(',', array_fill(0, count($m), '?')) . ')', str_repeat('s', count($m)), $m);
+}
+
 function unread_count($conn, $userId) {
-    $r = db_run($conn, "SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND is_read = 0", "i", array((int)$userId));
+    $mute = notif_mute_sql($conn, $userId);
+    $r = db_run($conn, "SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND is_read = 0" . $mute[0],
+        "i" . $mute[1], array_merge(array((int)$userId), $mute[2]));
     return ($r['ok'] && $r['rows']) ? (int)$r['rows'][0]['n'] : 0;
 }
 

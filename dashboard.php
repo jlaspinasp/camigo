@@ -41,12 +41,7 @@ if ($urow) {
         "ii", array($urow['id'], $urow['id']))['rows'];
 }
 
-// next events happening on campus
-$soon = events_query($conn, $urow ? $urow['id'] : 0, EVENT_END_SQL . " >= ?", "s", array(event_now_sql()), "e.start_at ASC", 3);
-$upcoming = $soon['rows'];
-
 // newest projects that are looking for teammates
-$myInterests = project_tags($urow['interests'] ?? '');
 $freshRes = project_query($conn, $urow ? $urow['id'] : 0, "p.is_open = 1 AND p.stage <> 'launched'", "", array(), "p.created_at DESC, p.id DESC", 3);
 $freshProjects = $freshRes['rows'];
 
@@ -55,6 +50,7 @@ $myClubs = array();
 $week = array();
 $requests = array();
 $discover = array();
+$featured = null;
 $feed = array();
 if ($urow) {
     $myClubs = db_run($conn,
@@ -67,11 +63,16 @@ if ($urow) {
     $week     = rail_week($conn, $urow['id']);
     $requests = rail_requests($conn, $urow['id']);
     $discover = rail_discover($conn, $urow['id'], array_column($myClubs, 'category'));
+    $featured = rail_featured($conn, $urow['id']);
+    if ($featured) {
+        // don't show the featured club twice
+        $discover = array_values(array_filter($discover, function ($dc) use ($featured) { return (int)$dc['id'] !== (int)$featured['id']; }));
+    }
 
     if ($myClubs) $feed = club_feed($conn, $urow['id'], 10);
 }
 $clubCount = count($myClubs);
-$hasRail = ($clubCount > 0 || $week || $requests || $discover);
+$hasRail = ($clubCount > 0 || $week || $requests || $discover || $freshProjects || $featured);
 
 $flash = flash_get();
 $flashText = $flash ? $flash[0] : "";
@@ -119,7 +120,7 @@ $initial = strtoupper(substr($first, 0, 1));
         <div class="msg <?php echo e($flashClass); ?>" style="margin-bottom:20px"><?php echo e($flashText); ?></div>
     <?php } ?>
 
-    <section class="hero">
+    <section class="hero hero-slim">
         <h1>Welcome, <?php echo htmlspecialchars($first); ?>.</h1>
         <p><?php echo $clubCount > 0 ? "Here's what's new across your clubs." : "Join a club to start seeing its announcements and events right here."; ?></p>
     </section>
@@ -155,23 +156,38 @@ $initial = strtoupper(substr($first, 0, 1));
                     <?php foreach ($feed as $it) { render_feed_item($it); } ?>
                 </div>
                 <p class="empty hf-none" id="hfNone" hidden>Nothing of that kind yet.</p>
+                <button type="button" class="btn-sm btn-ghost hf-more" id="hfMore" hidden>Show more</button>
                 <script>
                 (function () {
-                    var btns = document.querySelectorAll("[data-filter]"),
+                    var LIMIT = 5,
+                        btns = document.querySelectorAll("[data-filter]"),
                         items = document.querySelectorAll("#hfList .hf"),
-                        none = document.getElementById("hfNone");
+                        none = document.getElementById("hfNone"),
+                        more = document.getElementById("hfMore"),
+                        filter = "all", expanded = false;
+
+                    function render() {
+                        var matched = 0, shown = 0;
+                        items.forEach(function (it) {
+                            var ok = (filter === "all" || it.getAttribute("data-type") === filter);
+                            if (ok) matched++;
+                            var visible = ok && (expanded || matched <= LIMIT);
+                            it.hidden = !visible;
+                            if (visible) shown++;
+                        });
+                        none.hidden = matched > 0;
+                        more.hidden = expanded || matched <= LIMIT;
+                    }
+
                     btns.forEach(function (b) {
                         b.addEventListener("click", function () {
-                            var f = b.getAttribute("data-filter"), shown = 0;
+                            filter = b.getAttribute("data-filter");
                             btns.forEach(function (x) { x.classList.toggle("on", x === b); });
-                            items.forEach(function (it) {
-                                var ok = (f === "all" || it.getAttribute("data-type") === f);
-                                it.hidden = !ok;
-                                if (ok) shown++;
-                            });
-                            none.hidden = shown > 0;
+                            render();
                         });
                     });
+                    more.addEventListener("click", function () { expanded = true; render(); });
+                    render();
                 })();
                 </script>
             <?php } ?>
@@ -208,7 +224,27 @@ $initial = strtoupper(substr($first, 0, 1));
                 </section>
             <?php } ?>
 
-            <?php if ($clubCount > 0 || $week) { ?>
+            <?php if ($featured) { $fm = (int)$featured['members']; ?>
+                <section class="panel rail-feat">
+                    <span class="feat-badge">&#9733; Featured club</span>
+                    <a class="feat-main" href="club?id=<?php echo (int)$featured['id']; ?>">
+                        <span class="club-tile t<?php echo (int)$featured['id'] % 3; ?>"><?php echo e(first_letter($featured['name'])); ?></span>
+                        <span>
+                            <strong><?php echo e($featured['name']); ?></strong>
+                            <em><?php echo e($featured['category']); ?> &middot; <?php echo $fm; ?> member<?php echo $fm === 1 ? '' : 's'; ?></em>
+                        </span>
+                    </a>
+                    <?php if ($featured['blurb'] !== '') { ?><p class="feat-desc"><?php echo e($featured['blurb']); ?></p><?php } ?>
+                    <a class="feat-btn" href="club?id=<?php echo (int)$featured['id']; ?>">View club</a>
+                </section>
+            <?php } ?>
+
+            <?php if ($clubCount > 0 || $week) {
+                $wkTotal = 0;
+                foreach ($week as $wd) { $wkTotal += count($wd['events']); }
+                $wkShown = 0;
+                $wkMax = 4;
+            ?>
                 <section class="panel rail-week">
                     <div class="rail-head">
                         <h2>This week</h2>
@@ -216,21 +252,79 @@ $initial = strtoupper(substr($first, 0, 1));
                     </div>
                     <?php if (!$week) { ?>
                         <p class="empty">Nothing scheduled in the next 7 days.</p>
-                    <?php } else { foreach ($week as $day) { ?>
-                        <div class="wk-day"><b><?php echo e($day['label']); ?></b><span><?php echo e($day['date']); ?></span></div>
-                        <?php foreach ($day['events'] as $we) {
-                            $wm = (($we['visibility'] ?? 'public') === 'members');
+                    <?php } else { ?>
+                        <div class="wk-list">
+                        <?php foreach ($week as $day) {
+                            if ($wkShown >= $wkMax) break;
                         ?>
-                            <a class="wk-item" href="event?id=<?php echo (int)$we['id']; ?>">
-                                <span class="wk-time"><?php echo e(event_dt($we['start_at'])->format('g:i A')); ?></span>
-                                <span class="wk-main">
-                                    <strong><?php echo e($we['title']); ?></strong>
-                                    <em><?php if ($wm) { echo event_icon('lock'); } ?><?php echo e($we['club_name']); ?></em>
+                            <div class="wk-day">
+                                <span class="wk-chip<?php echo !empty($day['is_today']) ? ' is-today' : ''; ?>" title="<?php echo e($day['label'] . ', ' . $day['date']); ?>">
+                                    <small><?php echo e($day['dow']); ?></small>
+                                    <b><?php echo e($day['num']); ?></b>
                                 </span>
-                                <?php if ((int)$we['me_going'] > 0) { ?><span class="wk-going" title="You're going"><?php echo event_icon('check'); ?></span><?php } ?>
-                            </a>
+                                <div class="wk-events">
+                                <?php foreach ($day['events'] as $we) {
+                                    if ($wkShown >= $wkMax) break;
+                                    $wkShown++;
+                                    $wm = (($we['visibility'] ?? 'public') === 'members');
+                                ?>
+                                    <a class="wk-item" href="event?id=<?php echo (int)$we['id']; ?>">
+                                        <span class="wk-main">
+                                            <strong><?php echo e($we['title']); ?></strong>
+                                            <em><span class="wk-time"><?php echo e(event_dt($we['start_at'])->format('g:i A')); ?></span><span class="wk-dot">&middot;</span><?php if ($wm) { echo event_icon('lock'); } ?><span class="wk-club"><?php echo e($we['club_name']); ?></span></em>
+                                        </span>
+                                        <?php if ((int)$we['me_going'] > 0) { ?><span class="wk-going" title="You're going"><?php echo event_icon('check'); ?></span><?php } ?>
+                                    </a>
+                                <?php } ?>
+                                </div>
+                            </div>
                         <?php } ?>
-                    <?php } } ?>
+                        </div>
+                        <?php if ($wkTotal > $wkShown) { ?>
+                            <a class="wk-more" href="events">+ <?php echo $wkTotal - $wkShown; ?> more this week</a>
+                        <?php } ?>
+                    <?php } ?>
+                </section>
+            <?php } ?>
+
+            <?php if ($myClubs) { ?>
+                <section class="panel rail-mine">
+                    <div class="rail-head">
+                        <h2>Your clubs</h2>
+                        <a href="clubs">All clubs</a>
+                    </div>
+                    <?php foreach (array_slice($myClubs, 0, 4) as $mc) {
+                        $role = (string)($mc['role'] ?? 'member');
+                        $roleLabel = ($role === 'owner') ? 'Owner' : (($role === 'officer') ? 'Officer' : '');
+                    ?>
+                        <a class="rail-club" href="club?id=<?php echo (int)$mc['id']; ?>">
+                            <span class="club-tile t<?php echo (int)$mc['id'] % 3; ?>"><?php echo e(first_letter($mc['name'])); ?></span>
+                            <span><strong><?php echo e($mc['name']); ?></strong><em><?php echo $roleLabel !== '' ? e($roleLabel) . ' &middot; ' : ''; ?><?php echo e($mc['category']); ?></em></span>
+                        </a>
+                    <?php } ?>
+                    <?php if (count($myClubs) > 4) { ?>
+                        <a class="wk-more" href="clubs">+ <?php echo count($myClubs) - 4; ?> more</a>
+                    <?php } ?>
+                </section>
+            <?php } ?>
+
+            <?php if ($freshProjects) { ?>
+                <section class="panel rail-pj">
+                    <div class="rail-head">
+                        <h2>Looking for teammates</h2>
+                        <a href="projects">All projects</a>
+                    </div>
+                    <?php foreach (array_slice($freshProjects, 0, 3) as $fp) {
+                        $left = project_open_spots($fp['roles'] ?? array());
+                    ?>
+                        <a class="rail-pj-row" href="project?id=<?php echo (int)$fp['id']; ?>">
+                            <span class="pj-mini-ic t<?php echo project_tone($fp['id']); ?>"><?php echo project_category_icon($fp['category']); ?></span>
+                            <span class="rail-pj-txt">
+                                <strong><?php echo e($fp['title']); ?></strong>
+                                <em><?php echo e($fp['category']); ?><?php if ($left > 0) { echo ' &middot; ' . $left . ' spot' . ($left === 1 ? '' : 's') . ' open'; } ?></em>
+                            </span>
+                        </a>
+                    <?php } ?>
                 </section>
             <?php } ?>
 
@@ -274,49 +368,6 @@ $initial = strtoupper(substr($first, 0, 1));
         <?php } ?>
     </section>
     <?php } ?>
-
-    <?php if ($upcoming) { ?>
-    <div class="strip-head">
-        <h2 class="section-title">Upcoming events</h2>
-        <a href="events">See all events</a>
-    </div>
-    <div class="ev-list">
-        <?php foreach ($upcoming as $ue) { render_event_card($ue, 'dashboard'); } ?>
-    </div>
-    <?php } ?>
-
-    <?php if ($freshProjects) { ?>
-    <div class="strip-head">
-        <h2 class="section-title">Projects looking for teammates</h2>
-        <a href="projects">See all projects</a>
-    </div>
-    <div class="pj-grid three">
-        <?php foreach ($freshProjects as $fp) { render_project_card($fp, $myInterests); } ?>
-    </div>
-    <?php } ?>
-
-    <h2 class="section-title">Explore Camigo</h2>
-
-    <section class="tiles">
-        <div class="tile">
-            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M17.5 14.5c2.5 0 4 1.5 4 4"/></svg></div>
-            <h3>Clubs</h3>
-            <p>Discover student organizations and join the ones you like.</p>
-            <a href="clubs" class="go">Browse clubs</a>
-        </div>
-        <div class="tile">
-            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.5 1.6 6 5 6 9.5L15.5 15h-7L6 12.5C6 8 8.5 4.6 12 3z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M9 15l-2 4.5 3.2-1.4M15 15l2 4.5-3.2-1.4"/></svg></div>
-            <h3>Projects</h3>
-            <p>Post your idea, find teammates, and build it together.</p>
-            <a href="projects" class="go">Browse projects</a>
-        </div>
-        <div class="tile">
-            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>
-            <h3>Events</h3>
-            <p>See what's happening on campus this week.</p>
-            <a href="events" class="go">Browse events</a>
-        </div>
-    </section>
 
 </main>
 

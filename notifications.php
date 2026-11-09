@@ -13,17 +13,36 @@ if (isset($_GET['open'])) {
 
     $link = $r['rows'] ? (string)$r['rows'][0]['link'] : '';
     // only ever go to a page on this site
-    if (!preg_match('/^[a-z-]+(\?[A-Za-z0-9=&_%-]*)?$/', $link)) {
+    if (!preg_match('/^[a-z-]+(\?[A-Za-z0-9=&_%-]*)?(#[A-Za-z0-9_-]+)?$/', $link)) {
         $link = 'notifications';
     }
     header("Location: " . $link);
     exit();
 }
 
-// ---- mark all as read ----
+// ---- one notification: mark read / unread, or delete (ajax) ----
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['act'], $_POST['id'])) {
+    $ok = csrf_ok();
+    $nid = (int)$_POST['id'];
+    $act = (string)$_POST['act'];
+    if ($ok && $act === 'read')   db_run($conn, "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?", "ii", array($nid, $me['id']));
+    if ($ok && $act === 'unread') db_run($conn, "UPDATE notifications SET is_read = 0 WHERE id = ? AND user_id = ?", "ii", array($nid, $me['id']));
+    if ($ok && $act === 'delete') db_run($conn, "DELETE FROM notifications WHERE id = ? AND user_id = ?", "ii", array($nid, $me['id']));
+    header('Content-Type: application/json');
+    echo json_encode(array('ok' => (bool)$ok, 'unread' => unread_count($conn, $me['id'])));
+    exit();
+}
+
+// ---- mark all as read (also used by the bell dropdown, which sends ajax=1) ----
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['read_all'])) {
-    if (csrf_ok()) {
+    $ok = csrf_ok();
+    if ($ok) {
         db_run($conn, "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0", "i", array($me['id']));
+    }
+    if (isset($_POST['ajax'])) {
+        header('Content-Type: application/json');
+        echo json_encode(array('ok' => (bool)$ok));
+        exit();
     }
     header("Location: notifications");
     exit();
@@ -32,10 +51,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['read_all'])) {
 // tidy up very old notifications
 db_run($conn, "DELETE FROM notifications WHERE user_id = ? AND created_at < (NOW() - INTERVAL 60 DAY)", "i", array($me['id']));
 
+$mute = notif_mute_sql($conn, $me['id']);
 $res = db_run($conn,
     "SELECT id, type, message, link, is_read, UNIX_TIMESTAMP(created_at) AS ts
-     FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 50",
-    "i", array($me['id']));
+     FROM notifications WHERE user_id = ?" . $mute[0] . " ORDER BY id DESC LIMIT 50",
+    "i" . $mute[1], array_merge(array($me['id']), $mute[2]));
 
 $setupMissing = !$res['ok'];
 $items = $res['rows'];
@@ -64,12 +84,15 @@ foreach ($items as $it) { if (!(int)$it['is_read']) $unreadHere++; }
             <h1 class="page-title">Notifications</h1>
             <p class="page-sub">Updates about your clubs, events and projects.</p>
         </div>
-        <?php if ($unreadHere > 0) { ?>
-            <form method="POST">
-                <?php echo csrf_field(); ?>
-                <button type="submit" name="read_all" value="1" class="btn-sm btn-ghost">Mark all as read</button>
-            </form>
-        <?php } ?>
+        <div class="page-actions">
+            <?php if ($unreadHere > 0) { ?>
+                <form method="POST">
+                    <?php echo csrf_field(); ?>
+                    <button type="submit" name="read_all" value="1" class="btn-sm btn-ghost">Mark all as read</button>
+                </form>
+            <?php } ?>
+            <a href="notification-preferences" class="btn-sm btn-ghost">Preferences</a>
+        </div>
     </div>
 
     <?php if ($setupMissing) { ?>
@@ -90,16 +113,19 @@ foreach ($items as $it) { if (!(int)$it['is_read']) $unreadHere++; }
                 $look = notif_look($it['type']);
                 $unread = !(int)$it['is_read'];
             ?>
-                <a href="notifications?open=<?php echo (int)$it['id']; ?>" class="notif <?php echo $unread ? 'unread' : ''; ?>">
-                    <span class="n-ic <?php echo e($look[0]); ?>">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><?php echo $look[1]; ?></svg>
-                    </span>
-                    <span class="n-text">
-                        <span class="n-msg"><?php echo e($it['message']); ?></span>
-                        <span class="n-time"><?php echo e(time_ago($it['ts'])); ?></span>
-                    </span>
-                    <?php if ($unread) { ?><span class="u-dot" aria-label="Unread"></span><?php } ?>
-                </a>
+                <div class="n-row" data-id="<?php echo (int)$it['id']; ?>">
+                    <a href="notifications?open=<?php echo (int)$it['id']; ?>" class="notif <?php echo $unread ? 'unread' : ''; ?>">
+                        <span class="n-ic <?php echo e($look[0]); ?>">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><?php echo $look[1]; ?></svg>
+                        </span>
+                        <span class="n-text">
+                            <span class="n-msg"><?php echo e($it['message']); ?></span>
+                            <span class="n-time"><?php echo e(time_ago($it['ts'])); ?></span>
+                        </span>
+                        <?php if ($unread) { ?><span class="u-dot" aria-label="Unread"></span><?php } ?>
+                    </a>
+                    <?php include("notif-more.php"); ?>
+                </div>
             <?php } ?>
         </div>
 

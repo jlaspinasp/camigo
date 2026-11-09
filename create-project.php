@@ -71,7 +71,7 @@ if (isset($_POST['post'])) {
 
                     if ($clubId > 0) {
                         project_notify_club($conn, $clubId, $me['id'],
-                            $clubChoices[$clubId] . ' started a project: ' . $clean['title'], 'project?id=' . $pid);
+                            full_name($me) . ' started a project in ' . $clubChoices[$clubId] . ': ' . $clean['title'], 'project?id=' . $pid);
                     }
 
                     flash_set("Your project is live. Students can find it now" . ($clean['is_open'] ? " and apply to join." : "."), "success");

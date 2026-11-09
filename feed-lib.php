@@ -164,7 +164,7 @@ function rail_week($conn, $userId) {
         $key = $d->format('Y-m-d');
         if (!isset($days[$key])) {
             $label = ($key === $today) ? 'Today' : (($key === $tomorrow) ? 'Tomorrow' : $d->format('l'));
-            $days[$key] = array('label' => $label, 'date' => $d->format('M j'), 'events' => array());
+            $days[$key] = array('label' => $label, 'date' => $d->format('M j'), 'dow' => ($key === $today) ? 'Today' : $d->format('D'), 'num' => $d->format('j'), 'is_today' => ($key === $today), 'events' => array());
         }
         $days[$key]['events'][] = $ev;
     }
@@ -205,4 +205,27 @@ function rail_discover($conn, $userId, $myCategories) {
          ORDER BY " . $order . ", c.id DESC LIMIT 3",
         $types, $params);
     return $r['rows'];
+}
+
+
+// One club picked for the day and shown to everyone who hasn't joined it.
+// The seed is today's date, so it stays the same all day and changes tomorrow.
+function rail_featured($conn, $userId) {
+    $seed = (int)date('Ymd');
+    $r = db_run($conn,
+        "SELECT c.id, c.name, c.category, c.description,
+                (SELECT COUNT(*) FROM club_members x WHERE x.club_id = c.id AND x.status = 'active') AS members
+         FROM clubs c
+         WHERE c.status = 'approved' AND c.id NOT IN (SELECT club_id FROM club_members WHERE user_id = ?)
+         ORDER BY RAND(" . $seed . ") LIMIT 1",
+        "i", array((int)$userId));
+    if (empty($r['rows'])) return null;
+    $club = $r['rows'][0];
+    $txt = trim((string)($club['description'] ?? ''));
+    if (function_exists('mb_strimwidth')) {
+        $club['blurb'] = mb_strimwidth($txt, 0, 130, '...', 'UTF-8');
+    } else {
+        $club['blurb'] = (strlen($txt) > 130) ? substr($txt, 0, 127) . '...' : $txt;
+    }
+    return $club;
 }

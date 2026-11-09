@@ -45,7 +45,7 @@ if ($owned && isset($_POST['post'])) {
                 if ($r['ok']) {
                     $newId = (int)mysqli_insert_id($conn);
                     $excl = ($clean['visibility'] === 'members');
-                    event_notify_members($conn, $clubId, $me['id'], $ownedIds[$clubId] . ' posted a new ' . ($excl ? 'members-only ' : '') . 'event: ' . $clean['title'], 'event?id=' . $newId);
+                    event_notify_members($conn, $clubId, $me['id'], full_name($me) . ' posted a new ' . ($excl ? 'members-only ' : '') . 'event in ' . $ownedIds[$clubId] . ': ' . $clean['title'], 'event?id=' . $newId);
                     flash_set($excl ? "Your members-only event is live. Only club members can see it, and they've been notified." : "Your event is live. Club members have been notified.", "success");
                     header("Location: event?id=" . $newId);
                     exit();

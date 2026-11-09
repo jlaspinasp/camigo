@@ -1,0 +1,4 @@
+<?php // The three-dots button for one notification row. ?>
+<button type="button" class="n-more" aria-haspopup="menu" aria-expanded="false" aria-label="More options for this notification">
+    <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>
+</button>
