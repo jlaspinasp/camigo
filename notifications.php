@@ -62,7 +62,7 @@ foreach ($items as $it) { if (!(int)$it['is_read']) $unreadHere++; }
     <div class="page-top">
         <div>
             <h1 class="page-title">Notifications</h1>
-            <p class="page-sub">Updates about your clubs and requests.</p>
+            <p class="page-sub">Updates about your clubs, events and projects.</p>
         </div>
         <?php if ($unreadHere > 0) { ?>
             <form method="POST">

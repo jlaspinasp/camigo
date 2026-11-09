@@ -2,6 +2,7 @@
 session_start();
 require("db.php");
 require("auth.php");
+require_once("projects-lib.php");
 
 $me = require_user_row($conn);
 
@@ -27,6 +28,7 @@ $interests = array();
 $links = array();
 $pct = 0;
 $myClubs = array();
+$myProjects = array();
 
 if ($row && !$hidden) {
     $full = trim($row['first_name']
@@ -63,6 +65,14 @@ if ($row && !$hidden) {
          WHERE m.user_id = ? AND m.status = 'active' AND c.status = 'approved' ORDER BY m.joined_at DESC",
         "i", array($row['id']));
     $myClubs = $cr['rows'];
+
+    // projects this person founded or joined
+    $pjr = db_run($conn,
+        "SELECT p.id, p.title, p.tagline, p.stage, p.category, m.role, m.role_label
+         FROM project_members m JOIN projects p ON p.id = m.project_id
+         WHERE m.user_id = ? AND m.status = 'active' ORDER BY p.updated_at DESC LIMIT 12",
+        "i", array($row['id']));
+    $myProjects = $pjr['rows'];
 }
 ?>
 <!DOCTYPE html>
@@ -180,6 +190,31 @@ if ($row && !$hidden) {
                 <p class="empty">No clubs to show yet.</p>
             <?php } ?>
         </section>
+
+        <?php if ($myProjects || $isOwn) { ?>
+            <section class="panel">
+                <div class="club-head">
+                    <h2 style="margin:0">Projects</h2>
+                    <?php if ($isOwn) { ?><a href="create-project" class="club-meta">Post a project</a><?php } ?>
+                </div>
+                <?php if ($myProjects) { ?>
+                    <div class="pj-mini-list">
+                        <?php foreach ($myProjects as $mp) { ?>
+                            <a class="pj-mini" href="project?id=<?php echo (int)$mp['id']; ?>">
+                                <span class="pj-mini-ic t<?php echo project_tone($mp['id']); ?>"><?php echo project_category_icon($mp['category']); ?></span>
+                                <span class="pj-mini-txt">
+                                    <strong><?php echo e($mp['title']); ?></strong>
+                                    <em><?php echo e($mp['role'] === 'owner' ? 'Founder' : (!empty($mp['role_label']) ? $mp['role_label'] : 'Teammate')); ?> &middot; <?php echo e(project_stage_label($mp['stage'])); ?></em>
+                                </span>
+                                <?php echo project_stage_badge($mp['stage']); ?>
+                            </a>
+                        <?php } ?>
+                    </div>
+                <?php } else { ?>
+                    <p class="empty" style="margin-top:14px">You haven't joined a project yet. <a href="projects">Find one</a> or <a href="create-project">post your own</a>.</p>
+                <?php } ?>
+            </section>
+        <?php } ?>
 
         <?php if ($links || $isOwn) { ?>
             <section class="panel">

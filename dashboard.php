@@ -16,6 +16,7 @@ require("db.php");
 require("auth.php");
 require("events-lib.php");
 require("feed-lib.php");
+require_once("projects-lib.php");
 $me = current_user($conn);
 $isAdmin = $me && ($me['role'] ?? 'user') === 'admin';
 
@@ -43,6 +44,11 @@ if ($urow) {
 // next events happening on campus
 $soon = events_query($conn, $urow ? $urow['id'] : 0, EVENT_END_SQL . " >= ?", "s", array(event_now_sql()), "e.start_at ASC", 3);
 $upcoming = $soon['rows'];
+
+// newest projects that are looking for teammates
+$myInterests = project_tags($urow['interests'] ?? '');
+$freshRes = project_query($conn, $urow ? $urow['id'] : 0, "p.is_open = 1 AND p.stage <> 'launched'", "", array(), "p.created_at DESC, p.id DESC", 3);
+$freshProjects = $freshRes['rows'];
 
 // ---- home feed: news from the clubs this person has joined ----
 $myClubs = array();
@@ -94,6 +100,7 @@ $initial = strtoupper(substr($first, 0, 1));
         <?php if ($isAdmin) { ?><a href="admin-clubs" class="out">Admin</a><?php } ?>
         <a href="students" class="out">Students</a>
         <a href="clubs" class="out">Clubs</a>
+        <a href="projects" class="out">Projects</a>
         <a href="events" class="out">Events</a>
         <?php include("msg-icon.php"); ?>
         <?php include("bell.php"); ?>
@@ -278,7 +285,17 @@ $initial = strtoupper(substr($first, 0, 1));
     </div>
     <?php } ?>
 
-    <h2 class="section-title">What's coming</h2>
+    <?php if ($freshProjects) { ?>
+    <div class="strip-head">
+        <h2 class="section-title">Projects looking for teammates</h2>
+        <a href="projects">See all projects</a>
+    </div>
+    <div class="pj-grid three">
+        <?php foreach ($freshProjects as $fp) { render_project_card($fp, $myInterests); } ?>
+    </div>
+    <?php } ?>
+
+    <h2 class="section-title">Explore Camigo</h2>
 
     <section class="tiles">
         <div class="tile">
@@ -288,10 +305,10 @@ $initial = strtoupper(substr($first, 0, 1));
             <a href="clubs" class="go">Browse clubs</a>
         </div>
         <div class="tile">
-            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M8 10l2.5 2.5L16 8"/></svg></div>
+            <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.5 1.6 6 5 6 9.5L15.5 15h-7L6 12.5C6 8 8.5 4.6 12 3z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M9 15l-2 4.5 3.2-1.4M15 15l2 4.5-3.2-1.4"/></svg></div>
             <h3>Projects</h3>
             <p>Post your idea, find teammates, and build it together.</p>
-            <span class="soon">Coming soon</span>
+            <a href="projects" class="go">Browse projects</a>
         </div>
         <div class="tile">
             <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>

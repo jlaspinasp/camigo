@@ -481,6 +481,7 @@ function notif_look($type) {
     $chat  = '<path d="M5 4.5h14a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-8L6.5 20.5V16.5H5A1.5 1.5 0 013.5 15V6A1.5 1.5 0 015 4.5z"/>';
     $cal   = '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>';
     $clock = '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>';
+    $rocket = '<path d="M12 3c3.5 1.6 6 5 6 9.5L15.5 15h-7L6 12.5C6 8 8.5 4.6 12 3z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M9 15l-2 4.5 3.2-1.4M15 15l2 4.5-3.2-1.4"/>';
 
     switch ($type) {
         case 'club_approved':
@@ -497,6 +498,12 @@ function notif_look($type) {
         case 'event_update':  return array('info', $cal);
         case 'event_cancelled': return array('bad', $cal);
         case 'event_reminder': return array('remind', $clock);
+        case 'project_accepted': return array('good', $check);
+        case 'project_declined':
+        case 'project_removed':  return array('bad', $cross);
+        case 'project_apply':    return array('info', $userp);
+        case 'project_new':
+        case 'project_update':   return array('info', $rocket);
         default:              return array('info', $bell);
     }
 }
