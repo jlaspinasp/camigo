@@ -160,15 +160,18 @@ function event_postable_clubs($conn, $userId) {
 // Every row has: going (count), me_going (0/1), faces (a few people who are going and have public profiles).
 function events_query($conn, $meId, $where, $types, $params, $order, $limit) {
     $sql = "SELECT e.id, e.club_id, e.title, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility, UNIX_TIMESTAMP(e.created_at) AS created_ts,
-                   c.name AS club_name,
+                   c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo" : "") . ",
                    (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id) AS going,
-                   (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id AND r.user_id = ?) AS me_going
+                   (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id AND r.user_id = ?) AS me_going,
+                   " . (club_identity_ready($conn) ? "(c.invite_only = 1 AND NOT EXISTS (SELECT 1 FROM club_members hm WHERE hm.club_id = e.club_id AND hm.user_id = ? AND hm.status = 'active'))" : "0") . " AS hide_faces
             FROM events e
             JOIN clubs c ON c.id = e.club_id AND c.status = 'approved'
             WHERE e.status = 'active' AND " . EVENT_VISIBLE_SQL . " AND " . $where . "
             ORDER BY " . $order . " LIMIT " . (int)$limit;
 
-    $res = db_run($conn, $sql, "ii" . $types, array_merge(array((int)$meId, (int)$meId), $params));
+    $withHide = club_identity_ready($conn);
+    $res = db_run($conn, $sql, ($withHide ? "iii" : "ii") . $types,
+        array_merge($withHide ? array((int)$meId, (int)$meId, (int)$meId) : array((int)$meId, (int)$meId), $params));
     if (!$res['ok']) return array('ok' => false, 'rows' => array());
 
     $rows = $res['rows'];
@@ -203,6 +206,7 @@ function events_query($conn, $meId, $where, $types, $params, $order, $limit) {
             foreach ($ur['rows'] as $u) $users[(int)$u['id']] = $u;
 
             foreach ($rows as $i => $r) {
+                if (!empty($r['hide_faces'])) continue;
                 foreach (($byEvent[(int)$r['id']] ?? array()) as $uid) {
                     if (isset($users[$uid])) $rows[$i]['faces'][] = $users[$uid];
                 }

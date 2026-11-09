@@ -21,7 +21,7 @@ function club_feed($conn, $userId, $limit) {
 
     $pr = db_run($conn,
         "SELECT p.id, p.club_id, p.body, UNIX_TIMESTAMP(p.created_at) AS ts" . $cols . ",
-                c.name AS club_name, u.username, u.first_name, u.last_name, u.photo
+                c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo" : "") . ", u.username, u.first_name, u.last_name, u.photo
          FROM club_posts p
          JOIN clubs c ON c.id = p.club_id AND c.status = 'approved'
          JOIN club_members m ON m.club_id = p.club_id AND m.user_id = ? AND m.status = 'active'
@@ -52,13 +52,17 @@ function render_feed_item($it) {
         if (!isset($kinds[$kind])) $kind = 'announcement';
         $members = (($it['visibility'] ?? 'public') === 'members');
         $title   = (string)($it['title'] ?? '');
-        $text    = str_cut(trim(preg_replace('/\s+/u', ' ', (string)$it['body'])), 400);
+        // keep paragraph breaks, tidy the rest; the card clamps it and "See more" opens the rest
+        $text    = str_replace(array("\r\n", "\r"), "\n", (string)$it['body']);
+        $text    = preg_replace('/[ \t]+/u', ' ', $text);
+        $text    = preg_replace('/\n{3,}/', "\n\n", $text);
+        $text    = str_cut(trim($text), 1500);
         $link    = 'club?id=' . $clubId . '#updates';
         ?>
         <article class="hf" data-type="post">
             <div class="hf-head">
                 <a class="hf-club" href="club?id=<?php echo $clubId; ?>">
-                    <span class="club-tile sm <?php echo $tile; ?>"><?php echo e(first_letter($it['club_name'])); ?></span>
+                    <?php echo club_tile_html(array('id' => $clubId, 'name' => $it['club_name'], 'logo' => $it['club_logo'] ?? null), 'sm', 'span'); ?>
                     <span><strong><?php echo e($it['club_name']); ?></strong><em>Announcement &middot; <?php echo e($when); ?></em></span>
                 </a>
                 <span class="hf-tags">
@@ -67,7 +71,8 @@ function render_feed_item($it) {
                 </span>
             </div>
             <?php if ($title !== '') { ?><h3 class="hf-title"><a href="<?php echo e($link); ?>"><?php echo e($title); ?></a></h3><?php } ?>
-            <p class="hf-text"><?php echo e($text); ?></p>
+            <p class="hf-text" data-hf-text><?php echo e($text); ?></p>
+            <button type="button" class="hf-expand" hidden>See more</button>
             <div class="hf-foot">
                 <span class="hf-by">
                     <span class="faces"><span class="face"><?php echo avatar_inner($it); ?></span></span>
@@ -95,7 +100,7 @@ function render_feed_item($it) {
     <article class="hf" data-type="event">
         <div class="hf-head">
             <a class="hf-club" href="club?id=<?php echo $clubId; ?>">
-                <span class="club-tile sm <?php echo $tile; ?>"><?php echo e(first_letter($it['club_name'])); ?></span>
+                <?php echo club_tile_html(array('id' => $clubId, 'name' => $it['club_name'], 'logo' => $it['club_logo'] ?? null), 'sm', 'span'); ?>
                 <span><strong><?php echo e($it['club_name']); ?></strong><em>New event &middot; <?php echo e($when); ?></em></span>
             </a>
             <span class="hf-tags">
@@ -198,10 +203,10 @@ function rail_discover($conn, $userId, $myCategories) {
         $params = array_merge($params, $cats);
     }
     $r = db_run($conn,
-        "SELECT c.id, c.name, c.category,
+        "SELECT c.id, c.name, c.category" . (club_identity_ready($conn) ? ", c.logo" : "") . ",
                 (SELECT COUNT(*) FROM club_members x WHERE x.club_id = c.id AND x.status = 'active') AS members
          FROM clubs c
-         WHERE c.status = 'approved' AND c.id NOT IN (SELECT club_id FROM club_members WHERE user_id = ?)
+         WHERE c.status = 'approved'" . (club_identity_ready($conn) ? " AND c.invite_only = 0" : "") . " AND c.id NOT IN (SELECT club_id FROM club_members WHERE user_id = ?)
          ORDER BY " . $order . ", c.id DESC LIMIT 3",
         $types, $params);
     return $r['rows'];
@@ -213,10 +218,10 @@ function rail_discover($conn, $userId, $myCategories) {
 function rail_featured($conn, $userId) {
     $seed = (int)date('Ymd');
     $r = db_run($conn,
-        "SELECT c.id, c.name, c.category, c.description,
+        "SELECT c.id, c.name, c.category, c.description" . (club_identity_ready($conn) ? ", c.logo" : "") . ",
                 (SELECT COUNT(*) FROM club_members x WHERE x.club_id = c.id AND x.status = 'active') AS members
          FROM clubs c
-         WHERE c.status = 'approved' AND c.id NOT IN (SELECT club_id FROM club_members WHERE user_id = ?)
+         WHERE c.status = 'approved'" . (club_identity_ready($conn) ? " AND c.invite_only = 0" : "") . " AND c.id NOT IN (SELECT club_id FROM club_members WHERE user_id = ?)
          ORDER BY RAND(" . $seed . ") LIMIT 1",
         "i", array((int)$userId));
     if (empty($r['rows'])) return null;

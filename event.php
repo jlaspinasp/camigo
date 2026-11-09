@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ================= THE EVENT =================
 $er = db_run($conn,
     "SELECT e.id, e.club_id, e.created_by, e.title, e.description, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility,
-            c.name AS club_name, c.category AS club_category
+            c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo" : "") . ", c.category AS club_category
      FROM events e JOIN clubs c ON c.id = e.club_id AND c.status = 'approved'
      WHERE e.id = ? LIMIT 1", "i", array($eid));
 $setupMissing = !$er['ok'];
@@ -100,6 +100,7 @@ $going = 0;
 $meGoing = false;
 $attendees = array();
 $hiddenCount = 0;
+$guestsPrivate = ($ev && !$isMember && ($me['role'] ?? 'user') !== 'admin' && club_is_invite_only($conn, $ev['club_id']));
 if ($ev && !$locked) {
     $ar = db_run($conn,
         "SELECT u.id, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility
@@ -116,6 +117,7 @@ if ($ev && !$locked) {
         // people with a private profile are only listed to themselves and the club owner
         if ($public || $isMe || $isOwner) $attendees[] = $a;
     }
+    if ($guestsPrivate) $attendees = array();
     $hiddenCount = max(0, $going - count($attendees));
 }
 
@@ -265,7 +267,7 @@ $selfBack = 'event?id=' . $eid;
                             </div>
                         <?php } ?>
                         <?php if ($hiddenCount > 0) { ?>
-                            <p class="club-meta" style="margin-top:14px"><?php echo $attendees ? '+ ' : ''; ?><?php echo $hiddenCount; ?> other<?php echo $hiddenCount === 1 ? '' : 's'; ?> who keep their profile private.</p>
+                            <p class="club-meta" style="margin-top:14px"><?php if ($guestsPrivate) { ?>The guest list is private to this club's members.<?php } else { echo $attendees ? '+ ' : ''; echo $hiddenCount; ?> other<?php echo $hiddenCount === 1 ? '' : 's'; ?> who keep their profile private.<?php } ?></p>
                         <?php } ?>
                     <?php } ?>
                 </section>
@@ -303,7 +305,7 @@ $selfBack = 'event?id=' . $eid;
                                 <p class="club-meta" style="margin-top:8px;text-align:center">Plans changed? Press it again to cancel your RSVP.</p>
                                 <?php if ($state === 'upcoming') { $rp = $me['reminder_pref'] ?? 'going'; ?>
                                     <?php if ($rp === 'off') { ?>
-                                        <p class="ev-remind off"><?php echo event_icon('bell'); ?><span>Reminders are off. <a href="edit-profile">Turn them on</a> to get a nudge before this starts.</span></p>
+                                        <p class="ev-remind off"><?php echo event_icon('bell'); ?><span>Reminders are off. <a href="notification-preferences#event-reminders">Turn them on</a> to get a nudge before this starts.</span></p>
                                     <?php } else { ?>
                                         <p class="ev-remind"><?php echo event_icon('bell'); ?><span>We'll remind you the day before and again about an hour before it starts.</span></p>
                                     <?php } ?>
@@ -332,7 +334,7 @@ $selfBack = 'event?id=' . $eid;
                 <section class="panel ev-host">
                     <small>Hosted by</small>
                     <a href="club?id=<?php echo (int)$ev['club_id']; ?>" class="ev-host-row">
-                        <span class="club-tile t<?php echo (int)$ev['club_id'] % 3; ?>"><?php echo e(first_letter($ev['club_name'])); ?></span>
+                        <?php echo club_tile_html(array('id' => $ev['club_id'], 'name' => $ev['club_name'], 'logo' => $ev['club_logo'] ?? null), '', 'span'); ?>
                         <span><strong><?php echo e($ev['club_name']); ?></strong><em><?php echo e($ev['club_category']); ?></em></span>
                     </a>
                 </section>

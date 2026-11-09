@@ -2,6 +2,7 @@
 session_start();
 require("db.php");
 require("auth.php");
+require("events-lib.php");
 
 $me = require_admin($conn);
 
@@ -12,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     // needed to tell the creator what happened
-    $cbRows = ($id > 0) ? db_run($conn, "SELECT name, created_by FROM clubs WHERE id = ? LIMIT 1", "i", array($id))['rows'] : array();
+    $cbRows = ($id > 0) ? db_run($conn, "SELECT * FROM clubs WHERE id = ? LIMIT 1", "i", array($id))['rows'] : array();
     $cb = $cbRows ? $cbRows[0] : null;
 
     if (!csrf_ok() || $id <= 0) {
@@ -48,6 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             "sii", array($note, $me['id'], $id));
         if ($r['ok'] && $r['affected'] > 0) {
             if ($cb) {
+                delete_club_image($cb['logo'] ?? null);
+                delete_club_image($cb['cover'] ?? null);
                 notify($conn, $cb['created_by'], 'club_rejected',
                     'Your club request "' . $cb['name'] . '" was not approved.' . ($note !== '' ? ' Reason: ' . $note : ''), 'create-club');
             }
@@ -70,7 +73,7 @@ if ($flash) {
 }
 
 $pending = db_run($conn,
-    "SELECT c.id, c.name, c.name_key, c.category, c.description, c.created_at, u.username, u.first_name, u.last_name
+    "SELECT c.id, c.name, c.name_key, c.category, c.description, c.created_at" . (club_identity_ready($conn) ? ", c.logo, c.cover, c.invite_only" : "") . ", u.username, u.first_name, u.last_name
      FROM clubs c LEFT JOIN users u ON u.id = c.created_by
      WHERE c.status = 'pending' ORDER BY c.created_at ASC");
 
@@ -142,6 +145,16 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
                             <?php echo e(date('M j, Y', strtotime($c['created_at']))); ?>
                         </div>
                         <p class="club-desc"><?php echo nl2br(e($c['description'])); ?></p>
+
+                        <?php if (!empty($c['cover']) || !empty($c['logo']) || !empty($c['invite_only'])) { ?>
+                            <div style="margin:10px 0">
+                                <?php if (club_image_ok($c['cover'] ?? '')) { ?><img src="uploads/clubs/<?php echo e($c['cover']); ?>" alt="Cover" style="display:block;width:100%;max-height:130px;object-fit:cover;border-radius:12px"><?php } ?>
+                                <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+                                    <?php if (club_image_ok($c['logo'] ?? '')) { ?><img src="uploads/clubs/<?php echo e($c['logo']); ?>" alt="Logo" style="width:48px;height:48px;object-fit:cover;border-radius:12px"><?php } ?>
+                                    <?php if (!empty($c['invite_only'])) { ?><span class="badge invite"><?php echo event_icon('lock'); ?>Invite only</span><?php } ?>
+                                </div>
+                            </div>
+                        <?php } ?>
 
                         <?php if ($similar) { ?>
                             <div class="similar">Similar approved clubs: <?php echo e(implode(", ", array_column($similar, 'name'))); ?></div>

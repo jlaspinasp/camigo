@@ -11,6 +11,27 @@ $max_pending = 3;
 $message = "";
 $message_class = "";
 
+$identity = club_identity_ready($conn);
+$coverImg = '';
+$logoImg  = '';
+$ph = first_letter(trim($_POST['name'] ?? ''));
+if ($ph === '') $ph = 'A';
+
+// one uploaded image field: returns the saved file name, or null (sets $error if something was wrong)
+function club_upload_field($field, $kind, &$error) {
+    $up = $_FILES[$field] ?? null;
+    if (!$up || ($up['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+    if ($up['error'] !== UPLOAD_ERR_OK) { $error = "That image couldn't be uploaded. Please try a smaller file."; return null; }
+    if ($up['size'] > 2 * 1024 * 1024) { $error = "Images can be up to 2 MB."; return null; }
+    return save_club_image($up['tmp_name'], $kind, $error);
+}
+
+// a file larger than the server's post limit arrives as an empty form
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+    $message = "That upload was too large for the server. Try smaller images (up to 2 MB each).";
+    $message_class = "error";
+}
+
 $flash = flash_get();
 if ($flash) {
     $message = $flash[0];
@@ -58,22 +79,44 @@ if (isset($_POST['create'])) {
     }
 
     if ($error === "") {
-        $r = db_run(
-            $conn,
-            "INSERT INTO clubs (name, name_key, category, description, created_by, status) VALUES (?, ?, ?, ?, ?, 'pending')",
-            "ssssi",
-            array($name, $key, $category, $description, $me['id'])
-        );
+        $logoName = null;
+        $coverName = null;
+        $inviteOnly = 0;
+        $token = null;
 
-        if ($r['ok']) {
-            flash_set("Your club request was sent. An admin will review it soon.", "success");
-            header("Location: create-club");
-            exit();
+        if ($identity) {
+            $logoName = club_upload_field('logo', 'logo', $error);
+            if ($error === "") $coverName = club_upload_field('cover', 'cover', $error);
+            $inviteOnly = !empty($_POST['invite_only']) ? 1 : 0;
+            $token = $inviteOnly ? bin2hex(random_bytes(10)) : null;
         }
 
-        $error = ($r['errno'] == 1062)
-            ? "A club with this name already exists or is waiting for approval."
-            : "Something went wrong. Please try again.";
+        if ($error === "") {
+            if ($identity) {
+                $r = db_run($conn,
+                    "INSERT INTO clubs (name, name_key, category, description, created_by, status, logo, cover, invite_only, invite_token)
+                     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)",
+                    "ssssissis", array($name, $key, $category, $description, $me['id'], $logoName, $coverName, $inviteOnly, $token));
+            } else {
+                $r = db_run($conn,
+                    "INSERT INTO clubs (name, name_key, category, description, created_by, status) VALUES (?, ?, ?, ?, ?, 'pending')",
+                    "ssssi", array($name, $key, $category, $description, $me['id']));
+            }
+
+            if ($r['ok']) {
+                flash_set("Your club request was sent. An admin will review it soon.", "success");
+                header("Location: create-club");
+                exit();
+            }
+
+            $error = ($r['errno'] == 1062)
+                ? "A club with this name already exists or is waiting for approval."
+                : "Something went wrong. Please try again.";
+        }
+
+        // a failed request shouldn't leave stray uploads behind
+        delete_club_image($logoName);
+        delete_club_image($coverName);
     }
 
     $message = $error;
@@ -107,15 +150,49 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
     <h1 class="page-title">Create a club</h1>
     <p class="page-sub">Every new club is reviewed by an admin before it goes live, so we can keep the list free of duplicates.</p>
 
-    <section class="panel">
-        <h2>Club details</h2>
+    <?php if ($message != "") { ?>
+        <div class="msg <?php echo e($message_class); ?>" style="margin-top:20px"><?php echo e($message); ?></div>
+    <?php } ?>
 
-        <?php if ($message != "") { ?>
-            <div class="msg <?php echo e($message_class); ?>"><?php echo e($message); ?></div>
+    <form method="POST" enctype="multipart/form-data">
+        <?php echo csrf_field(); ?>
+
+        <?php if ($identity) { ?>
+        <section class="panel">
+            <h2>Club identity</h2>
+            <p class="club-meta">A logo and a cover make your page easy to recognise. Click an image to upload it, and use the &times; to remove it.</p>
+
+            <div class="id-preview">
+                <div class="cover id-cover<?php echo $coverImg ? ' has-img' : ''; ?>" id="cover-preview" role="button" tabindex="0" aria-label="Change cover image"
+                     data-gd="<?php echo 0; ?>"
+                     <?php if ($coverImg) { ?>style="background-image:url('uploads/clubs/<?php echo e($coverImg); ?>')"<?php } else { ?>data-g="<?php echo 0; ?>"<?php } ?>>
+                    <div class="id-cta"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 9"/></svg><strong>Click to add a cover image</strong></div>
+                    <button type="button" class="id-x" id="cover-remove" aria-label="Remove cover image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+                </div>
+
+                <div class="id-logo-row">
+                    <div class="id-logo-wrap">
+                        <div class="club-tile big t<?php echo 0; ?><?php echo $logoImg ? ' has-logo' : ''; ?>" id="logo-preview" role="button" tabindex="0" aria-label="Change logo" data-letter="<?php echo e($ph); ?>">
+                            <?php if ($logoImg) { ?><img src="uploads/clubs/<?php echo e($logoImg); ?>" alt=""><?php } else { echo e($ph); } ?>
+                        </div>
+                        <button type="button" class="id-x" id="logo-remove" aria-label="Remove logo" <?php echo $logoImg ? '' : 'hidden'; ?>><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+                    </div>
+                    <div class="id-logo-text"><strong>Club logo</strong><span>Click the logo to upload one.</span></div>
+                </div>
+            </div>
+
+            <input type="file" name="cover" id="cover" accept="image/jpeg,image/png,image/webp" hidden>
+            <input type="file" name="logo" id="logo" accept="image/jpeg,image/png,image/webp" hidden>
+            <input type="hidden" name="remove_cover" id="remove-cover" value="0">
+            <input type="hidden" name="remove_logo" id="remove-logo" value="0">
+            <p class="hint" id="id-msg">JPG, PNG or WebP, up to 2 MB. Covers are cropped wide, logos square.</p>
+        </section>
+        <?php } else { ?>
+            <div class="msg error" style="margin-top:20px">Logos, covers and invite-only clubs need a one-time upgrade. Run <strong>club-identity.sql</strong> in phpMyAdmin to unlock them.</div>
         <?php } ?>
 
-        <form method="POST">
-            <?php echo csrf_field(); ?>
+        <section class="panel">
+            <h2>Club details</h2>
 
             <div class="field">
                 <label for="name">Club name</label>
@@ -135,10 +212,18 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
                 <label for="description">What is your club about?</label>
                 <textarea name="description" id="description" maxlength="500" required><?php echo old_val('description'); ?></textarea>
             </div>
+        </section>
 
-            <button type="submit" name="create" class="btn inline">Submit for approval</button>
-        </form>
-    </section>
+        <?php if ($identity) { ?>
+        <section class="panel">
+            <h2>Privacy</h2>
+            <label class="remember" style="margin:0"><input type="checkbox" name="invite_only" value="1" <?php echo !empty($_POST['invite_only']) ? 'checked' : ''; ?>> <strong>Invite-only club</strong></label>
+            <p class="club-meta" style="margin-top:8px">People can still find your club, but they can't ask to join and they can't see who's in it. Anyone with your invite link joins straight away. You'll get your link as soon as an admin approves the club.</p>
+        </section>
+        <?php } ?>
+
+        <button type="submit" name="create" class="btn inline">Submit for approval</button>
+    </form>
 
     <section class="panel">
         <h2>Your requests</h2>
@@ -163,6 +248,125 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
     </section>
 
 </main>
+
+<?php if ($identity) { ?>
+<script>
+(function () {
+    var MAX = 2 * 1024 * 1024;
+    var TYPES = /^image\/(jpeg|png|webp)$/;
+    var msg = document.getElementById("id-msg");
+    var msgText = msg.textContent;
+
+    function say(text) { msg.textContent = text; msg.classList.add("bad"); }
+    function calm() { msg.textContent = msgText; msg.classList.remove("bad"); }
+
+    // one picker per image: click, keyboard, drag and drop, change and remove
+    function picker(o) {
+        var input = document.getElementById(o.input);
+        var area = document.getElementById(o.area);
+        var removeField = document.getElementById(o.removeField);
+
+        function open() { input.click(); }
+
+        function accept(file) {
+            if (!file) return false;
+            if (!TYPES.test(file.type)) { say("Please choose a JPG, PNG or WebP image."); return false; }
+            if (file.size > MAX) { say("That image is over 2 MB. Please choose a smaller one."); return false; }
+            calm();
+            removeField.value = "0";
+            o.show(URL.createObjectURL(file));
+            return true;
+        }
+
+        input.addEventListener("change", function () {
+            var f = input.files && input.files[0];
+            if (!f) return;
+            if (!accept(f)) input.value = "";
+        });
+
+        o.openers.forEach(function (id) {
+            var el = document.getElementById(id);
+            el.addEventListener("click", function (e) { e.stopPropagation(); open(); });
+        });
+        area.addEventListener("click", open);
+        area.addEventListener("keydown", function (e) {
+            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+        });
+
+        ["dragenter", "dragover"].forEach(function (t) {
+            area.addEventListener(t, function (e) { e.preventDefault(); area.classList.add("id-drag"); });
+        });
+        ["dragleave", "drop"].forEach(function (t) {
+            area.addEventListener(t, function () { area.classList.remove("id-drag"); });
+        });
+        area.addEventListener("drop", function (e) {
+            e.preventDefault();
+            var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+            if (!f) return;
+            try {
+                var dt = new DataTransfer();
+                dt.items.add(f);
+                input.files = dt.files;
+            } catch (err) { say("Dragging isn't supported in this browser. Click to browse instead."); return; }
+            if (!accept(f)) input.value = "";
+        });
+
+        document.getElementById(o.remove).addEventListener("click", function (e) {
+            e.stopPropagation();
+            input.value = "";
+            removeField.value = "1";
+            calm();
+            o.reset();
+        });
+    }
+
+    var cover = document.getElementById("cover-preview");
+    picker({
+        input: "cover", area: "cover-preview", removeField: "remove-cover", remove: "cover-remove", openers: [],
+        show: function (url) {
+            cover.classList.add("has-img");
+            cover.removeAttribute("data-g");
+            cover.style.backgroundImage = "url('" + url + "')";
+        },
+        reset: function () {
+            cover.classList.remove("has-img");
+            cover.style.backgroundImage = "";
+            cover.setAttribute("data-g", cover.getAttribute("data-gd"));
+        }
+    });
+
+    var logo = document.getElementById("logo-preview");
+    var logoX = document.getElementById("logo-remove");
+    picker({
+        input: "logo", area: "logo-preview", removeField: "remove-logo", remove: "logo-remove", openers: [],
+        show: function (url) {
+            logo.classList.add("has-logo");
+            logo.innerHTML = "";
+            var img = document.createElement("img");
+            img.src = url;
+            img.alt = "";
+            logo.appendChild(img);
+            logoX.hidden = false;
+        },
+        reset: function () {
+            logo.classList.remove("has-logo");
+            logo.textContent = logo.getAttribute("data-letter");
+            logoX.hidden = true;
+        }
+    });
+
+    // the letter on the logo follows the club name while no logo is chosen
+    var nm = document.getElementById("name");
+    if (nm) {
+        nm.addEventListener("input", function () {
+            var l = (nm.value.trim().charAt(0) || "A").toUpperCase();
+            logo.setAttribute("data-letter", l);
+            if (!logo.classList.contains("has-logo")) logo.textContent = l;
+        });
+    }
+})();
+</script>
+<?php } ?>
 
 </body>
 </html>

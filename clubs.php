@@ -3,6 +3,7 @@ session_start();
 require("db.php");
 require("auth.php");
 require("events-lib.php");
+require("feed-lib.php");
 
 $me = require_user_row($conn);
 
@@ -16,6 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!csrf_ok() || $id <= 0) {
         flash_set("Your session expired. Please try again.", "error");
+
+    } elseif ($action === 'join' && club_is_invite_only($conn, $id)) {
+        flash_set("That club is invite-only. Ask a member for an invite link.", "error");
 
     } elseif ($action === 'join') {
 
@@ -66,7 +70,7 @@ $cat  = $_GET['cat'] ?? '';
 $mine = !empty($_GET['mine']);
 if (!in_array($cat, $categories, true)) $cat = '';
 
-$sql = "SELECT c.id, c.name, c.category, c.description,
+$sql = "SELECT c.*,
             (SELECT COUNT(*) FROM club_members m WHERE m.club_id = c.id AND m.status = 'active') AS members,
             (SELECT COUNT(*) FROM club_members p WHERE p.club_id = c.id AND p.status = 'pending') AS pending_n,
             mine.role AS my_role, mine.status AS my_status
@@ -114,6 +118,36 @@ $message = $flash ? $flash[0] : "";
 $message_class = $flash ? $flash[1] : "";
 
 $filtered = ($q !== '' || $cat !== '');
+
+// Cover photo (or a colour gradient when the club has none).
+function club_media_html($c, $class) {
+    $img = !empty($c['cover']) && club_image_ok($c['cover']);
+    $h = '<div class="' . $class . ($img ? ' has-img' : '') . '" data-g="' . ((int)$c['id'] % 6) . '">';
+    if ($img) {
+        $h .= '<img src="uploads/clubs/' . e($c['cover']) . '" alt="" loading="lazy" decoding="async">';
+    }
+    return $h . '</div>';
+}
+
+// ---- featured club: the same daily pick the dashboard shows (rail_featured) ----
+// Only on the plain "All clubs" view. Its cover and details come from the list below.
+$featured = null;
+$gridClubs = $clubs;
+if (!$tableMissing && !$filtered && !$mine) {
+    $pick = rail_featured($conn, $me['id']);
+    if ($pick) {
+        foreach ($clubs as $fc) {
+            if ((int)$fc['id'] === (int)$pick['id']) {
+                $featured = $fc;
+                break;
+            }
+        }
+    }
+    if ($featured) {
+        $fid = (int)$featured['id'];
+        $gridClubs = array_values(array_filter($clubs, function ($gc) use ($fid) { return (int)$gc['id'] !== $fid; }));
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -147,6 +181,49 @@ $filtered = ($q !== '' || $cat !== '');
 
     <?php if ($message != "") { ?>
         <div class="msg <?php echo e($message_class); ?>" style="margin-top:20px"><?php echo e($message); ?></div>
+    <?php } ?>
+
+    <?php if ($featured) {
+        $f = $featured;
+        $fn = (int)$f['members'];
+        $fOwner   = ($f['my_role'] === 'owner');
+        $fPending = ($f['my_status'] === 'pending');
+        $fMember  = (($f['my_role'] === 'member' || $f['my_role'] === 'officer') && $f['my_status'] === 'active');
+        $fJoin    = (!$fOwner && !$fPending && !$fMember && empty($f['invite_only']));
+    ?>
+        <section class="cf" aria-label="Featured club">
+            <?php echo club_media_html($f, 'cf-media'); ?>
+            <div class="cf-body">
+                <span class="cf-flag"><?php echo event_icon('star'); ?>Featured today</span>
+                <div class="cf-id">
+                    <?php echo club_tile_html($f, 'cf-logo'); ?>
+                    <div class="cf-titles">
+                        <h2 class="cf-name"><a href="club?id=<?php echo (int)$f['id']; ?>"><?php echo e($f['name']); ?></a></h2>
+                        <div class="cf-meta">
+                            <span class="cf-cat"><?php echo e($f['category']); ?></span>
+                            <span class="cf-count"><?php echo event_icon('users'); ?><?php echo $fn; ?> member<?php echo $fn === 1 ? '' : 's'; ?></span>
+                        </div>
+                    </div>
+                </div>
+                <?php if (trim((string)$f['description']) !== '') { ?><p class="cf-desc"><?php echo e($f['description']); ?></p><?php } ?>
+                <div class="cf-actions">
+                    <?php if ($fJoin) { ?>
+                        <form method="POST">
+                            <?php echo csrf_field(); ?>
+                            <input type="hidden" name="club_id" value="<?php echo (int)$f['id']; ?>">
+                            <button type="submit" name="action" value="join" class="btn-sm cf-btn cf-primary">Request to join</button>
+                        </form>
+                        <a href="club?id=<?php echo (int)$f['id']; ?>" class="btn-sm cf-btn cf-glass">View club</a>
+                    <?php } else { ?>
+                        <a href="club?id=<?php echo (int)$f['id']; ?>" class="btn-sm cf-btn cf-primary">View club</a>
+                        <?php if ($fOwner) { ?><span class="cf-state">You own this club</span>
+                        <?php } elseif ($fMember) { ?><span class="cf-state">You're a member</span>
+                        <?php } elseif ($fPending) { ?><span class="cf-state">Request sent</span>
+                        <?php } else { ?><span class="cf-state">Invite only</span><?php } ?>
+                    <?php } ?>
+                </div>
+            </div>
+        </section>
     <?php } ?>
 
     <div class="tabs">
@@ -184,59 +261,69 @@ $filtered = ($q !== '' || $cat !== '');
 
     <?php } else { ?>
 
-        <div class="club-grid">
-            <?php foreach ($clubs as $c) {
+        <?php if ($gridClubs) { ?>
+        <div class="cc-grid">
+            <?php foreach ($gridClubs as $c) {
                 $n = (int)$c['members'];
-                $tile = (int)$c['id'] % 3;
                 $isOwner   = ($c['my_role'] === 'owner');
                 $isPending = ($c['my_status'] === 'pending');
                 $isOfficer = ($c['my_role'] === 'officer' && $c['my_status'] === 'active');
                 $isMember  = (($c['my_role'] === 'member' || $isOfficer) && $c['my_status'] === 'active');
             ?>
-                <article class="club-card">
-                    <div class="club-top">
-                        <div class="club-tile t<?php echo $tile; ?>"><?php echo e(first_letter($c['name'])); ?></div>
-                        <div class="club-info">
+                <article class="cc-card">
+                    <div class="cc-top">
+                        <?php echo club_media_html($c, 'cc-media'); ?>
+                        <?php if (!empty($c['invite_only'])) { ?><span class="cc-pill"><?php echo event_icon('lock'); ?>Invite only</span><?php } ?>
+                    </div>
+
+                    <div class="cc-body">
+                        <?php echo club_tile_html($c, 'cc-logo'); ?>
+                        <div class="cc-head">
                             <h3><a href="club?id=<?php echo (int)$c['id']; ?>"><?php echo e($c['name']); ?></a></h3>
                             <span class="chip"><?php echo e($c['category']); ?></span>
                         </div>
-                    </div>
 
-                    <p class="club-text"><?php echo e($c['description']); ?></p>
+                        <p class="club-text"><?php echo e($c['description']); ?></p>
 
-                    <div class="club-foot">
-                        <span class="club-meta"><?php echo $n; ?> member<?php echo $n === 1 ? '' : 's'; ?></span>
+                        <div class="club-foot">
+                            <span class="club-meta cc-count"><?php echo event_icon('users'); ?><?php echo $n; ?> member<?php echo $n === 1 ? '' : 's'; ?></span>
 
-                        <?php if ($isOwner) { ?>
-                            <div class="foot-right">
-                                <?php if ((int)$c['pending_n'] > 0) { ?>
-                                    <a href="club-requests" class="badge pending"><?php echo (int)$c['pending_n']; ?> request<?php echo ((int)$c['pending_n'] === 1) ? '' : 's'; ?></a>
-                                <?php } ?>
-                                <span class="badge approved">Owner</span>
-                            </div>
-                        <?php } else { ?>
-                            <form method="POST" class="foot-right">
-                                <?php echo csrf_field(); ?>
-                                <input type="hidden" name="club_id" value="<?php echo (int)$c['id']; ?>">
-                                <input type="hidden" name="q" value="<?php echo e($q); ?>">
-                                <input type="hidden" name="cat" value="<?php echo e($cat); ?>">
-                                <?php if ($mine) { ?><input type="hidden" name="mine" value="1"><?php } ?>
+                            <?php if ($isOwner) { ?>
+                                <div class="foot-right">
+                                    <?php if ((int)$c['pending_n'] > 0) { ?>
+                                        <a href="club-requests" class="badge pending"><?php echo (int)$c['pending_n']; ?> request<?php echo ((int)$c['pending_n'] === 1) ? '' : 's'; ?></a>
+                                    <?php } ?>
+                                    <span class="badge approved">Owner</span>
+                                </div>
+                            <?php } else { ?>
+                                <form method="POST" class="foot-right">
+                                    <?php echo csrf_field(); ?>
+                                    <input type="hidden" name="club_id" value="<?php echo (int)$c['id']; ?>">
+                                    <input type="hidden" name="q" value="<?php echo e($q); ?>">
+                                    <input type="hidden" name="cat" value="<?php echo e($cat); ?>">
+                                    <?php if ($mine) { ?><input type="hidden" name="mine" value="1"><?php } ?>
 
-                                <?php if ($isPending) { ?>
-                                    <span class="badge pending">Request sent</span>
-                                    <button type="submit" name="action" value="cancel" class="btn-sm btn-ghost">Cancel</button>
-                                <?php } elseif ($isMember) { ?>
-                                    <?php if ($isOfficer) { ?><span class="badge officer"><?php echo event_icon('star'); ?>Officer</span><?php } ?>
-                                    <button type="submit" name="action" value="leave" class="btn-sm btn-ghost">Leave</button>
-                                <?php } else { ?>
-                                    <button type="submit" name="action" value="join" class="btn-sm btn-dark">Request to join</button>
-                                <?php } ?>
-                            </form>
-                        <?php } ?>
+                                    <?php if ($isPending) { ?>
+                                        <span class="badge pending">Request sent</span>
+                                        <button type="submit" name="action" value="cancel" class="btn-sm btn-ghost">Cancel</button>
+                                    <?php } elseif ($isMember) { ?>
+                                        <?php if ($isOfficer) { ?><span class="badge officer"><?php echo event_icon('star'); ?>Officer</span><?php } ?>
+                                        <button type="submit" name="action" value="leave" class="btn-sm btn-ghost">Leave</button>
+                                    <?php } else { ?>
+                                        <?php if (!empty($c['invite_only'])) { ?>
+                                            <span class="club-meta">Ask a member for an invite</span>
+                                        <?php } else { ?>
+                                            <button type="submit" name="action" value="join" class="btn-sm btn-dark">Request to join</button>
+                                        <?php } ?>
+                                    <?php } ?>
+                                </form>
+                            <?php } ?>
+                        </div>
                     </div>
                 </article>
             <?php } ?>
         </div>
+        <?php } ?>
 
     <?php } ?>
 

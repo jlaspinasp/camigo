@@ -141,7 +141,6 @@ $emptyText = array(
 
     <section class="pj-banner">
         <div class="pj-banner-copy">
-            <span class="pj-eyebrow"><?php echo project_icon('rocket'); ?>Projects</span>
             <h1>Turn an idea into a team.</h1>
             <p>Post what you want to build, say who you need, and build it together with students from your campus.</p>
             <div class="pj-banner-actions">
@@ -151,13 +150,6 @@ $emptyText = array(
                 <?php } ?>
             </div>
         </div>
-        <?php if (!$setupMissing) { ?>
-        <div class="pj-stats">
-            <div><b><?php echo $openN; ?></b><span>recruiting now</span></div>
-            <div><b><?php echo $spotsN; ?></b><span>open spots</span></div>
-            <div><b><?php echo $launchedN; ?></b><span>launched</span></div>
-        </div>
-        <?php } ?>
     </section>
 
     <?php if ($message != "") { ?>

@@ -54,7 +54,7 @@ $featured = null;
 $feed = array();
 if ($urow) {
     $myClubs = db_run($conn,
-        "SELECT c.id, c.name, c.category, m.role
+        "SELECT c.id, c.name, c.category, m.role" . (club_identity_ready($conn) ? ", c.logo" : "") . "
          FROM club_members m JOIN clubs c ON c.id = m.club_id AND c.status = 'approved'
          WHERE m.user_id = ? AND m.status = 'active'
          ORDER BY (m.role = 'owner') DESC, (m.role = 'officer') DESC, c.name ASC LIMIT 50",
@@ -190,6 +190,44 @@ $initial = strtoupper(substr($first, 0, 1));
                     render();
                 })();
                 </script>
+                <script>
+                // "See more" on long announcements: expand the text in place
+                (function () {
+                    var list = document.getElementById("hfList");
+                    if (!list) return;
+
+                    function measure() {
+                        list.querySelectorAll("[data-hf-text]").forEach(function (el) {
+                            var btn = el.nextElementSibling;
+                            if (!btn || !btn.classList.contains("hf-expand")) return;
+                            var card = el.closest(".hf");
+                            if (card && card.hidden) return;            // can't measure what isn't showing
+                            var want = el.classList.contains("open") ? false : !(el.scrollHeight > el.clientHeight + 2);
+                            if (btn.hidden !== want) btn.hidden = want;   // only touch it when it changes, or the observer below loops
+                        });
+                    }
+
+                    list.addEventListener("click", function (e) {
+                        var btn = e.target.closest ? e.target.closest(".hf-expand") : null;
+                        if (!btn) return;
+                        var el = btn.previousElementSibling;
+                        var open = el.classList.toggle("open");
+                        btn.textContent = open ? "See less" : "See more";
+                    });
+
+                    measure();
+                    window.addEventListener("resize", measure);
+                    window.addEventListener("load", measure);
+                    if (window.MutationObserver) {
+                        new MutationObserver(function (muts) {
+                            // only react when a post card is shown or hidden, never to our own button changes
+                            for (var i = 0; i < muts.length; i++) {
+                                if (muts[i].target.classList && muts[i].target.classList.contains("hf")) { measure(); return; }
+                            }
+                        }).observe(list, { subtree: true, attributes: true, attributeFilter: ["hidden"] });
+                    }
+                })();
+                </script>
             <?php } ?>
         </section>
 
@@ -228,7 +266,7 @@ $initial = strtoupper(substr($first, 0, 1));
                 <section class="panel rail-feat">
                     <span class="feat-badge">&#9733; Featured club</span>
                     <a class="feat-main" href="club?id=<?php echo (int)$featured['id']; ?>">
-                        <span class="club-tile t<?php echo (int)$featured['id'] % 3; ?>"><?php echo e(first_letter($featured['name'])); ?></span>
+                        <?php echo club_tile_html($featured, '', 'span'); ?>
                         <span>
                             <strong><?php echo e($featured['name']); ?></strong>
                             <em><?php echo e($featured['category']); ?> &middot; <?php echo $fm; ?> member<?php echo $fm === 1 ? '' : 's'; ?></em>
@@ -298,7 +336,7 @@ $initial = strtoupper(substr($first, 0, 1));
                         $roleLabel = ($role === 'owner') ? 'Owner' : (($role === 'officer') ? 'Officer' : '');
                     ?>
                         <a class="rail-club" href="club?id=<?php echo (int)$mc['id']; ?>">
-                            <span class="club-tile t<?php echo (int)$mc['id'] % 3; ?>"><?php echo e(first_letter($mc['name'])); ?></span>
+                            <?php echo club_tile_html($mc, '', 'span'); ?>
                             <span><strong><?php echo e($mc['name']); ?></strong><em><?php echo $roleLabel !== '' ? e($roleLabel) . ' &middot; ' : ''; ?><?php echo e($mc['category']); ?></em></span>
                         </a>
                     <?php } ?>
@@ -336,7 +374,7 @@ $initial = strtoupper(substr($first, 0, 1));
                     </div>
                     <?php foreach ($discover as $dc) { $mc = (int)$dc['members']; ?>
                         <a class="rail-club" href="club?id=<?php echo (int)$dc['id']; ?>">
-                            <span class="club-tile t<?php echo (int)$dc['id'] % 3; ?>"><?php echo e(first_letter($dc['name'])); ?></span>
+                            <?php echo club_tile_html($dc, '', 'span'); ?>
                             <span><strong><?php echo e($dc['name']); ?></strong><em><?php echo e($dc['category']); ?> &middot; <?php echo $mc; ?> member<?php echo $mc === 1 ? '' : 's'; ?></em></span>
                         </a>
                     <?php } ?>

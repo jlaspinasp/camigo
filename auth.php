@@ -169,15 +169,86 @@ function year_levels() {
     return array("1st year", "2nd year", "3rd year", "4th year", "5th year", "Graduate student");
 }
 
-// key => [label, required domain ('' = any site), example link]
+// key => [label, allowed domain(s) separated by | ('' = any site), example link]
+// "Instagram" .. "GitHub" always exist; the rest need profile-more.sql (edit-profile hides what isn't set up yet).
 function social_networks() {
     return array(
-        'instagram' => array('Instagram', 'instagram.com', 'https://instagram.com/yourname'),
-        'facebook'  => array('Facebook',  'facebook.com',  'https://facebook.com/yourname'),
-        'github'    => array('GitHub',    'github.com',    'https://github.com/yourname'),
-        'linkedin'  => array('LinkedIn',  'linkedin.com',  'https://linkedin.com/in/yourname'),
-        'website'   => array('Website',   '',              'https://yourwebsite.com'),
+        'instagram' => array('Instagram', 'instagram.com',            'https://instagram.com/yourname'),
+        'facebook'  => array('Facebook',  'facebook.com',             'https://facebook.com/yourname'),
+        'github'    => array('GitHub',    'github.com',               'https://github.com/yourname'),
+        'discord'   => array('Discord',   'discord.gg|discord.com',   'https://discord.gg/yourinvite'),
+        'youtube'   => array('YouTube',   'youtube.com|youtu.be',     'https://youtube.com/@yourchannel'),
+        'tiktok'    => array('TikTok',    'tiktok.com',               'https://tiktok.com/@yourname'),
+        'x'         => array('X',         'x.com|twitter.com',        'https://x.com/yourname'),
+        'twitch'    => array('Twitch',    'twitch.tv',                'https://twitch.tv/yourname'),
+        'spotify'   => array('Spotify',   'spotify.com',              'https://open.spotify.com/user/yourname'),
     );
+}
+
+// Thought-bubble emoji next to the profile photo: one emoji, or empty. Returns null (and sets $error) on bad input.
+function parse_status_emoji($raw, &$error) {
+    $v = trim((string)$raw);
+    if ($v === '') return '';
+    $len = function_exists('mb_strlen') ? mb_strlen($v, 'UTF-8') : strlen($v);
+    if ($len > 8 || preg_match('/[\x00-\x7F]/', $v) || !preg_match('/^[^\p{L}\p{N}\s\p{P}\p{Sc}\p{Sm}\p{Cc}]+$/u', $v)) {
+        $error = "Please pick a single emoji for your thought bubble.";
+        return null;
+    }
+    return $v;
+}
+
+// Short text inside the thought bubble (optional, up to 40 characters). Returns null (and sets $error) if too long.
+function parse_status_text($raw, &$error) {
+    $v = trim(preg_replace('/\s+/', ' ', (string)$raw));
+    if (str_len($v) > 40) {
+        $error = "Your thought bubble can be up to 40 characters.";
+        return null;
+    }
+    return $v;
+}
+
+// Prompts shown in an empty bubble on your own profile (changes daily)
+function bubble_prompts() {
+    return array('Pick a mythical creature as a pet', "What's your comfort show?", 'One song on repeat lately?', 'Coffee or tea person?', 'Your go-to study snack?', 'Dream elective you would take?', 'Best thing you ate this week?');
+}
+
+// A few quick picks for the thought bubble
+function bubble_picks() {
+    return array('🐱','🐶','🎧','🎮','📚','☕','💻','🎨','🎸','⚽','🏀','🍜','🌱','🚀','✨','🔥','🌙','🎬','📷','✈️','🧠','💪','🎯','😴');
+}
+
+// "Currently into" rows. Every one is optional; people only fill in what fits.
+function currently_categories() {
+    return array('Listening to', 'Reading', 'Watching', 'Playing', 'Learning', 'Building', 'Cooking', 'Training', 'Exploring', 'Obsessed with');
+}
+
+// Turns the saved JSON into array(array('Reading', 'Atomic Habits'), ...) in a fixed order
+function currently_list($json) {
+    $data = json_decode((string)$json, true);
+    $out = array();
+    if (!is_array($data)) return $out;
+    foreach (currently_categories() as $cat) {
+        if (isset($data[$cat]) && is_string($data[$cat]) && trim($data[$cat]) !== '') {
+            $out[] = array($cat, trim($data[$cat]));
+        }
+    }
+    return $out;
+}
+
+// $_POST['currently'] (category => text) -> JSON string or null. Sets $error on bad input.
+function parse_currently($post, &$error) {
+    $clean = array();
+    if (!is_array($post)) return null;
+    foreach (currently_categories() as $cat) {
+        $v = isset($post[$cat]) && is_string($post[$cat]) ? trim(preg_replace('/\s+/', ' ', $post[$cat])) : '';
+        if ($v === '') continue;
+        if (str_len($v) > 60) {
+            $error = "\"$cat\" can be up to 60 characters.";
+            return null;
+        }
+        $clean[$cat] = $v;
+    }
+    return $clean ? json_encode($clean, JSON_UNESCAPED_UNICODE) : null;
 }
 
 function first_letter($s) {
@@ -210,9 +281,13 @@ function normalize_url($input, $domain, $label, &$error) {
 
     if ($domain !== '') {
         $host = strtolower((string)parse_url($u, PHP_URL_HOST));
-        $suffix = '.' . $domain;
-        if ($host !== $domain && substr($host, -strlen($suffix)) !== $suffix) {
-            $error = "Your $label link needs to go to $domain.";
+        $okHost = false;
+        foreach (explode('|', $domain) as $d) {
+            $suffix = '.' . $d;
+            if ($host === $d || substr($host, -strlen($suffix)) === $suffix) { $okHost = true; break; }
+        }
+        if (!$okHost) {
+            $error = "Your $label link needs to go to " . str_replace('|', ' or ', $domain) . ".";
             return null;
         }
     }
@@ -220,7 +295,7 @@ function normalize_url($input, $domain, $label, &$error) {
 }
 
 // "Robotics, Chess" -> "Robotics,Chess". Returns null (and sets $error) on bad input.
-function parse_interests($raw, &$error) {
+function parse_interests($raw, &$error, $max = 8) {
     $out = array();
     $seen = array();
 
@@ -243,8 +318,8 @@ function parse_interests($raw, &$error) {
         $out[] = $t;
     }
 
-    if (count($out) > 8) {
-        $error = "Please pick up to 8 interests.";
+    if ($max > 0 && count($out) > $max) {
+        $error = "Please pick up to $max interests.";
         return null;
     }
     return implode(',', $out);
@@ -540,4 +615,153 @@ function notif_look($type) {
         case 'project_update':   return array('info', $rocket);
         default:              return array('info', $bell);
     }
+}
+
+// ================= CLUB IDENTITY (logo, cover) + INVITE-ONLY CLUBS =================
+
+// Has club-identity.sql been run? Checked once per request so older databases keep working.
+function club_identity_ready($conn) {
+    static $ready = null;
+    if ($ready === null) {
+        $c = @mysqli_query($conn, "SHOW COLUMNS FROM clubs LIKE 'invite_only'");
+        $ready = ($c && mysqli_num_rows($c) > 0);
+    }
+    return $ready;
+}
+
+function club_is_invite_only($conn, $clubId) {
+    if (!club_identity_ready($conn)) return false;
+    $r = db_run($conn, "SELECT invite_only FROM clubs WHERE id = ? LIMIT 1", "i", array((int)$clubId));
+    return ($r['rows'] && (int)$r['rows'][0]['invite_only'] === 1);
+}
+
+function club_image_dir() {
+    return __DIR__ . '/uploads/clubs';
+}
+
+function club_image_ok($name) {
+    return is_string($name) && preg_match('/^[a-f0-9]{24}\.jpg$/', $name) === 1;
+}
+
+// Re-draws an upload as a clean JPEG with a random name.
+// $kind 'logo' = 400x400 square, 'cover' = 10:3 banner, up to 3840x1152. Returns the file name, or null (and sets $error).
+function save_club_image($tmpPath, $kind, &$error, $dir = null) {
+    if (!function_exists('imagecreatetruecolor') || !function_exists('imagejpeg')) {
+        $error = "Image uploads aren't available on this server.";
+        return null;
+    }
+
+    $info = @getimagesize($tmpPath);
+    if (!$info) {
+        $error = "That file isn't a valid image.";
+        return null;
+    }
+    if ($info[0] * $info[1] > 20000000) {
+        $error = "That image is too large. Please choose a smaller one.";
+        return null;
+    }
+
+    $src = false;
+    if ($info[2] === IMAGETYPE_JPEG && function_exists('imagecreatefromjpeg')) {
+        $src = @imagecreatefromjpeg($tmpPath);
+    } elseif ($info[2] === IMAGETYPE_PNG && function_exists('imagecreatefrompng')) {
+        $src = @imagecreatefrompng($tmpPath);
+    } elseif (defined('IMAGETYPE_WEBP') && $info[2] === IMAGETYPE_WEBP && function_exists('imagecreatefromwebp')) {
+        $src = @imagecreatefromwebp($tmpPath);
+    }
+    if (!$src) {
+        $error = "Please upload a JPG, PNG or WebP image.";
+        return null;
+    }
+
+    // phone photos: turn them the right way up
+    if ($info[2] === IMAGETYPE_JPEG && function_exists('exif_read_data') && function_exists('imagerotate')) {
+        $exif = @exif_read_data($tmpPath);
+        $o = isset($exif['Orientation']) ? (int)$exif['Orientation'] : 1;
+        $angle = ($o === 3) ? 180 : (($o === 6) ? -90 : (($o === 8) ? 90 : 0));
+        if ($angle !== 0) {
+            $rot = imagerotate($src, $angle, 0);
+            if ($rot) {
+                imagedestroy($src);
+                $src = $rot;
+            }
+        }
+    }
+
+    // the shape of the result (logo = square, cover = 10:3 banner)
+    $rw = ($kind === 'cover') ? 1600 : 400;
+    $rh = ($kind === 'cover') ? 480 : 400;
+
+    // largest centered crop with that shape, then shrink
+    $w = imagesx($src);
+    $h = imagesy($src);
+    $cw = $w;
+    $ch = (int)round($w * $rh / $rw);
+    if ($ch > $h) {
+        $ch = $h;
+        $cw = (int)round($h * $rw / $rh);
+    }
+    $sx = (int)(($w - $cw) / 2);
+    $sy = (int)(($h - $ch) / 2);
+
+    // covers are shown large (and on retina screens twice as sharp), so keep up to 3840px wide (4K)
+    // and never scale a small photo UP (that only adds blur)
+    if ($kind === 'cover') {
+        $tw = max(1, min(3840, $cw));
+        $th = (int)round($tw * $rh / $rw);
+    } else {
+        $tw = 400;
+        $th = 400;
+    }
+
+    $dst = imagecreatetruecolor($tw, $th);
+    imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
+    imagecopyresampled($dst, $src, 0, 0, $sx, $sy, $tw, $th, $cw, $ch);
+
+    if ($dir === null) $dir = club_image_dir();
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    if (!is_dir($dir) || !is_writable($dir)) {
+        imagedestroy($src);
+        imagedestroy($dst);
+        error_log("Club image folder missing or not writable: " . $dir);
+        $error = "The image folder isn't writable. Create the uploads/" . basename($dir) . " folder and allow writing to it.";
+        return null;
+    }
+
+    $name = bin2hex(random_bytes(12)) . '.jpg';
+    if ($kind === 'cover') imageinterlace($dst, 1);   // progressive: loads blurry-to-sharp instead of top-down
+    $ok = @imagejpeg($dst, $dir . '/' . $name, ($kind === 'cover') ? 93 : 86);
+
+    imagedestroy($src);
+    imagedestroy($dst);
+
+    if (!$ok) {
+        $error = "We couldn't save that image. Please try again.";
+        return null;
+    }
+    return $name;
+}
+
+function delete_club_image($name, $dir = null) {
+    if (club_image_ok($name)) {
+        @unlink(($dir === null ? club_image_dir() : $dir) . '/' . $name);
+    }
+}
+
+// The square club mark: the logo if there is one, otherwise the first letter on a colour tile.
+// $club needs id, name and (optionally) logo.
+function club_tile_html($club, $size = '', $tag = 'div') {
+    $cls = 'club-tile' . ($size !== '' ? ' ' . $size : '') . ' t' . ((int)$club['id'] % 3);
+    if (!empty($club['logo']) && club_image_ok($club['logo'])) {
+        return '<' . $tag . ' class="' . $cls . ' has-logo"><img src="uploads/clubs/' . e($club['logo']) . '" alt=""></' . $tag . '>';
+    }
+    return '<' . $tag . ' class="' . $cls . '">' . e(first_letter($club['name'])) . '</' . $tag . '>';
+}
+
+
+// profile cover photos live in their own folder
+function user_cover_dir() {
+    return __DIR__ . '/uploads/covers';
 }

@@ -46,6 +46,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     : $first . " already asked to join " . $club . ". You can accept them in Join requests.", "error");
             } else {
                 $link = 'club?id=' . $cid;
+                if (club_identity_ready($conn)) {
+                    $ik = db_run($conn, "SELECT invite_only, invite_token FROM clubs WHERE id = ? LIMIT 1", "i", array($cid));
+                    if ($ik['rows'] && (int)$ik['rows'][0]['invite_only'] === 1 && !empty($ik['rows'][0]['invite_token'])) {
+                        $link .= '&invite=' . $ik['rows'][0]['invite_token'];
+                    }
+                }
                 $dup = db_run($conn,
                     "SELECT id FROM notifications WHERE user_id = ? AND type = 'club_invite' AND link = ?
                      AND created_at > (NOW() - INTERVAL 7 DAY) LIMIT 1",
