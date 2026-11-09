@@ -21,11 +21,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set($r[0], $r[1]);
 
     } elseif ($action === 'cancel') {
-        $er = db_run($conn, "SELECT id, club_id, title, status FROM events WHERE id = ? LIMIT 1", "i", array($eid));
+        $er = db_run($conn, "SELECT id, club_id, title, status, created_by FROM events WHERE id = ? LIMIT 1", "i", array($eid));
         $row = $er['rows'] ? $er['rows'][0] : null;
 
-        if (!$row || !event_is_club_owner($conn, $row['club_id'], $me['id'])) {
-            flash_set("Only the club owner can do that.", "error");
+        if (!$row || !event_can_cancel($conn, $row, $me['id'])) {
+            flash_set("Only the club owner, or the officer who posted this event, can cancel it.", "error");
         } elseif ($row['status'] !== 'active') {
             flash_set("This event is already cancelled.", "error");
         } else {
@@ -43,14 +43,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ================= THE EVENT =================
 $er = db_run($conn,
-    "SELECT e.id, e.club_id, e.title, e.description, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility,
+    "SELECT e.id, e.club_id, e.created_by, e.title, e.description, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility,
             c.name AS club_name, c.category AS club_category
      FROM events e JOIN clubs c ON c.id = e.club_id AND c.status = 'approved'
      WHERE e.id = ? LIMIT 1", "i", array($eid));
 $setupMissing = !$er['ok'];
 $ev = $er['rows'] ? $er['rows'][0] : null;
 
-$isOwner   = $ev ? event_is_club_owner($conn, $ev['club_id'], $me['id']) : false;
+$myRole   = $ev ? club_role($conn, $ev['club_id'], $me['id']) : null;
+$isOwner   = ($myRole === 'owner');
+$isStaff   = ($myRole === 'owner' || $myRole === 'officer');
+$canCancel = $ev ? event_can_cancel($conn, $ev, $me['id']) : false;
 $isMember  = $ev ? event_is_club_member($conn, $ev['club_id'], $me['id']) : false;
 $exclusive = $ev && ($ev['visibility'] === 'members');
 $locked    = $exclusive && !$isMember;   // members-only and the viewer is not in the club
@@ -204,7 +207,7 @@ $selfBack = 'event?id=' . $eid;
                 <?php } elseif ($state === 'live') { ?><span class="badge live">Live now</span>
                 <?php } elseif ($isOver) { ?><span class="badge ended">Ended</span>
                 <?php } elseif ($when !== '') { ?><span class="badge soon"><?php echo e($when); ?></span><?php } ?>
-                <?php if ($isOwner) { ?><span class="badge approved">You're hosting</span><?php } ?>
+                <?php if ($isStaff) { ?><span class="badge approved">You're hosting</span><?php } ?>
             </div>
 
             <h1><?php echo e($ev['title']); ?></h1>
@@ -215,14 +218,16 @@ $selfBack = 'event?id=' . $eid;
                 <div class="fact"><span class="fi"><?php echo event_icon('pin'); ?></span><div><small>Where</small><strong><?php echo e($ev['location']); ?></strong></div></div>
             </div>
 
-            <?php if ($isOwner && !$cancelled && !$isOver) { ?>
+            <?php if ($isStaff && !$cancelled && !$isOver) { ?>
                 <div class="ev-owner">
                     <a href="edit-event?id=<?php echo $eid; ?>" class="btn-sm btn-light">Edit event</a>
+                    <?php if ($canCancel) { ?>
                     <form method="POST" onsubmit="return confirm('Cancel this event? Everyone who is going will be told.');">
                         <?php echo csrf_field(); ?>
                         <input type="hidden" name="event_id" value="<?php echo $eid; ?>">
                         <button type="submit" name="action" value="cancel" class="btn-sm btn-light danger">Cancel event</button>
                     </form>
+                    <?php } ?>
                 </div>
             <?php } ?>
         </section>
@@ -296,6 +301,13 @@ $selfBack = 'event?id=' . $eid;
                             <?php if ($meGoing) { ?>
                                 <button type="submit" name="action" value="unrsvp" class="btn going-big"><?php echo event_icon('check'); ?>You're going</button>
                                 <p class="club-meta" style="margin-top:8px;text-align:center">Plans changed? Press it again to cancel your RSVP.</p>
+                                <?php if ($state === 'upcoming') { $rp = $me['reminder_pref'] ?? 'going'; ?>
+                                    <?php if ($rp === 'off') { ?>
+                                        <p class="ev-remind off"><?php echo event_icon('bell'); ?><span>Reminders are off. <a href="edit-profile">Turn them on</a> to get a nudge before this starts.</span></p>
+                                    <?php } else { ?>
+                                        <p class="ev-remind"><?php echo event_icon('bell'); ?><span>We'll remind you the day before and again about an hour before it starts.</span></p>
+                                    <?php } ?>
+                                <?php } ?>
                             <?php } elseif ($full) { ?>
                                 <button type="button" class="btn" disabled style="opacity:.5;cursor:not-allowed">Event is full</button>
                             <?php } else { ?>

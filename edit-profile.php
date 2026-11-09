@@ -97,6 +97,12 @@ if (isset($_POST['save'])) {
             ));
 
         if ($r['ok']) {
+            // event reminder choice (only exists after event-reminders.sql was run)
+            $rp = $_POST['reminder_pref'] ?? '';
+            if (array_key_exists('reminder_pref', $me) && in_array($rp, array('going', 'all', 'off'), true)) {
+                db_run($conn, "UPDATE users SET reminder_pref = ? WHERE username = ?", "ss", array($rp, $me['username']));
+            }
+
             // clean up the old photo if it was replaced or removed
             if (!empty($me['photo']) && $me['photo'] !== $photo) {
                 delete_avatar($me['photo']);
@@ -124,6 +130,9 @@ function fv($key, $row) {
 $curYear = isset($_POST['year_level']) ? $_POST['year_level'] : ($me['year_level'] ?? '');
 $curVis  = isset($_POST['visibility']) ? $_POST['visibility'] : ($me['profile_visibility'] ?? 'public');
 $hasPhoto = !empty($me['photo']);
+$hasRemind = array_key_exists('reminder_pref', $me);
+$curRemind = isset($_POST['reminder_pref']) ? $_POST['reminder_pref'] : ($me['reminder_pref'] ?? 'going');
+if (!in_array($curRemind, array('going', 'all', 'off'), true)) $curRemind = 'going';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -245,6 +254,26 @@ $hasPhoto = !empty($me['photo']);
                 <span><strong>Private</strong><small>Only you can see your profile.</small></span>
             </label>
         </section>
+
+        <?php if ($hasRemind) { ?>
+        <section class="panel">
+            <h2>Event reminders</h2>
+            <p class="remind-lead">Camigo can nudge you before events so you don't miss them. Reminders show up in your notifications.</p>
+
+            <label class="radio-card">
+                <input type="radio" name="reminder_pref" value="going" <?php echo ($curRemind === 'going') ? 'checked' : ''; ?>>
+                <span><strong>Events I'm going to</strong><small>A reminder the day before and about an hour before every event you've RSVP'd to.</small></span>
+            </label>
+            <label class="radio-card">
+                <input type="radio" name="reminder_pref" value="all" <?php echo ($curRemind === 'all') ? 'checked' : ''; ?>>
+                <span><strong>Going, plus my clubs' events</strong><small>Everything above, and a heads-up the day before club events you haven't responded to yet.</small></span>
+            </label>
+            <label class="radio-card">
+                <input type="radio" name="reminder_pref" value="off" <?php echo ($curRemind === 'off') ? 'checked' : ''; ?>>
+                <span><strong>Off</strong><small>No reminders. You'll still hear when an event is posted, changed or cancelled.</small></span>
+            </label>
+        </section>
+        <?php } ?>
 
         <div class="form-actions">
             <button type="submit" name="save" class="btn inline">Save profile</button>

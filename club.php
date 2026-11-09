@@ -27,9 +27,15 @@ if ($club) {
     }
 }
 $isOwner   = ($myRole === 'owner' && $myStatus === 'active');
+$isOfficer = ($myRole === 'officer' && $myStatus === 'active');
 $isPending = ($myStatus === 'pending');
 $isMember  = ($myRole === 'member' && $myStatus === 'active');
-$canSeePrivate = ($isOwner || $isMember);   // members-only announcements are visible to these people
+$isStaff   = ($isOwner || $isOfficer);          // may post announcements and events
+$isInside  = ($isStaff || $isMember);           // any active member of the club
+$canSeePrivate = $isInside;                     // members-only announcements are visible to these people
+
+// has the officer upgrade (club-officers.sql) been run?
+$officersReady = $club ? officers_ready($conn) : false;
 
 // has the announcements upgrade (club-announcements.sql) been run?
 $annReady = false;
@@ -97,7 +103,7 @@ if ($club && $_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set(($r['ok'] && $r['affected'] > 0) ? "Request cancelled." : "There was no request to cancel.", ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
 
     } elseif ($action === 'leave') {
-        $r = db_run($conn, "DELETE FROM club_members WHERE club_id = ? AND user_id = ? AND role = 'member' AND status = 'active'", "ii", array($cid, $me['id']));
+        $r = db_run($conn, "DELETE FROM club_members WHERE club_id = ? AND user_id = ? AND role IN ('member', 'officer') AND status = 'active'", "ii", array($cid, $me['id']));
         if ($r['ok'] && $r['affected'] > 0) event_purge_member_rsvps($conn, $cid, $me['id']);
         flash_set(($r['ok'] && $r['affected'] > 0) ? "You left the club." : "You can't leave this club.", ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
 
@@ -106,8 +112,8 @@ if ($club && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $hash = '#updates';
         $pid  = (int)($_POST['post_id'] ?? 0);
 
-        if (!$isOwner) {
-            flash_set("Only the club owner can do that.", "error");
+        if (!$isStaff) {
+            flash_set("Only club owners and officers can do that.", "error");
 
         } elseif ($action === 'post_update') {
             $err = '';
@@ -161,8 +167,10 @@ if ($club && $_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
         } elseif ($action === 'delete_post') {
-            $r = db_run($conn, "DELETE FROM club_posts WHERE id = ? AND club_id = ?", "ii", array($pid, $cid));
-            flash_set(($r['ok'] && $r['affected'] > 0) ? "Announcement deleted." : "That announcement was already removed.", ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
+            // owners can delete any announcement; officers only the ones they posted
+            $r = db_run($conn, "DELETE FROM club_posts WHERE id = ? AND club_id = ? AND (? = 1 OR user_id = ?)", "iiii", array($pid, $cid, $isOwner ? 1 : 0, $me['id']));
+            $gone = ($r['ok'] && $r['affected'] > 0);
+            flash_set($gone ? "Announcement deleted." : ($isOwner ? "That announcement was already removed." : "You can only delete announcements you posted."), $gone ? "success" : "error");
 
         } else {
             // pin one update at a time; pressing it again unpins
@@ -179,7 +187,7 @@ if ($club && $_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-    } elseif (in_array($action, array('accept', 'decline', 'remove'), true)) {
+    } elseif (in_array($action, array('accept', 'decline', 'remove', 'promote', 'demote'), true)) {
 
         if (!$isOwner || $mid <= 0) {
             flash_set("Only the club owner can do that.", "error");
@@ -197,10 +205,34 @@ if ($club && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 notify($conn, $tu['user_id'], 'join_declined', 'Your request to join ' . $club['name'] . ' was declined.', 'clubs');
             }
             flash_set(($r['ok'] && $r['affected'] > 0) ? "Request declined." : "That request was already handled.", ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
-        } else {
-            // owners can't be removed
+        } elseif ($action === 'promote') {
+            // owners only. The target must be an active regular member of THIS club.
             $tu = member_info($conn, $mid);
-            $r = db_run($conn, "DELETE FROM club_members WHERE id = ? AND club_id = ? AND role = 'member' AND status = 'active'", "ii", array($mid, $cid));
+            $cnt = db_run($conn, "SELECT COUNT(*) AS n FROM club_members WHERE club_id = ? AND role = 'officer' AND status = 'active'", "i", array($cid));
+            $have = ($cnt['ok'] && $cnt['rows']) ? (int)$cnt['rows'][0]['n'] : 0;
+
+            if (!$officersReady) {
+                flash_set("Officer roles need a one-time upgrade. Run club-officers.sql in phpMyAdmin.", "error");
+            } elseif ($have >= CLUB_MAX_OFFICERS) {
+                flash_set("A club can have up to " . CLUB_MAX_OFFICERS . " officers. Remove one before adding another.", "error");
+            } else {
+                $r = db_run($conn, "UPDATE club_members SET role = 'officer' WHERE id = ? AND club_id = ? AND role = 'member' AND status = 'active'", "ii", array($mid, $cid));
+                if ($r['ok'] && $r['affected'] > 0 && $tu) {
+                    notify($conn, $tu['user_id'], 'officer_promoted', 'You are now an officer of ' . $club['name'] . '. You can post announcements and events.', 'club?id=' . $cid);
+                }
+                flash_set(($r['ok'] && $r['affected'] > 0) ? "Officer added. They can now post announcements and events." : "That member couldn't be promoted.", ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
+            }
+        } elseif ($action === 'demote') {
+            $tu = member_info($conn, $mid);
+            $r = db_run($conn, "UPDATE club_members SET role = 'member' WHERE id = ? AND club_id = ? AND role = 'officer' AND status = 'active'", "ii", array($mid, $cid));
+            if ($r['ok'] && $r['affected'] > 0 && $tu) {
+                notify($conn, $tu['user_id'], 'officer_removed', 'You are no longer an officer of ' . $club['name'] . '.', 'club?id=' . $cid);
+            }
+            flash_set(($r['ok'] && $r['affected'] > 0) ? "Officer role removed. They're a regular member again." : "That officer couldn't be changed.", ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
+        } else {
+            // the owner can't be removed; officers and members can
+            $tu = member_info($conn, $mid);
+            $r = db_run($conn, "DELETE FROM club_members WHERE id = ? AND club_id = ? AND role IN ('member', 'officer') AND status = 'active'", "ii", array($mid, $cid));
             if ($r['ok'] && $r['affected'] > 0 && $tu) {
                 event_purge_member_rsvps($conn, $cid, $tu['user_id']);
                 notify($conn, $tu['user_id'], 'removed', 'You were removed from ' . $club['name'] . '.', 'clubs');
@@ -209,7 +241,8 @@ if ($club && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    header("Location: club?id=" . $cid . $hash);
+    $dest = (($_POST['back'] ?? '') === 'dashboard') ? 'dashboard' : 'club?id=' . $cid . $hash;
+    header("Location: " . $dest);
     exit();
 }
 
@@ -221,7 +254,7 @@ if ($club) {
                 FROM club_members m JOIN users u ON u.id = m.user_id
                 WHERE m.club_id = ? AND m.status = ";
 
-    $members = db_run($conn, $sqlBase . "'active' ORDER BY (m.role = 'owner') DESC, m.joined_at ASC LIMIT 200", "i", array($cid))['rows'];
+    $members = db_run($conn, $sqlBase . "'active' ORDER BY (m.role = 'owner') DESC, (m.role = 'officer') DESC, m.joined_at ASC LIMIT 200", "i", array($cid))['rows'];
 
     if ($isOwner) {
         $pending = db_run($conn, $sqlBase . "'pending' ORDER BY m.joined_at ASC", "i", array($cid))['rows'];
@@ -238,8 +271,9 @@ if ($club) {
     if ($annReady) {
         $pr = db_run($conn,
             "SELECT p.id, p.title, p.kind, p.visibility, p.body, p.pinned, (p.edited_at IS NOT NULL) AS edited, UNIX_TIMESTAMP(p.created_at) AS ts,
-                    u.username, u.first_name, u.last_name, u.photo
+                    u.username, u.first_name, u.last_name, u.photo, pm.role AS author_role
              FROM club_posts p JOIN users u ON u.id = p.user_id
+             LEFT JOIN club_members pm ON pm.club_id = p.club_id AND pm.user_id = p.user_id AND pm.status = 'active'
              WHERE p.club_id = ? AND (p.visibility = 'public' OR 1 = ?) ORDER BY p.pinned DESC, p.id DESC LIMIT " . ($postLimit + 1),
             "ii", array($cid, $canSeePrivate ? 1 : 0));
 
@@ -251,8 +285,9 @@ if ($club) {
     } else {
         $pr = db_run($conn,
             "SELECT p.id, p.body, p.pinned, UNIX_TIMESTAMP(p.created_at) AS ts,
-                    u.username, u.first_name, u.last_name, u.photo
+                    u.username, u.first_name, u.last_name, u.photo, pm.role AS author_role
              FROM club_posts p JOIN users u ON u.id = p.user_id
+             LEFT JOIN club_members pm ON pm.club_id = p.club_id AND pm.user_id = p.user_id AND pm.status = 'active'
              WHERE p.club_id = ? ORDER BY p.pinned DESC, p.id DESC LIMIT " . ($postLimit + 1),
             "i", array($cid));
     }
@@ -288,7 +323,7 @@ if ($club) {
 
 // members-only events outsiders can't see: only a teaser count is shown (no titles or details)
 $hiddenEvents = 0;
-if ($club && !$isMember && !$isOwner) {
+if ($club && !$isInside) {
     $hr = db_run($conn,
         "SELECT COUNT(*) AS n FROM events e WHERE e.club_id = ? AND e.status = 'active' AND e.visibility = 'members' AND " . EVENT_END_SQL . " >= ?",
         "is", array($cid, event_now_sql()));
@@ -356,7 +391,8 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
                         <h1 class="p-name"><?php echo e($club['name']); ?></h1>
                         <div class="p-user">
                             <span class="chip"><?php echo e($club['category']); ?></span>
-                            <?php if ($isOwner) { ?><span class="badge approved">You're the owner</span><?php } ?>
+                            <?php if ($isOwner) { ?><span class="badge owner"><?php echo event_icon('crown'); ?>You're the owner</span><?php } ?>
+                            <?php if ($isOfficer) { ?><span class="badge officer"><?php echo event_icon('star'); ?>You're an officer</span><?php } ?>
                         </div>
                     </div>
 
@@ -370,9 +406,9 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
                                 <?php if ($isPending) { ?>
                                     <span class="badge pending">Request sent</span>
                                     <button type="submit" name="action" value="cancel" class="btn-sm btn-ghost">Cancel</button>
-                                <?php } elseif ($isMember) { ?>
-                                    <span class="badge approved">Member</span>
-                                    <button type="submit" name="action" value="leave" class="btn-sm btn-ghost">Leave</button>
+                                <?php } elseif ($isMember || $isOfficer) { ?>
+                                    <?php if (!$isOfficer) { ?><span class="badge approved">Member</span><?php } ?>
+                                    <button type="submit" name="action" value="leave" class="btn-sm btn-ghost" onclick="return confirm('Leave this club?<?php echo $isOfficer ? ' You will lose your officer role.' : ''; ?>');">Leave</button>
                                 <?php } else { ?>
                                     <button type="submit" name="action" value="join" class="btn-sm btn-dark">Request to join</button>
                                 <?php } ?>
@@ -424,11 +460,11 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
                 <h2 style="margin:0">Announcements</h2>
             </div>
 
-            <?php if ($isOwner && !$postsSetupMissing && !$annReady) { ?>
+            <?php if ($isStaff && !$postsSetupMissing && !$annReady) { ?>
                 <div class="msg error">Announcements need a one-time upgrade. Run <strong>club-announcements.sql</strong> in phpMyAdmin to unlock headlines, types and members-only posts.</div>
             <?php } ?>
 
-            <?php if ($isOwner && $annReady && !$postsSetupMissing) { ?>
+            <?php if ($isStaff && $annReady && !$postsSetupMissing) { ?>
                 <form method="POST" class="ann-compose">
                     <?php echo csrf_field(); ?>
                     <input type="hidden" name="club_id" value="<?php echo (int)$club['id']; ?>">
@@ -456,12 +492,12 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
             <?php } ?>
 
             <?php if ($postsSetupMissing) { ?>
-                <?php if ($isOwner) { ?><div class="msg error">Updates aren't set up yet. Run <strong>club-updates.sql</strong> in phpMyAdmin.</div><?php } ?>
+                <?php if ($isStaff) { ?><div class="msg error">Updates aren't set up yet. Run <strong>club-updates.sql</strong> in phpMyAdmin.</div><?php } ?>
             <?php } elseif (!$posts && $hiddenPosts === 0) { ?>
                 <div class="ann-empty">
                     <div class="ev-empty-ic"><?php echo event_icon('megaphone'); ?></div>
-                    <strong><?php echo $isOwner ? "No announcements yet" : "Nothing posted yet"; ?></strong>
-                    <p><?php echo $isOwner ? "Your first announcement will appear here for your club." : "When the club owner posts news, you'll see it here."; ?></p>
+                    <strong><?php echo $isStaff ? "No announcements yet" : "Nothing posted yet"; ?></strong>
+                    <p><?php echo $isStaff ? "Your first announcement will appear here for your club." : "When the club's owner or officers post news, you'll see it here."; ?></p>
                 </div>
             <?php } else { ?>
                 <div class="ann-feed">
@@ -491,10 +527,10 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
                             <div class="ann-foot">
                                 <a href="<?php echo e($plink); ?>" class="ann-by">
                                     <span class="p-avatar tiny"><?php echo avatar_inner($p); ?></span>
-                                    <span><strong><?php echo e(full_name($p)); ?></strong><em>Club owner<?php echo !empty($p['edited']) ? ' · Edited' : ''; ?></em></span>
+                                    <span><strong><?php echo e(full_name($p)); ?></strong><em><?php echo e(($p['author_role'] ?? '') === 'owner' ? 'Club owner' : ((($p['author_role'] ?? '') === 'officer') ? 'Club officer' : 'Former officer')); ?><?php echo !empty($p['edited']) ? ' · Edited' : ''; ?></em></span>
                                 </a>
 
-                                <?php if ($isOwner) { ?>
+                                <?php if ($isStaff) { ?>
                                     <div class="ann-actions">
                                         <form method="POST">
                                             <?php echo csrf_field(); ?>
@@ -516,12 +552,14 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
                                                 </form>
                                             </details>
                                         <?php } ?>
+                                        <?php if ($isOwner || $p['username'] === $me['username']) { ?>
                                         <form method="POST" onsubmit="return confirm('Delete this announcement?');">
                                             <?php echo csrf_field(); ?>
                                             <input type="hidden" name="club_id" value="<?php echo (int)$club['id']; ?>">
                                             <input type="hidden" name="post_id" value="<?php echo (int)$p['id']; ?>">
                                             <button type="submit" name="action" value="delete_post" class="del"><?php echo event_icon('trash'); ?>Delete</button>
                                         </form>
+                                        <?php } ?>
                                     </div>
                                 <?php } ?>
                             </div>
@@ -563,11 +601,11 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
             <?php } ?>
         </section>
 
-        <?php if ($clubEvents || $isOwner || $hiddenEvents > 0) { ?>
+        <?php if ($clubEvents || $isStaff || $hiddenEvents > 0) { ?>
             <section class="panel">
                 <div class="club-head" style="margin-bottom:16px">
                     <h2 style="margin:0">Upcoming events</h2>
-                    <?php if ($isOwner) { ?><a href="create-event?club=<?php echo (int)$club['id']; ?>" class="btn-sm btn-dark">Post an event</a><?php } ?>
+                    <?php if ($isStaff) { ?><a href="create-event?club=<?php echo (int)$club['id']; ?>" class="btn-sm btn-dark">Post an event</a><?php } ?>
                 </div>
                 <?php if ($clubEvents) { ?>
                     <div class="ev-list">
@@ -588,40 +626,106 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
             </section>
         <?php } ?>
 
-        <section class="panel">
-            <h2>Members (<?php echo $n; ?>)</h2>
+        <section class="panel" id="members">
+            <div class="club-head" style="margin-bottom:16px">
+                <h2 style="margin:0">Members (<?php echo $n; ?>)</h2>
+            </div>
+
+            <?php
+                $leaders = array(); $regular = array();
+                foreach ($members as $m) {
+                    if ($m['role'] === 'owner' || $m['role'] === 'officer') $leaders[] = $m; else $regular[] = $m;
+                }
+                $officerCount = 0;
+                foreach ($leaders as $l) if ($l['role'] === 'officer') $officerCount++;
+
+                // one member card. $m is a row from the members query.
+                $renderMember = function ($m) use ($club, $me, $isOwner, $officersReady) {
+                    $link = member_link($m, $me['username']);
+                    $line = member_line($m);
+                    $full = trim($m['first_name'] . ' ' . ($m['last_name'] ?? ''));
+                    $role = $m['role'];
+                    $fid  = '<input type="hidden" name="club_id" value="' . (int)$club['id'] . '"><input type="hidden" name="member_id" value="' . (int)$m['mid'] . '">';
+                    ?>
+                    <div class="member<?php echo $role === 'owner' ? ' is-owner' : ($role === 'officer' ? ' is-officer' : ''); ?>">
+                        <div class="p-avatar tiny"><?php echo avatar_inner($m); ?></div>
+                        <div class="grow">
+                            <strong><a href="<?php echo e($link); ?>" class="plain"><?php echo e($full); ?></a></strong>
+                            <div class="club-meta">@<?php echo e($m['username']); ?><?php if ($line !== '') { ?> &middot; <?php echo e($line); ?><?php } ?></div>
+                        </div>
+
+                        <?php if ($role === 'owner') { ?>
+                            <span class="badge owner"><?php echo event_icon('crown'); ?>Owner</span>
+                        <?php } elseif ($role === 'officer') { ?>
+                            <span class="badge officer"><?php echo event_icon('star'); ?>Officer</span>
+                        <?php } ?>
+
+                        <?php if ($isOwner && $role !== 'owner') { ?>
+                            <details class="m-menu">
+                                <summary aria-label="Manage <?php echo e($full); ?>"><?php echo event_icon('dots'); ?></summary>
+                                <div class="m-pop">
+                                    <?php if ($role === 'member') { ?>
+                                        <form method="POST" onsubmit="return confirm('Make <?php echo e(addslashes($m['first_name'])); ?> an officer? They will be able to post announcements and events for this club.');">
+                                            <?php echo csrf_field(); echo $fid; ?>
+                                            <button type="submit" name="action" value="promote"<?php echo $officersReady ? '' : ' disabled title="Run club-officers.sql first"'; ?>><?php echo event_icon('star'); ?>Make officer</button>
+                                        </form>
+                                    <?php } else { ?>
+                                        <form method="POST" onsubmit="return confirm('Remove officer role? They stay in the club as a regular member.');">
+                                            <?php echo csrf_field(); echo $fid; ?>
+                                            <button type="submit" name="action" value="demote"><?php echo event_icon('userplus'); ?>Remove officer role</button>
+                                        </form>
+                                    <?php } ?>
+                                    <form method="POST" onsubmit="return confirm('Remove this person from the club?');">
+                                        <?php echo csrf_field(); echo $fid; ?>
+                                        <button type="submit" name="action" value="remove" class="danger"><?php echo event_icon('trash'); ?>Remove from club</button>
+                                    </form>
+                                </div>
+                            </details>
+                        <?php } ?>
+                    </div>
+                    <?php
+                };
+            ?>
+
+            <?php if ($isOwner) { ?>
+                <div class="role-note">
+                    <span class="role-note-ic"><?php echo event_icon('shield'); ?></span>
+                    <div>
+                        <strong>Officers <span class="role-count"><?php echo $officerCount; ?> / <?php echo CLUB_MAX_OFFICERS; ?></span></strong>
+                        <p>Promote trusted members from the <b>&hellip;</b> menu. Officers can post and edit announcements and events. They can't edit the club, handle requests, manage members or remove you.</p>
+                        <?php if (!$officersReady) { ?><p class="role-warn">One-time upgrade needed: run <strong>club-officers.sql</strong> in phpMyAdmin to turn on officer roles.</p><?php } ?>
+                    </div>
+                </div>
+            <?php } ?>
 
             <?php if (!$members) { ?>
                 <p class="empty">No members yet.</p>
             <?php } else { ?>
-                <div class="member-list">
-                    <?php foreach ($members as $m) {
-                        $link = member_link($m, $me['username']);
-                        $line = member_line($m);
-                        $full = trim($m['first_name'] . ' ' . ($m['last_name'] ?? ''));
-                    ?>
-                        <div class="member">
-                            <div class="p-avatar tiny"><?php echo avatar_inner($m); ?></div>
-                            <div class="grow">
-                                <strong>
-                                    <?php if ($link !== '') { ?><a href="<?php echo e($link); ?>" class="plain"><?php echo e($full); ?></a><?php } else { echo e($full); } ?>
-                                </strong>
-                                <div class="club-meta">@<?php echo e($m['username']); ?><?php if ($line !== '') { ?> &middot; <?php echo e($line); ?><?php } ?></div>
-                            </div>
+                <?php if ($leaders) { ?>
+                    <div class="m-group">Leadership</div>
+                    <div class="member-list">
+                        <?php foreach ($leaders as $m) { $renderMember($m); } ?>
+                    </div>
+                <?php } ?>
+                <?php if ($regular) { ?>
+                    <?php if ($leaders) { ?><div class="m-group">Members</div><?php } ?>
+                    <div class="member-list">
+                        <?php foreach ($regular as $m) { $renderMember($m); } ?>
+                    </div>
+                <?php } ?>
+            <?php } ?>
 
-                            <?php if ($m['role'] === 'owner') { ?>
-                                <span class="badge approved">Owner</span>
-                            <?php } elseif ($isOwner) { ?>
-                                <form method="POST" onsubmit="return confirm('Remove this member from the club?');">
-                                    <?php echo csrf_field(); ?>
-                                    <input type="hidden" name="club_id" value="<?php echo (int)$club['id']; ?>">
-                                    <input type="hidden" name="member_id" value="<?php echo (int)$m['mid']; ?>">
-                                    <button type="submit" name="action" value="remove" class="btn-sm btn-ghost">Remove</button>
-                                </form>
-                            <?php } ?>
-                        </div>
-                    <?php } ?>
-                </div>
+            <?php if ($isOwner) { ?>
+            <script>
+            (function () {
+                // only one manage menu open at a time; click elsewhere or press Esc to close
+                var menus = document.querySelectorAll(".m-menu");
+                function closeAll(except) { menus.forEach(function (m) { if (m !== except) m.removeAttribute("open"); }); }
+                menus.forEach(function (m) { m.addEventListener("toggle", function () { if (m.open) closeAll(m); }); });
+                document.addEventListener("click", function (e) { if (!e.target.closest(".m-menu")) closeAll(null); });
+                document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeAll(null); });
+            })();
+            </script>
             <?php } ?>
         </section>
 

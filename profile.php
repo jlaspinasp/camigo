@@ -171,7 +171,7 @@ if ($row && !$hidden) {
             <?php if ($myClubs) { ?>
                 <div class="chip-row">
                     <?php foreach ($myClubs as $mc) { ?>
-                        <a class="chip" href="club?id=<?php echo (int)$mc['id']; ?>"><?php echo e($mc['name']); ?><?php if ($mc['role'] === 'owner') { ?> <small>&middot; Owner</small><?php } ?></a>
+                        <a class="chip" href="club?id=<?php echo (int)$mc['id']; ?>"><?php echo e($mc['name']); ?><?php if ($mc['role'] === 'owner') { ?> <small>&middot; Owner</small><?php } elseif ($mc['role'] === 'officer') { ?> <small>&middot; Officer</small><?php } ?></a>
                     <?php } ?>
                 </div>
             <?php } elseif ($isOwn) { ?>

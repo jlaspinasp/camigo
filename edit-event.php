@@ -18,8 +18,8 @@ if (!$ev) {
     exit();
 }
 
-// only an owner of the hosting club can edit
-if (!event_is_club_owner($conn, $ev['club_id'], $me['id'])) {
+// owners and officers of the hosting club can edit
+if (!event_is_club_staff($conn, $ev['club_id'], $me['id'])) {
     header("Location: event?id=" . $eid);
     exit();
 }
@@ -78,6 +78,10 @@ if (isset($_POST['save'])) {
                         notify($conn, $uid, 'event_update', $clean['title'] . ' is now open to club members only, so your RSVP was removed.', 'events');
                     }
                     $going = max(0, $going - count($removed));
+                }
+                // a new start time means the reminders have to be sent again for the new time
+                if ($clean['start_at'] !== $ev['start_at']) {
+                    db_run($conn, "DELETE FROM event_reminders WHERE event_id = ?", "i", array($eid));
                 }
                 $timeChanged = ($clean['start_at'] !== $ev['start_at'] || (string)$clean['end_at'] !== (string)$ev['end_at'] || $clean['location'] !== $ev['location']);
                 if ($timeChanged && $going > 0) {

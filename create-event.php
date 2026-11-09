@@ -6,8 +6,8 @@ require("events-lib.php");
 
 $me = require_user_row($conn);
 
-// only owners of approved clubs can post events
-$owned = event_owned_clubs($conn, $me['id']);
+// owners and officers of approved clubs can post events
+$owned = event_postable_clubs($conn, $me['id']);
 $ownedIds = array();
 foreach ($owned as $c) $ownedIds[(int)$c['id']] = $c['name'];
 
@@ -26,7 +26,7 @@ if ($owned && isset($_POST['post'])) {
     if (!csrf_ok()) {
         $error = "Your session expired. Please try again.";
     } elseif (!isset($ownedIds[(int)($_POST['club_id'] ?? 0)])) {
-        $error = "You can only post events for clubs you own.";
+        $error = "You can only post events for clubs where you're an owner or officer.";
     } else {
         $clean = event_clean($_POST, true, $error);
 
@@ -83,8 +83,8 @@ $minDate = event_now()->format('Y-m-d');
     <?php if (!$owned) { ?>
 
         <section class="panel center">
-            <h2>Only club owners can post events</h2>
-            <p class="empty">Own a club to host events. <a href="create-club">Create a club</a> or <a href="clubs?mine=1">see your clubs</a>.</p>
+            <h2>Only club owners and officers can post events</h2>
+            <p class="empty">Own a club, or ask a club owner to make you an officer. <a href="create-club">Create a club</a> or <a href="clubs?mine=1">see your clubs</a>.</p>
         </section>
 
     <?php } else { ?>

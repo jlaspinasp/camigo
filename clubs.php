@@ -2,6 +2,7 @@
 session_start();
 require("db.php");
 require("auth.php");
+require("events-lib.php");
 
 $me = require_user_row($conn);
 
@@ -42,9 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } elseif ($action === 'leave') {
 
-        // owners can't leave their own club
+        // owners can't leave their own club (officers and members can)
         $r = db_run($conn,
-            "DELETE FROM club_members WHERE club_id = ? AND user_id = ? AND role = 'member' AND status = 'active'",
+            "DELETE FROM club_members WHERE club_id = ? AND user_id = ? AND role IN ('member', 'officer') AND status = 'active'",
             "ii", array($id, $me['id']));
         flash_set(($r['ok'] && $r['affected'] > 0) ? "You left the club." : "You can't leave that club.",
                   ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
@@ -189,7 +190,8 @@ $filtered = ($q !== '' || $cat !== '');
                 $tile = (int)$c['id'] % 3;
                 $isOwner   = ($c['my_role'] === 'owner');
                 $isPending = ($c['my_status'] === 'pending');
-                $isMember  = ($c['my_role'] === 'member' && $c['my_status'] === 'active');
+                $isOfficer = ($c['my_role'] === 'officer' && $c['my_status'] === 'active');
+                $isMember  = (($c['my_role'] === 'member' || $isOfficer) && $c['my_status'] === 'active');
             ?>
                 <article class="club-card">
                     <div class="club-top">
@@ -224,6 +226,7 @@ $filtered = ($q !== '' || $cat !== '');
                                     <span class="badge pending">Request sent</span>
                                     <button type="submit" name="action" value="cancel" class="btn-sm btn-ghost">Cancel</button>
                                 <?php } elseif ($isMember) { ?>
+                                    <?php if ($isOfficer) { ?><span class="badge officer"><?php echo event_icon('star'); ?>Officer</span><?php } ?>
                                     <button type="submit" name="action" value="leave" class="btn-sm btn-ghost">Leave</button>
                                 <?php } else { ?>
                                     <button type="submit" name="action" value="join" class="btn-sm btn-dark">Request to join</button>

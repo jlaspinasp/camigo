@@ -54,7 +54,7 @@ $setupMissing = !$res['ok'];
 $events = $res['rows'];
 
 // can this person post events?
-$owned = $setupMissing ? array() : event_owned_clubs($conn, $me['id']);
+$owned = $setupMissing ? array() : event_postable_clubs($conn, $me['id']);
 
 $flash = flash_get();
 $message = $flash ? $flash[0] : "";
@@ -78,7 +78,7 @@ $emptyTitle = array(
     'past'     => "No past events",
 );
 $emptyText = array(
-    'upcoming' => "When a club owner posts an event, it shows up here.",
+    'upcoming' => "When a club posts an event, it shows up here.",
     'mine'     => "Join a club, or check back when your clubs plan something.",
     'exclusive' => "Events your clubs keep for their own members will appear here. Outsiders never see them.",
     'going'    => "Find something you like and press “I'm going”.",

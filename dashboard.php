@@ -15,6 +15,7 @@ if (!empty($_SESSION['needs_profile'])) {
 require("db.php");
 require("auth.php");
 require("events-lib.php");
+require("feed-lib.php");
 $me = current_user($conn);
 $isAdmin = $me && ($me['role'] ?? 'user') === 'admin';
 
@@ -42,6 +43,29 @@ if ($urow) {
 // next events happening on campus
 $soon = events_query($conn, $urow ? $urow['id'] : 0, EVENT_END_SQL . " >= ?", "s", array(event_now_sql()), "e.start_at ASC", 3);
 $upcoming = $soon['rows'];
+
+// ---- home feed: news from the clubs this person has joined ----
+$myClubs = array();
+$week = array();
+$requests = array();
+$discover = array();
+$feed = array();
+if ($urow) {
+    $myClubs = db_run($conn,
+        "SELECT c.id, c.name, c.category, m.role
+         FROM club_members m JOIN clubs c ON c.id = m.club_id AND c.status = 'approved'
+         WHERE m.user_id = ? AND m.status = 'active'
+         ORDER BY (m.role = 'owner') DESC, (m.role = 'officer') DESC, c.name ASC LIMIT 50",
+        "i", array($urow['id']))['rows'];
+
+    $week     = rail_week($conn, $urow['id']);
+    $requests = rail_requests($conn, $urow['id']);
+    $discover = rail_discover($conn, $urow['id'], array_column($myClubs, 'category'));
+
+    if ($myClubs) $feed = club_feed($conn, $urow['id'], 10);
+}
+$clubCount = count($myClubs);
+$hasRail = ($clubCount > 0 || $week || $requests || $discover);
 
 $flash = flash_get();
 $flashText = $flash ? $flash[0] : "";
@@ -90,8 +114,137 @@ $initial = strtoupper(substr($first, 0, 1));
 
     <section class="hero">
         <h1>Welcome, <?php echo htmlspecialchars($first); ?>.</h1>
-        <p>You're in. Clubs, events and student projects will show up here as Camigo grows.</p>
+        <p><?php echo $clubCount > 0 ? "Here's what's new across your clubs." : "Join a club to start seeing its announcements and events right here."; ?></p>
     </section>
+
+    <div class="home-grid<?php echo $hasRail ? '' : ' no-rail'; ?>">
+        <section class="home-main">
+            <div class="home-feed-head">
+                <h2 class="section-title" style="margin:0">From your clubs</h2>
+                <?php if ($feed) { ?>
+                    <div class="hf-filter" role="tablist" aria-label="Filter the feed">
+                        <button type="button" class="on" data-filter="all">All</button>
+                        <button type="button" data-filter="post">Announcements</button>
+                        <button type="button" data-filter="event">Events</button>
+                    </div>
+                <?php } ?>
+            </div>
+
+            <?php if (!$clubCount) { ?>
+                <section class="panel center" style="margin-top:0">
+                    <div class="ev-empty-ic"><?php echo event_icon('megaphone'); ?></div>
+                    <h2>Your feed starts with a club</h2>
+                    <p class="empty">Join a club and its announcements and events will show up here, including the members-only ones.</p>
+                    <p style="margin-top:18px"><a href="clubs" class="btn-sm btn-dark">Browse clubs</a></p>
+                </section>
+            <?php } elseif (!$feed) { ?>
+                <section class="panel center" style="margin-top:0">
+                    <div class="ev-empty-ic"><?php echo event_icon('check'); ?></div>
+                    <h2>You're all caught up</h2>
+                    <p class="empty">New announcements and events from your clubs will appear here.</p>
+                </section>
+            <?php } else { ?>
+                <div class="hf-list" id="hfList">
+                    <?php foreach ($feed as $it) { render_feed_item($it); } ?>
+                </div>
+                <p class="empty hf-none" id="hfNone" hidden>Nothing of that kind yet.</p>
+                <script>
+                (function () {
+                    var btns = document.querySelectorAll("[data-filter]"),
+                        items = document.querySelectorAll("#hfList .hf"),
+                        none = document.getElementById("hfNone");
+                    btns.forEach(function (b) {
+                        b.addEventListener("click", function () {
+                            var f = b.getAttribute("data-filter"), shown = 0;
+                            btns.forEach(function (x) { x.classList.toggle("on", x === b); });
+                            items.forEach(function (it) {
+                                var ok = (f === "all" || it.getAttribute("data-type") === f);
+                                it.hidden = !ok;
+                                if (ok) shown++;
+                            });
+                            none.hidden = shown > 0;
+                        });
+                    });
+                })();
+                </script>
+            <?php } ?>
+        </section>
+
+        <?php if ($hasRail) { ?>
+        <aside class="rail">
+
+            <?php if ($requests) { ?>
+                <section class="panel rail-req">
+                    <div class="rail-head">
+                        <h2>Needs your attention</h2>
+                        <span class="rail-count"><?php echo count($requests); ?></span>
+                    </div>
+                    <?php foreach (array_slice($requests, 0, 3) as $rq) { ?>
+                        <div class="req-row">
+                            <a class="req-who" href="profile?u=<?php echo e(urlencode($rq['username'])); ?>">
+                                <span class="faces"><span class="face lg"><?php echo avatar_inner($rq); ?></span></span>
+                                <span><strong><?php echo e(full_name($rq)); ?></strong><em>wants to join <?php echo e($rq['club_name']); ?></em></span>
+                            </a>
+                            <form method="POST" action="club" class="req-btns">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="club_id" value="<?php echo (int)$rq['club_id']; ?>">
+                                <input type="hidden" name="member_id" value="<?php echo (int)$rq['mid']; ?>">
+                                <input type="hidden" name="back" value="dashboard">
+                                <button type="submit" name="action" value="accept" class="btn-sm btn-dark">Accept</button>
+                                <button type="submit" name="action" value="decline" class="btn-sm btn-ghost">Decline</button>
+                            </form>
+                        </div>
+                    <?php } ?>
+                    <?php if (count($requests) > 3) { ?>
+                        <p class="club-meta" style="margin-top:10px">+ <?php echo count($requests) - 3; ?> more waiting. Open the club to review them.</p>
+                    <?php } ?>
+                </section>
+            <?php } ?>
+
+            <?php if ($clubCount > 0 || $week) { ?>
+                <section class="panel rail-week">
+                    <div class="rail-head">
+                        <h2>This week</h2>
+                        <a href="events">All events</a>
+                    </div>
+                    <?php if (!$week) { ?>
+                        <p class="empty">Nothing scheduled in the next 7 days.</p>
+                    <?php } else { foreach ($week as $day) { ?>
+                        <div class="wk-day"><b><?php echo e($day['label']); ?></b><span><?php echo e($day['date']); ?></span></div>
+                        <?php foreach ($day['events'] as $we) {
+                            $wm = (($we['visibility'] ?? 'public') === 'members');
+                        ?>
+                            <a class="wk-item" href="event?id=<?php echo (int)$we['id']; ?>">
+                                <span class="wk-time"><?php echo e(event_dt($we['start_at'])->format('g:i A')); ?></span>
+                                <span class="wk-main">
+                                    <strong><?php echo e($we['title']); ?></strong>
+                                    <em><?php if ($wm) { echo event_icon('lock'); } ?><?php echo e($we['club_name']); ?></em>
+                                </span>
+                                <?php if ((int)$we['me_going'] > 0) { ?><span class="wk-going" title="You're going"><?php echo event_icon('check'); ?></span><?php } ?>
+                            </a>
+                        <?php } ?>
+                    <?php } } ?>
+                </section>
+            <?php } ?>
+
+            <?php if ($discover) { ?>
+                <section class="panel rail-disc">
+                    <div class="rail-head">
+                        <h2>Discover clubs</h2>
+                        <a href="clubs">Browse all</a>
+                    </div>
+                    <?php foreach ($discover as $dc) { $mc = (int)$dc['members']; ?>
+                        <a class="rail-club" href="club?id=<?php echo (int)$dc['id']; ?>">
+                            <span class="club-tile t<?php echo (int)$dc['id'] % 3; ?>"><?php echo e(first_letter($dc['name'])); ?></span>
+                            <span><strong><?php echo e($dc['name']); ?></strong><em><?php echo e($dc['category']); ?> &middot; <?php echo $mc; ?> member<?php echo $mc === 1 ? '' : 's'; ?></em></span>
+                        </a>
+                    <?php } ?>
+                </section>
+            <?php } ?>
+
+        </aside>
+        <?php } ?>
+    </div>
 
     <?php if ($know) { ?>
     <div class="strip-head">

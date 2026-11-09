@@ -70,6 +70,11 @@ function event_icon($name) {
         'edit'     => '<path d="M4 20h4l10-10-4-4L4 16v4zM13 7l4 4"/>',
         'trash'    => '<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>',
         'lock'     => '<rect x="5" y="10.5" width="14" height="10" rx="3"/><path d="M8 10.5V8a4 4 0 018 0v2.5"/>',
+        'star'     => '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9L12 3.5z"/>',
+        'crown'    => '<path d="M3.5 8l4.5 4 4-7 4 7 4.5-4-1.5 10h-14L3.5 8z"/>',
+        'userplus' => '<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5M19 8v6M16 11h6"/>',
+        'dots'     => '<circle cx="5.5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18.5" cy="12" r="1.2"/>',
+        'shield'   => '<path d="M12 3.5l7 2.8v5.4c0 4.2-2.8 7.4-7 9-4.2-1.6-7-4.8-7-9V6.3l7-2.8z"/><path d="M9 12l2.2 2.2L15.2 10"/>',
         'globe'    => '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 3.9 5.7 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.7-3.9-9S9.4 5.7 12 3z"/>',
     );
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($p[$name] ?? '') . '</svg>';
@@ -81,6 +86,7 @@ function event_safe_back($s, $fallback) {
     return preg_match('/^(events|event|club|dashboard)(\?[A-Za-z0-9=&_%.-]*)?$/', $s) ? $s : $fallback;
 }
 
+// Owner only (editing the club, managing members, deleting other people's posts)
 function event_is_club_owner($conn, $clubId, $userId) {
     $r = db_run($conn,
         "SELECT id FROM club_members WHERE club_id = ? AND user_id = ? AND role = 'owner' AND status = 'active' LIMIT 1",
@@ -88,7 +94,19 @@ function event_is_club_owner($conn, $clubId, $userId) {
     return (bool)$r['rows'];
 }
 
-// Is this person an active member (owner or regular member) of the club?
+// Owner or officer: may post and edit events and announcements
+function event_is_club_staff($conn, $clubId, $userId) {
+    return club_is_staff($conn, $clubId, $userId);
+}
+
+// Owners can cancel any event; officers only the events they posted themselves
+function event_can_cancel($conn, $ev, $userId) {
+    $role = club_role($conn, $ev['club_id'], $userId);
+    if ($role === 'owner') return true;
+    return ($role === 'officer' && isset($ev['created_by']) && (int)$ev['created_by'] === (int)$userId);
+}
+
+// Is this person an active member (owner, officer or regular member) of the club?
 function event_is_club_member($conn, $clubId, $userId) {
     $r = db_run($conn,
         "SELECT id FROM club_members WHERE club_id = ? AND user_id = ? AND status = 'active' LIMIT 1",
@@ -127,11 +145,11 @@ function event_purge_outsider_rsvps($conn, $eventId, $clubId) {
     return $ids;
 }
 
-// Approved clubs this person owns (they can post events for these)
-function event_owned_clubs($conn, $userId) {
+// Approved clubs this person owns or is an officer of (they can post events for these)
+function event_postable_clubs($conn, $userId) {
     $r = db_run($conn,
         "SELECT c.id, c.name FROM clubs c
-         JOIN club_members m ON m.club_id = c.id AND m.user_id = ? AND m.role = 'owner' AND m.status = 'active'
+         JOIN club_members m ON m.club_id = c.id AND m.user_id = ? AND m.role IN ('owner', 'officer') AND m.status = 'active'
          WHERE c.status = 'approved' ORDER BY c.name ASC",
         "i", array((int)$userId));
     return $r['rows'];
@@ -141,7 +159,7 @@ function event_owned_clubs($conn, $userId) {
 // Returns array('ok' => bool, 'rows' => [...]). $where may use ? marks; pass their types and values.
 // Every row has: going (count), me_going (0/1), faces (a few people who are going and have public profiles).
 function events_query($conn, $meId, $where, $types, $params, $order, $limit) {
-    $sql = "SELECT e.id, e.club_id, e.title, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility,
+    $sql = "SELECT e.id, e.club_id, e.title, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility, UNIX_TIMESTAMP(e.created_at) AS created_ts,
                    c.name AS club_name,
                    (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id) AS going,
                    (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id AND r.user_id = ?) AS me_going

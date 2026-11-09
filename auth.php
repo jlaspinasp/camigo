@@ -101,6 +101,36 @@ function flash_get() {
 }
 
 // ---- club helpers ----
+
+// Officers: owners promote a few trusted members who can post announcements and events.
+// Officers can NOT edit the club, handle join requests, invite people, manage members or touch the owner.
+define('CLUB_MAX_OFFICERS', 8);
+
+// 'owner', 'officer', 'member' (active only), or null if the person isn't an active member
+function club_role($conn, $clubId, $userId) {
+    $r = db_run($conn,
+        "SELECT role FROM club_members WHERE club_id = ? AND user_id = ? AND status = 'active' LIMIT 1",
+        "ii", array((int)$clubId, (int)$userId));
+    return $r['rows'] ? $r['rows'][0]['role'] : null;
+}
+
+// Owners and officers may post announcements and events
+function club_is_staff($conn, $clubId, $userId) {
+    $role = club_role($conn, $clubId, $userId);
+    return ($role === 'owner' || $role === 'officer');
+}
+
+// Has club-officers.sql been run? (If role is still an ENUM without 'officer', promoting would silently blank the role.)
+function officers_ready($conn) {
+    $c = mysqli_query($conn, "SHOW COLUMNS FROM club_members LIKE 'role'");
+    if (!$c || !($row = mysqli_fetch_assoc($c))) return false;
+    $type = strtolower((string)($row['Type'] ?? ''));
+    return (strpos($type, 'enum(') !== 0) || (strpos($type, "'officer'") !== false);
+}
+
+function role_label($role) {
+    return $role === 'owner' ? 'Owner' : ($role === 'officer' ? 'Officer' : 'Member');
+}
 // "Robotics Club!" and "robotics-club" both become "roboticsclub"
 function club_key($name) {
     $n = function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
@@ -450,19 +480,23 @@ function notif_look($type) {
     $mail  = '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7.5l8 6 8-6"/>';
     $chat  = '<path d="M5 4.5h14a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-8L6.5 20.5V16.5H5A1.5 1.5 0 013.5 15V6A1.5 1.5 0 015 4.5z"/>';
     $cal   = '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>';
+    $clock = '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>';
 
     switch ($type) {
         case 'club_approved':
-        case 'join_accepted': return array('good', $check);
+        case 'join_accepted':
+        case 'officer_promoted': return array('good', $check);
         case 'club_rejected':
         case 'join_declined':
         case 'removed':       return array('bad', $cross);
         case 'join_request':  return array('info', $userp);
         case 'club_invite':   return array('invite', $mail);
-        case 'club_update':   return array('info', $chat);
+        case 'club_update':
+        case 'officer_removed': return array('info', $chat);
         case 'event_new':
         case 'event_update':  return array('info', $cal);
         case 'event_cancelled': return array('bad', $cal);
+        case 'event_reminder': return array('remind', $clock);
         default:              return array('info', $bell);
     }
 }
