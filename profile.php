@@ -125,6 +125,8 @@ if ($row && !$hidden) {
                     </div>
                     <?php if ($isOwn) { ?>
                         <a href="edit-profile" class="btn-sm btn-dark">Edit profile</a>
+                    <?php } else { ?>
+                        <a href="messages?u=<?php echo e(urlencode($row['username'])); ?>" class="btn-sm btn-dark">Message</a>
                     <?php } ?>
                 </div>
 

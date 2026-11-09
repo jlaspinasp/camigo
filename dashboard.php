@@ -19,6 +19,24 @@ $isAdmin = $me && ($me['role'] ?? 'user') === 'admin';
 
 $urow = get_user_row($conn, $_SESSION['username']);
 $unread = $urow ? unread_count($conn, $urow['id']) : 0;
+$unreadMsg = $urow ? unread_messages($conn, $urow['id']) : 0;
+
+// people who share at least one club with you
+$know = array();
+if ($urow) {
+    $know = db_run($conn,
+        "SELECT u.id, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo,
+                COUNT(DISTINCT a.club_id) AS shared
+         FROM club_members a
+         JOIN club_members b ON b.club_id = a.club_id AND b.user_id = ? AND b.status = 'active'
+         JOIN clubs c ON c.id = a.club_id AND c.status = 'approved'
+         JOIN users u ON u.id = a.user_id
+         WHERE a.status = 'active' AND a.user_id <> ?
+           AND (u.profile_visibility IS NULL OR u.profile_visibility = 'public') AND u.birthday IS NOT NULL
+         GROUP BY u.id, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo
+         ORDER BY shared DESC, u.first_name ASC LIMIT 6",
+        "ii", array($urow['id'], $urow['id']))['rows'];
+}
 
 $first = $_SESSION['first_name'];
 $initial = strtoupper(substr($first, 0, 1));
@@ -41,7 +59,9 @@ $initial = strtoupper(substr($first, 0, 1));
 
     <div class="user">
         <?php if ($isAdmin) { ?><a href="admin-clubs" class="out">Admin</a><?php } ?>
+        <a href="students" class="out">Students</a>
         <a href="clubs" class="out">Clubs</a>
+        <?php include("msg-icon.php"); ?>
         <?php include("bell.php"); ?>
         <a href="profile" class="me-link" title="Your profile">
             <span class="avatar"><?php echo $urow ? avatar_inner($urow) : htmlspecialchars($initial); ?></span>
@@ -50,6 +70,7 @@ $initial = strtoupper(substr($first, 0, 1));
         <a href="logout" class="out">Log out</a>
     </div>
 </header>
+<?php $rtUserId = $urow ? $urow['id'] : 0; include("realtime.php"); ?>
 
 <main class="main">
 
@@ -57,6 +78,28 @@ $initial = strtoupper(substr($first, 0, 1));
         <h1>Welcome, <?php echo htmlspecialchars($first); ?>.</h1>
         <p>You're in. Clubs, student projects and campus events will show up here as Camigo grows.</p>
     </section>
+
+    <?php if ($know) { ?>
+    <div class="strip-head">
+        <h2 class="section-title">People you may know</h2>
+        <a href="students">See all students</a>
+    </div>
+    <section class="dir-strip">
+        <?php foreach ($know as $k) {
+            $sub = array();
+            if (!empty($k['course'])) $sub[] = $k['course'];
+            if (!empty($k['year_level'])) $sub[] = $k['year_level'];
+            $n = (int)$k['shared'];
+        ?>
+            <a class="dir-mini" href="profile?u=<?php echo e(urlencode($k['username'])); ?>">
+                <div class="dir-avatar"><?php echo avatar_inner($k); ?></div>
+                <strong><?php echo e(full_name($k)); ?></strong>
+                <span class="mini-sub"><?php echo e($sub ? implode(' · ', $sub) : '@' . $k['username']); ?></span>
+                <span class="mini-shared"><?php echo $n; ?> shared club<?php echo $n === 1 ? '' : 's'; ?></span>
+            </a>
+        <?php } ?>
+    </section>
+    <?php } ?>
 
     <h2 class="section-title">What's coming</h2>
 

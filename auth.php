@@ -2,6 +2,11 @@
 // Shared helpers for pages that need the logged-in user, admin checks, and safe DB calls.
 // Pages must call session_start() and require("db.php") before using these.
 
+// Realtime messaging settings (optional). The site works without this file.
+if (is_file(__DIR__ . '/pusher_config.php')) {
+    require_once __DIR__ . '/pusher_config.php';
+}
+
 function e($v) {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
@@ -400,6 +405,12 @@ function unread_count($conn, $userId) {
     return ($r['ok'] && $r['rows']) ? (int)$r['rows'][0]['n'] : 0;
 }
 
+// Unread direct messages. Returns 0 if the messages table doesn't exist yet.
+function unread_messages($conn, $userId) {
+    $r = db_run($conn, "SELECT COUNT(*) AS n FROM messages WHERE recipient_id = ? AND is_read = 0", "i", array((int)$userId));
+    return ($r['ok'] && $r['rows']) ? (int)$r['rows'][0]['n'] : 0;
+}
+
 // Tells the owner(s) of a club that someone asked to join
 function notify_join_request($conn, $clubId, $requesterRow) {
     $c = db_run($conn, "SELECT name FROM clubs WHERE id = ? LIMIT 1", "i", array((int)$clubId));
@@ -436,6 +447,7 @@ function notif_look($type) {
     $cross = '<path d="M6 6l12 12M18 6L6 18"/>';
     $userp = '<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5M19 8v6M16 11h6"/>';
     $bell  = '<path d="M6 16v-5a6 6 0 0112 0v5l1.5 2h-15L6 16zM10 21h4"/>';
+    $mail  = '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M4 7.5l8 6 8-6"/>';
 
     switch ($type) {
         case 'club_approved':
@@ -444,6 +456,7 @@ function notif_look($type) {
         case 'join_declined':
         case 'removed':       return array('bad', $cross);
         case 'join_request':  return array('info', $userp);
+        case 'club_invite':   return array('invite', $mail);
         default:              return array('info', $bell);
     }
 }
