@@ -5,6 +5,8 @@ require("auth.php");
 require("events-lib.php");
 
 $me  = require_user_row($conn);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') register_shutdown_function('chat_club_sync_quiet', $conn);
+
 $cid = (int)($_GET['id'] ?? $_POST['club_id'] ?? 0);
 
 // ---- the club (approved clubs only) ----

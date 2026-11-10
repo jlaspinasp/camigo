@@ -1,29 +1,44 @@
 <?php
+if (isset($_GET['file'])) { @ini_set('display_errors', '0'); ob_start(); }   // attachments: nothing may print before the file
 session_start();
 require("db.php");
 require("auth.php");
 
 $me = require_user_row($conn);
+$meId = (int)$me['id'];
 
-// is realtime (Pusher) set up? If not, everything still works with a slow refresh.
+// attachments are served from this same address, so they work wherever messages already works
+if (isset($_GET['file'])) {
+    session_write_close();
+    chat_serve_file($conn, $me, isset($_GET['k']) ? $_GET['k'] : 'u', $_GET['file']);
+}
+// temporary diagnostics: only available while chat-check.php exists on the server
+if (isset($_GET['check']) && is_file(__DIR__ . '/chat-check.php')) {
+    define('CHAT_CHECK_EMBED', 1);
+    require __DIR__ . '/chat-check.php';
+    exit();
+}
+
 $rt = function_exists('pusher_enabled') && pusher_enabled();
+$schemaOk = chat_ensure_schema($conn);
 
-// ---- who am I talking to? (?u=username) ----
-$want    = trim($_GET['u'] ?? $_POST['u'] ?? '');
-$partner = null;
-if ($want !== '') {
-    $p = get_user_row($conn, $want);
-    if ($p && (int)$p['id'] !== (int)$me['id']) $partner = $p;
+// every club has a group chat: make sure it exists and I'm in the ones I should be (cheap, at most every 30s)
+if ($schemaOk && $_SERVER['REQUEST_METHOD'] !== 'POST' && (time() - (int)($_SESSION['club_chat_sync'] ?? 0)) > 30) {
+    chat_club_sync($conn);
+    $_SESSION['club_chat_sync'] = time();
 }
 
 function json_out($a) {
     header('Content-Type: application/json');
-    echo json_encode($a);
+    echo json_encode($a, JSON_UNESCAPED_UNICODE);
     exit();
 }
-
 function safe_photo($row) {
     return (!empty($row['photo']) && preg_match('/^[a-f0-9]{24}\.jpg$/', $row['photo'])) ? $row['photo'] : '';
+}
+function person_out($u) {
+    return array('id' => (int)$u['id'], 'username' => $u['username'], 'name' => full_name($u),
+                 'photo' => safe_photo($u), 'initial' => first_letter($u['first_name']));
 }
 
 // a private profile can't be messaged first, but an existing conversation can continue
@@ -37,148 +52,510 @@ function can_message($conn, $meId, $p) {
     return true;
 }
 
-$isAjax = !empty($_POST['ajax']);
-
-// ================= MARK AS READ (called by the chat page) =================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['read'])) {
-    if (!csrf_ok() || !$partner) json_out(array('ok' => false));
-
-    $r = db_run($conn, "UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ? AND is_read = 0", "ii", array($me['id'], $partner['id']));
-    if ($rt && $r['ok'] && $r['affected'] > 0) {
-        pusher_trigger(array(user_channel($partner['id'])), 'seen', array('by' => (int)$me['id']));
+// one message row -> what the browser needs
+function out_msg($r, $k) {
+    $gone = !empty($r['deleted_at']);
+    $o = array('id' => (int)$r['id'], 'from' => (int)$r['sender_id'], 'ts' => (int)$r['ts'],
+               'kind' => isset($r['kind']) ? $r['kind'] : 'msg', 'gone' => $gone,
+               'body' => $gone ? '' : (string)$r['body'], 'file' => null);
+    if (!$gone && !empty($r['file_path'])) {
+        $f = chat_file_public($r['file_path'], $r['file_name'], $r['file_mime'], $r['file_size']);
+        $f['url'] = 'messages?file=' . $o['id'] . '&k=' . $k;
+        $o['file'] = $f;
     }
-    json_out(array('ok' => true, 'unread' => unread_messages($conn, $me['id'])));
+    if ($k === 'g' && $o['kind'] === 'msg') {
+        $o['name'] = full_name($r); $o['username'] = $r['username'] ?? '';
+        $o['photo'] = safe_photo($r); $o['initial'] = first_letter($r['first_name'] ?? '?');
+    }
+    return $o;
 }
 
-// ================= SEND =================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send'])) {
+$DM_COLS  = "m.id, m.sender_id, m.body, m.is_read, m.deleted_at, m.file_path, m.file_name, m.file_mime, m.file_size, UNIX_TIMESTAMP(m.created_at) AS ts";
+$GRP_COLS = "m.id, m.sender_id, m.kind, m.body, m.deleted_at, m.file_path, m.file_name, m.file_mime, m.file_size, UNIX_TIMESTAMP(m.created_at) AS ts, u.first_name, u.last_name, u.username, u.photo";
+$logoOk   = function_exists('club_identity_ready') && club_identity_ready($conn);
+$LOGO_SEL = $logoOk ? "cb.logo" : "NULL";
 
-    $body = trim(str_replace("\r\n", "\n", $_POST['body'] ?? ''));
-    $body = preg_replace("/\n{3,}/", "\n\n", $body);
-    $err  = '';
-    $mid  = 0;
-    $ts   = time();
+// a group I'm in (club_id > 0 means the club manages who is in it)
+function load_group($conn, $gid, $meId) {
+    $r = db_run($conn,
+        "SELECT g.id, g.name, g.created_by, g.club_id, g.project_id, g.photo, gm.role FROM chat_groups g
+         JOIN chat_group_members gm ON gm.group_id = g.id AND gm.user_id = ? WHERE g.id = ? LIMIT 1",
+        "ii", array($meId, (int)$gid));
+    return $r['rows'] ? $r['rows'][0] : null;
+}
+function group_logo($conn, $g, $logoOk) {
+    $club = '';
+    if (!empty($g['club_id']) && $logoOk) {
+        $r = db_run($conn, "SELECT logo FROM clubs WHERE id = ? LIMIT 1", "i", array((int)$g['club_id']));
+        if ($r['rows']) $club = $r['rows'][0]['logo'];
+    }
+    return chat_group_logo_url($club, $g['photo'] ?? '');
+}
 
-    if (!csrf_ok()) {
-        $err = "Your session expired. Please reload the page.";
-    } elseif (!$partner) {
-        $err = "We couldn't find that student.";
-    } elseif (!can_message($conn, $me['id'], $partner)) {
-        $err = "This student isn't taking new messages.";
-    } elseif ($body === '') {
-        $err = "Write a message first.";
-    } elseif (str_len($body) > 1000) {
-        $err = "Messages can be up to 1,000 characters.";
-    } else {
-        $rl = db_run($conn, "SELECT COUNT(*) AS n FROM messages WHERE sender_id = ? AND created_at > (NOW() - INTERVAL 1 MINUTE)", "i", array($me['id']));
-        if ($rl['ok'] && $rl['rows'] && (int)$rl['rows'][0]['n'] >= 15) {
-            $err = "You're sending messages too fast. Wait a moment and try again.";
+// ================= JSON ACTIONS =================
+// a file bigger than the host allows arrives as an empty POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && !empty($_SERVER['CONTENT_LENGTH'])) {
+    json_out(array('ok' => false, 'error' => "That file is too big for this server (limit " . chat_size_label(chat_max_file()) . ")."));
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['act'])) {
+    if (!csrf_ok()) json_out(array('ok' => false, 'error' => 'Your session expired. Please reload the page.'));
+    if (!$schemaOk) json_out(array('ok' => false, 'error' => "Messaging isn't fully set up yet. Reload and try again."));
+
+    $act = (string)$_POST['act'];
+    $k   = (($_POST['k'] ?? 'u') === 'g') ? 'g' : 'u';
+    $tid = (int)($_POST['id'] ?? 0);
+    $unreadNow = function () use ($conn, $meId) {
+        $n = chat_unread_total($conn, $meId);
+        return $n === null ? unread_messages($conn, $meId) : $n;
+    };
+
+    // ---- who is on the other end of a direct chat ----
+    $partner = null;
+    if ($k === 'u' && $tid > 0) {
+        $pr = db_run($conn, "SELECT * FROM users WHERE id = ? LIMIT 1", "i", array($tid));
+        if ($pr['rows'] && (int)$pr['rows'][0]['id'] !== $meId) $partner = $pr['rows'][0];
+    }
+
+    // ---------- mark as read ----------
+    if ($act === 'read') {
+        if ($k === 'u' && $partner) {
+            $r = db_run($conn, "UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ? AND is_read = 0", "ii", array($meId, $partner['id']));
+            if ($r['ok'] && $r['affected'] > 0) chat_push(array($partner['id']), 'seen', array('by' => $meId));
+        } elseif ($k === 'g' && load_group($conn, $tid, $meId)) {
+            db_run($conn, "UPDATE chat_group_members SET last_read_id = (SELECT COALESCE(MAX(id),0) FROM group_messages WHERE group_id = ?) WHERE group_id = ? AND user_id = ?", "iii", array($tid, $tid, $meId));
+        }
+        json_out(array('ok' => true, 'unread' => $unreadNow()));
+    }
+
+    // ---------- send (text and/or a file) ----------
+    if ($act === 'send') {
+        $body = trim(str_replace("\r\n", "\n", $_POST['body'] ?? ''));
+        $body = preg_replace("/\n{3,}/", "\n\n", $body);
+        $hasFile = !empty($_FILES['file']) && ($_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+        $ts = time();
+        $group = null;
+
+        if ($k === 'u') {
+            if (!$partner) json_out(array('ok' => false, 'error' => "We couldn't find that student."));
+            if (chat_blocked_by_me($conn, $meId, $partner['id'])) json_out(array('ok' => false, 'error' => "Unblock " . $partner['first_name'] . " to send a message."));
+            if (chat_blocked_me($conn, $meId, $partner['id']))   json_out(array('ok' => false, 'error' => "You can't message this person."));
+            if (!can_message($conn, $meId, $partner))            json_out(array('ok' => false, 'error' => "This student isn't taking new messages."));
         } else {
-            $r = db_run($conn, "INSERT INTO messages (sender_id, recipient_id, body) VALUES (?, ?, ?)", "iis", array($me['id'], $partner['id'], $body));
-            if (!$r['ok']) {
-                $err = "We couldn't send that. Please try again.";
-            } else {
-                $mid = (int)mysqli_insert_id($conn);
-                if ($rt) {
-                    // push it to the other person right away, on whatever page they're on
-                    pusher_trigger(array(user_channel($partner['id'])), 'new-message', array(
-                        'id'       => $mid,
-                        'from'     => (int)$me['id'],
-                        'body'     => $body,
-                        'ts'       => $ts,
-                        'name'     => full_name($me),
-                        'username' => $me['username'],
-                        'photo'    => safe_photo($me),
-                        'initial'  => first_letter($me['first_name']),
-                    ));
-                }
+            $group = load_group($conn, $tid, $meId);
+            if (!$group) json_out(array('ok' => false, 'error' => "You're not in this group."));
+        }
+        if ($body === '' && !$hasFile) json_out(array('ok' => false, 'error' => "Write a message first."));
+        if (str_len($body) > 1000)     json_out(array('ok' => false, 'error' => "Messages can be up to 1,000 characters."));
+
+        $tbl = ($k === 'u') ? 'messages' : 'group_messages';
+        $rl = db_run($conn, "SELECT COUNT(*) AS n FROM $tbl WHERE sender_id = ? AND created_at > (NOW() - INTERVAL 1 MINUTE)", "i", array($meId));
+        if ($rl['ok'] && $rl['rows'] && (int)$rl['rows'][0]['n'] >= 20) json_out(array('ok' => false, 'error' => "You're sending messages too fast. Wait a moment and try again."));
+
+        $file = null;
+        if ($hasFile) {
+            $ferr = '';
+            $file = chat_save_upload($_FILES['file'], $ferr);
+            if (!$file) json_out(array('ok' => false, 'error' => $ferr));
+        }
+        $fp = $file ? $file['path'] : null; $fn = $file ? $file['name'] : null;
+        $fm = $file ? $file['mime'] : null; $fs = $file ? $file['size'] : null;
+
+        if ($k === 'u') {
+            $r = db_run($conn, "INSERT INTO messages (sender_id, recipient_id, body, file_path, file_name, file_mime, file_size) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "iissssi", array($meId, $partner['id'], $body, $fp, $fn, $fm, $fs));
+        } else {
+            $r = db_run($conn, "INSERT INTO group_messages (group_id, sender_id, body, file_path, file_name, file_mime, file_size) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "iissssi", array($tid, $meId, $body, $fp, $fn, $fm, $fs));
+        }
+        if (!$r['ok']) { if ($file) chat_delete_file($file['path']); json_out(array('ok' => false, 'error' => "We couldn't send that. Please try again.")); }
+        $mid = (int)mysqli_insert_id($conn);
+
+        $fpub = $file ? chat_file_public($fp, $fn, $fm, $fs) : null;
+        if ($fpub) $fpub['url'] = 'messages?file=' . $mid . '&k=' . $k;
+        $evt = array('k' => $k, 'id' => $mid, 'from' => $meId, 'body' => $body, 'ts' => $ts, 'file' => $fpub,
+                     'name' => full_name($me), 'username' => $me['username'], 'photo' => safe_photo($me), 'initial' => first_letter($me['first_name']));
+
+        if ($k === 'u') {
+            chat_push(array($partner['id']), 'new-message', $evt);
+        } else {
+            $evt['gid'] = $tid; $evt['gname'] = $group['name'];
+            db_run($conn, "UPDATE chat_group_members SET last_read_id = ? WHERE group_id = ? AND user_id = ?", "iii", array($mid, $tid, $meId));
+            chat_push(array_diff(chat_group_member_ids($conn, $tid), array($meId)), 'new-message', $evt);
+        }
+        json_out(array('ok' => true, 'message' => array('id' => $mid, 'ts' => $ts, 'file' => $fpub)));
+    }
+
+    // ---------- unsend (only your own message) ----------
+    if ($act === 'unsend') {
+        $mid = (int)($_POST['mid'] ?? 0);
+        $tbl = ($k === 'u') ? 'messages' : 'group_messages';
+        $r = db_run($conn, "SELECT * FROM $tbl WHERE id = ? AND sender_id = ? AND deleted_at IS NULL LIMIT 1", "ii", array($mid, $meId));
+        if (!$r['rows']) json_out(array('ok' => false, 'error' => "That message can't be unsent."));
+        $row = $r['rows'][0];
+        if ($k === 'g' && $row['kind'] !== 'msg') json_out(array('ok' => false, 'error' => "That message can't be unsent."));
+        if ($k === 'u') $ok = db_run($conn, "UPDATE messages SET deleted_at = NOW(), body = '', file_path = NULL, file_name = NULL, file_mime = NULL, file_size = NULL, is_read = 1 WHERE id = ?", "i", array($mid));
+        else            $ok = db_run($conn, "UPDATE group_messages SET deleted_at = NOW(), body = '', file_path = NULL, file_name = NULL, file_mime = NULL, file_size = NULL WHERE id = ?", "i", array($mid));
+        if (!$ok['ok']) json_out(array('ok' => false, 'error' => "We couldn't unsend that. Please try again."));
+        chat_delete_file($row['file_path']);
+
+        if ($k === 'u') chat_push(array((int)$row['recipient_id']), 'unsent', array('k' => 'u', 'id' => $mid, 'from' => $meId));
+        else            chat_push(array_diff(chat_group_member_ids($conn, (int)$row['group_id']), array($meId)), 'unsent', array('k' => 'g', 'id' => $mid, 'gid' => (int)$row['group_id'], 'from' => $meId));
+        json_out(array('ok' => true, 'unread' => $unreadNow()));
+    }
+
+    // ---------- mute notifications ----------
+    if ($act === 'mute') {
+        if ($k === 'u' && !$partner) json_out(array('ok' => false, 'error' => 'Not found.'));
+        if ($k === 'g' && !load_group($conn, $tid, $meId)) json_out(array('ok' => false, 'error' => 'Not found.'));
+        $on = !empty($_POST['on']) ? 1 : 0;
+        chat_pref_set($conn, $meId, $k, $tid, 'muted', $on);
+        json_out(array('ok' => true, 'muted' => (bool)$on, 'unread' => $unreadNow()));
+    }
+
+    // ---------- block / unblock ----------
+    if ($act === 'block') {
+        if (!$partner) json_out(array('ok' => false, 'error' => 'Not found.'));
+        if (!empty($_POST['on'])) db_run($conn, "INSERT IGNORE INTO chat_blocks (blocker_id, blocked_id) VALUES (?, ?)", "ii", array($meId, $partner['id']));
+        else                      db_run($conn, "DELETE FROM chat_blocks WHERE blocker_id = ? AND blocked_id = ?", "ii", array($meId, $partner['id']));
+        json_out(array('ok' => true, 'blocked' => !empty($_POST['on']), 'unread' => $unreadNow()));
+    }
+
+    // ---------- delete chat (for me only) ----------
+    if ($act === 'clear') {
+        if ($k === 'u') {
+            if (!$partner) json_out(array('ok' => false, 'error' => 'Not found.'));
+            $m = db_run($conn, "SELECT COALESCE(MAX(id),0) AS mx FROM messages WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)", "iiii", array($meId, $partner['id'], $partner['id'], $meId));
+        } else {
+            if (!load_group($conn, $tid, $meId)) json_out(array('ok' => false, 'error' => 'Not found.'));
+            $m = db_run($conn, "SELECT COALESCE(MAX(id),0) AS mx FROM group_messages WHERE group_id = ?", "i", array($tid));
+            db_run($conn, "UPDATE chat_group_members SET last_read_id = ? WHERE group_id = ? AND user_id = ?", "iii", array((int)$m['rows'][0]['mx'], $tid, $meId));
+        }
+        chat_pref_set($conn, $meId, $k, $tid, 'cleared_id', (int)$m['rows'][0]['mx']);
+        if ($k === 'u') db_run($conn, "UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ?", "ii", array($meId, $partner['id']));
+        json_out(array('ok' => true, 'unread' => $unreadNow()));
+    }
+
+    // ---------- people picker for new groups / adding members ----------
+    if ($act === 'people') {
+        $q = trim((string)($_POST['q'] ?? ''));
+        $skip = chat_block_ids($conn, $meId);
+        $skip[] = $meId;
+        if ($k === 'g' && $tid) $skip = array_merge($skip, chat_group_member_ids($conn, $tid));
+        if ($q !== '') {
+            $like = '%' . str_replace(array('%', '_'), array('\\%', '\\_'), $q) . '%';
+            $r = db_run($conn, "SELECT id, username, first_name, last_name, photo FROM users
+                WHERE CONCAT(first_name, ' ', last_name) LIKE ? OR username LIKE ? ORDER BY first_name LIMIT 30", "ss", array($like, $like));
+        } else {
+            $r = db_run($conn, "SELECT u.id, u.username, u.first_name, u.last_name, u.photo FROM users u
+                JOIN (SELECT IF(sender_id = ?, recipient_id, sender_id) AS pid, MAX(id) AS mx FROM messages
+                      WHERE sender_id = ? OR recipient_id = ? GROUP BY pid ORDER BY mx DESC LIMIT 20) t ON t.pid = u.id
+                ORDER BY t.mx DESC", "iii", array($meId, $meId, $meId));
+            if (!$r['rows']) $r = db_run($conn, "SELECT id, username, first_name, last_name, photo FROM users ORDER BY first_name LIMIT 20");
+        }
+        $out = array();
+        foreach ($r['rows'] as $u) {
+            if (in_array((int)$u['id'], $skip, true)) continue;
+            $out[] = person_out($u);
+            if (count($out) >= 12) break;
+        }
+        json_out(array('ok' => true, 'people' => $out));
+    }
+
+    // ---------- groups ----------
+    $pickIds = function () use ($conn, $meId) {
+        $ids = array();
+        foreach ((array)($_POST['members'] ?? array()) as $x) { $x = (int)$x; if ($x > 0 && $x !== $meId) $ids[$x] = $x; }
+        $ids = array_values($ids);
+        if (!$ids) return array();
+        $blocked = chat_block_ids($conn, $meId);
+        $r = db_run($conn, "SELECT id FROM users WHERE id IN (" . implode(',', array_fill(0, count($ids), '?')) . ")", str_repeat('i', count($ids)), $ids);
+        $ok = array();
+        foreach ($r['rows'] as $row) if (!in_array((int)$row['id'], $blocked, true)) $ok[] = (int)$row['id'];
+        return $ok;
+    };
+    $names = function ($ids) use ($conn) {
+        if (!$ids) return '';
+        $r = db_run($conn, "SELECT first_name FROM users WHERE id IN (" . implode(',', array_fill(0, count($ids), '?')) . ")", str_repeat('i', count($ids)), $ids);
+        $n = array(); foreach ($r['rows'] as $x) $n[] = $x['first_name'];
+        return implode(', ', $n);
+    };
+
+    if ($act === 'group_create') {
+        $name = trim(preg_replace('/\s+/', ' ', (string)($_POST['name'] ?? '')));
+        $ids = $pickIds();
+        if ($name === '' || str_len($name) > 60) json_out(array('ok' => false, 'error' => "Give your group a name (up to 60 characters)."));
+        if (count($ids) < 1) json_out(array('ok' => false, 'error' => "Add at least one person."));
+        if (count($ids) > CHAT_GROUP_MAX - 1) json_out(array('ok' => false, 'error' => "Groups can have up to " . CHAT_GROUP_MAX . " people."));
+
+        $photoName = null;
+        if (!empty($_FILES['file']) && ($_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            if ($_FILES['file']['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($_FILES['file']['tmp_name'])) json_out(array('ok' => false, 'error' => "That photo didn't upload. Try a smaller image."));
+            $perr = '';
+            $photoName = save_club_image($_FILES['file']['tmp_name'], 'logo', $perr, chat_group_photo_dir());
+            if (!$photoName) json_out(array('ok' => false, 'error' => $perr));
+        }
+
+        $r = db_run($conn, "INSERT INTO chat_groups (name, created_by, photo) VALUES (?, ?, ?)", "sis", array($name, $meId, $photoName));
+        if (!$r['ok']) { if ($photoName) delete_club_image($photoName, chat_group_photo_dir()); json_out(array('ok' => false, 'error' => "We couldn't create the group. Please try again.")); }
+        $gid = (int)mysqli_insert_id($conn);
+        db_run($conn, "INSERT INTO chat_group_members (group_id, user_id, role) VALUES (?, ?, 'admin')", "ii", array($gid, $meId));
+        foreach ($ids as $uid) db_run($conn, "INSERT IGNORE INTO chat_group_members (group_id, user_id) VALUES (?, ?)", "ii", array($gid, $uid));
+        $text = $me['first_name'] . " created the group";
+        $sid = chat_group_sys($conn, $gid, $meId, $text);
+        db_run($conn, "UPDATE chat_group_members SET last_read_id = ? WHERE group_id = ?", "ii", array($sid, $gid));
+
+        chat_push($ids, 'group-added', array('convo' => chat_group_convo($gid, $name, count($ids) + 1, $text, $photoName ? 'uploads/groups/' . $photoName : '')));
+        json_out(array('ok' => true, 'id' => $gid));
+    }
+
+    if (in_array($act, array('group_info', 'group_rename', 'group_add', 'group_remove', 'group_leave', 'group_photo', 'group_photo_remove'), true)) {
+        $g = load_group($conn, $tid, $meId);
+        if (!$g) json_out(array('ok' => false, 'error' => "You're not in this group."));
+        $isManaged = !empty($g['club_id']) || !empty($g['project_id']);
+        $isAdmin = ($g['role'] === 'admin') && !$isManaged;   // club and project chats are managed by the club / project itself
+        $others  = function () use ($conn, $tid, $meId) { return array_values(array_diff(chat_group_member_ids($conn, $tid), array($meId))); };
+
+        if ($act === 'group_info') {
+            $r = db_run($conn, "SELECT u.id, u.username, u.first_name, u.last_name, u.photo, gm.role FROM chat_group_members gm
+                JOIN users u ON u.id = gm.user_id WHERE gm.group_id = ? ORDER BY (gm.role = 'admin') DESC, gm.joined_at ASC", "i", array($tid));
+            $mem = array();
+            foreach ($r['rows'] as $u) { $p = person_out($u); $p['role'] = $u['role']; $mem[] = $p; }
+            json_out(array('ok' => true, 'name' => $g['name'], 'admin' => $isAdmin, 'club' => (int)$g['club_id'], 'project' => (int)$g['project_id'], 'members' => $mem));
+        }
+
+        if ($isManaged) json_out(array('ok' => false, 'error' => "This chat belongs to the club or project. People join and leave it there."));
+
+        if ($act === 'group_rename') {
+            if (!$isAdmin) json_out(array('ok' => false, 'error' => "Only group admins can do that."));
+            $name = trim(preg_replace('/\s+/', ' ', (string)($_POST['name'] ?? '')));
+            if ($name === '' || str_len($name) > 60) json_out(array('ok' => false, 'error' => "Group names can be up to 60 characters."));
+            db_run($conn, "UPDATE chat_groups SET name = ? WHERE id = ?", "si", array($name, $tid));
+            $text = $me['first_name'] . " renamed the group to " . $name;
+            $sid = chat_group_sys($conn, $tid, $meId, $text);
+            $sys = array('id' => $sid, 'ts' => time(), 'body' => $text);
+            chat_push($others(), 'group-updated', array('gid' => $tid, 'name' => $name, 'sys' => $sys));
+            json_out(array('ok' => true, 'name' => $name, 'sys' => $sys));
+        }
+
+        if ($act === 'group_photo' || $act === 'group_photo_remove') {
+            if (!$isAdmin) json_out(array('ok' => false, 'error' => "Only group admins can do that."));
+            $newName = null;
+            if ($act === 'group_photo') {
+                $up = $_FILES['file'] ?? null;
+                if (!$up || ($up['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_uploaded_file($up['tmp_name'])) json_out(array('ok' => false, 'error' => "Choose an image (JPG, PNG or WebP) up to " . chat_size_label(chat_max_file()) . "."));
+                $perr = '';
+                $newName = save_club_image($up['tmp_name'], 'logo', $perr, chat_group_photo_dir());
+                if (!$newName) json_out(array('ok' => false, 'error' => $perr));
             }
+            db_run($conn, "UPDATE chat_groups SET photo = ? WHERE id = ?", "si", array($newName, $tid));
+            if (!empty($g['photo'])) delete_club_image($g['photo'], chat_group_photo_dir());
+            $logo = $newName ? 'uploads/groups/' . $newName : '';
+            $text = $me['first_name'] . ($newName ? " changed the group photo" : " removed the group photo");
+            $sid = chat_group_sys($conn, $tid, $meId, $text);
+            $sys = array('id' => $sid, 'ts' => time(), 'body' => $text);
+            chat_push($others(), 'group-updated', array('gid' => $tid, 'name' => $g['name'], 'logo' => $logo, 'sys' => $sys));
+            json_out(array('ok' => true, 'logo' => $logo, 'sys' => $sys));
+        }
+
+        if ($act === 'group_add') {
+            if (!$isAdmin) json_out(array('ok' => false, 'error' => "Only group admins can do that."));
+            $have = chat_group_member_ids($conn, $tid);
+            $ids = array_values(array_diff($pickIds(), $have));
+            if (!$ids) json_out(array('ok' => false, 'error' => "Choose at least one person to add."));
+            if (count($have) + count($ids) > CHAT_GROUP_MAX) json_out(array('ok' => false, 'error' => "Groups can have up to " . CHAT_GROUP_MAX . " people."));
+            foreach ($ids as $uid) db_run($conn, "INSERT IGNORE INTO chat_group_members (group_id, user_id) VALUES (?, ?)", "ii", array($tid, $uid));
+            $text = $me['first_name'] . " added " . $names($ids);
+            $sid = chat_group_sys($conn, $tid, $meId, $text);
+            db_run($conn, "UPDATE chat_group_members SET last_read_id = ? WHERE group_id = ? AND user_id IN (" . implode(',', array_fill(0, count($ids) + 1, '?')) . ")",
+                "ii" . str_repeat('i', count($ids) + 1), array_merge(array($sid, $tid, $meId), $ids));
+            $sys = array('id' => $sid, 'ts' => time(), 'body' => $text);
+            chat_push($ids, 'group-added', array('convo' => chat_group_convo($tid, $g['name'], count($have) + count($ids), $text, chat_group_logo_url('', $g['photo']))));
+            chat_push(array_diff($have, array($meId)), 'group-updated', array('gid' => $tid, 'name' => $g['name'], 'sys' => $sys));
+            json_out(array('ok' => true, 'sys' => $sys));
+        }
+
+        if ($act === 'group_remove') {
+            $uid = (int)($_POST['uid'] ?? 0);
+            if (!$isAdmin || $uid === $meId) json_out(array('ok' => false, 'error' => "You can't do that."));
+            $nm = $names(array($uid));
+            $r = db_run($conn, "DELETE FROM chat_group_members WHERE group_id = ? AND user_id = ?", "ii", array($tid, $uid));
+            if (!$r['affected']) json_out(array('ok' => false, 'error' => "That person isn't in the group."));
+            $text = $me['first_name'] . " removed " . $nm;
+            $sid = chat_group_sys($conn, $tid, $meId, $text);
+            $sys = array('id' => $sid, 'ts' => time(), 'body' => $text);
+            chat_push(array($uid), 'group-removed', array('gid' => $tid));
+            chat_push($others(), 'group-updated', array('gid' => $tid, 'name' => $g['name'], 'sys' => $sys));
+            json_out(array('ok' => true, 'sys' => $sys));
+        }
+
+        if ($act === 'group_leave') {
+            db_run($conn, "DELETE FROM chat_group_members WHERE group_id = ? AND user_id = ?", "ii", array($tid, $meId));
+            $left = chat_group_member_ids($conn, $tid);
+            if (!$left) {
+                $files = db_run($conn, "SELECT file_path FROM group_messages WHERE group_id = ? AND file_path IS NOT NULL", "i", array($tid));
+                foreach ($files['rows'] as $f) chat_delete_file($f['file_path']);
+                db_run($conn, "DELETE FROM group_messages WHERE group_id = ?", "i", array($tid));
+                db_run($conn, "DELETE FROM chat_groups WHERE id = ?", "i", array($tid));
+                if (!empty($g['photo'])) delete_club_image($g['photo'], chat_group_photo_dir());
+            } else {
+                $ad = db_run($conn, "SELECT 1 FROM chat_group_members WHERE group_id = ? AND role = 'admin' LIMIT 1", "i", array($tid));
+                if (!$ad['rows']) db_run($conn, "UPDATE chat_group_members SET role = 'admin' WHERE group_id = ? ORDER BY joined_at ASC LIMIT 1", "i", array($tid));
+                $text = $me['first_name'] . " left the group";
+                $sid = chat_group_sys($conn, $tid, $meId, $text);
+                chat_push($left, 'group-updated', array('gid' => $tid, 'name' => $g['name'], 'sys' => array('id' => $sid, 'ts' => time(), 'body' => $text)));
+            }
+            db_run($conn, "DELETE FROM chat_prefs WHERE user_id = ? AND kind = 'g' AND target_id = ?", "ii", array($meId, $tid));
+            json_out(array('ok' => true, 'unread' => $unreadNow()));
         }
     }
 
-    if ($isAjax) {
-        if ($err !== '') json_out(array('ok' => false, 'error' => $err));
-        json_out(array('ok' => true, 'message' => array('id' => $mid, 'ts' => $ts)));
-    }
-
-    if ($err !== '') flash_set($err, "error");
-    header("Location: messages" . ($partner ? "?u=" . urlencode($partner['username']) : ""));
-    exit();
+    json_out(array('ok' => false, 'error' => 'Unknown action.'));
 }
 
-// ---- opening a conversation marks it as read (and tells them "Seen") ----
-if ($partner) {
-    $r = db_run($conn, "UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ? AND is_read = 0", "ii", array($me['id'], $partner['id']));
-    if ($rt && $r['ok'] && $r['affected'] > 0) {
-        pusher_trigger(array(user_channel($partner['id'])), 'seen', array('by' => (int)$me['id']));
+// ================= PAGE =================
+$wantU = trim($_GET['u'] ?? '');
+$wantG = (int)($_GET['g'] ?? 0);
+
+$boot = array('me' => $meId, 'meName' => full_name($me), 'csrf' => csrf_token(), 'rt' => $rt, 'convos' => array(), 'open' => null,
+              'maxFile' => chat_max_file(), 'maxFiles' => CHAT_MAX_FILES, 'groupMax' => CHAT_GROUP_MAX,
+              'accept' => '.' . implode(',.', array_keys(chat_allowed_types())));
+$setupMissing = !$schemaOk;
+
+if (!$setupMissing) {
+    $blockedIds = chat_block_ids($conn, $meId);
+    $myBlocks = array();
+    $br = db_run($conn, "SELECT blocked_id FROM chat_blocks WHERE blocker_id = ?", "i", array($meId));
+    foreach ($br['rows'] as $x) $myBlocks[] = (int)$x['blocked_id'];
+
+    // ---- direct chats: the latest message with each person ----
+    $dm = db_run($conn,
+        "SELECT u.id, u.username, u.first_name, u.last_name, u.photo,
+                m.id AS mid, m.body, m.sender_id, m.deleted_at, m.file_path, m.file_mime, UNIX_TIMESTAMP(m.created_at) AS ts,
+                COALESCE(p.muted, 0) AS muted,
+                (SELECT COUNT(*) FROM messages x WHERE x.sender_id = u.id AND x.recipient_id = ? AND x.is_read = 0 AND x.deleted_at IS NULL AND x.id > COALESCE(p.cleared_id, 0)) AS unread
+         FROM messages m
+         JOIN users u ON u.id = IF(m.sender_id = ?, m.recipient_id, m.sender_id)
+         LEFT JOIN chat_prefs p ON p.user_id = ? AND p.kind = 'u' AND p.target_id = u.id
+         WHERE m.id IN (SELECT MAX(id) FROM messages WHERE sender_id = ? OR recipient_id = ? GROUP BY IF(sender_id = ?, recipient_id, sender_id))
+           AND m.id > COALESCE(p.cleared_id, 0)
+         ORDER BY m.id DESC LIMIT 60",
+        "iiiiii", array($meId, $meId, $meId, $meId, $meId, $meId));
+    foreach ($dm['rows'] as $c) {
+        $blocked = in_array((int)$c['id'], $blockedIds, true);
+        $o = person_out($c);
+        $o['k'] = 'u';
+        $o['last'] = array('mine' => ((int)$c['sender_id'] === $meId), 'kind' => 'msg', 'gone' => !empty($c['deleted_at']),
+                           'body' => (string)$c['body'], 'file' => !empty($c['file_path']) ? (chat_is_image($c['file_mime']) ? 'image' : 'file') : false,
+                           'sender' => $c['first_name']);
+        $o['ts'] = (int)$c['ts'];
+        $o['mid'] = (int)$c['mid'];
+        $o['unread'] = $blocked ? 0 : (int)$c['unread'];
+        $o['muted'] = (bool)$c['muted'];
+        $o['blocked'] = in_array((int)$c['id'], $myBlocks, true);
+        $boot['convos'][] = $o;
     }
-}
 
-// ---- conversation list: latest message with each person ----
-$convos = db_run($conn,
-    "SELECT u.id, u.username, u.first_name, u.last_name, u.photo,
-            m.body, m.sender_id, UNIX_TIMESTAMP(m.created_at) AS ts,
-            (SELECT COUNT(*) FROM messages x WHERE x.sender_id = u.id AND x.recipient_id = ? AND x.is_read = 0) AS unread
-     FROM messages m
-     JOIN users u ON u.id = IF(m.sender_id = ?, m.recipient_id, m.sender_id)
-     WHERE m.id IN (
-         SELECT MAX(id) FROM messages WHERE sender_id = ? OR recipient_id = ?
-         GROUP BY IF(sender_id = ?, recipient_id, sender_id)
-     )
-     ORDER BY m.id DESC LIMIT 50",
-    "iiiii", array($me['id'], $me['id'], $me['id'], $me['id'], $me['id']));
+    // ---- group chats ----
+    $gr = db_run($conn,
+        "SELECT g.id, g.name, g.club_id, g.project_id, g.photo AS gphoto, $LOGO_SEL AS logo, COALESCE(p.muted, 0) AS muted,
+                lm.id AS mid, lm.sender_id, lm.kind, lm.body, lm.deleted_at, lm.file_path, lm.file_mime,
+                UNIX_TIMESTAMP(COALESCE(lm.created_at, g.created_at)) AS ts, su.first_name AS s_first,
+                (SELECT COUNT(*) FROM chat_group_members c2 WHERE c2.group_id = g.id) AS members,
+                (SELECT COUNT(*) FROM group_messages x WHERE x.group_id = g.id AND x.id > gm.last_read_id AND x.sender_id <> ? AND x.kind = 'msg' AND x.deleted_at IS NULL AND x.id > COALESCE(p.cleared_id, 0)) AS unread
+         FROM chat_group_members gm
+         JOIN chat_groups g ON g.id = gm.group_id
+         LEFT JOIN clubs cb ON cb.id = g.club_id
+         LEFT JOIN chat_prefs p ON p.user_id = gm.user_id AND p.kind = 'g' AND p.target_id = g.id
+         LEFT JOIN group_messages lm ON lm.id = (SELECT MAX(id) FROM group_messages WHERE group_id = g.id)
+         LEFT JOIN users su ON su.id = lm.sender_id
+         WHERE gm.user_id = ? AND (lm.id IS NULL OR lm.id > COALESCE(p.cleared_id, 0))
+         ORDER BY ts DESC LIMIT 60",
+        "ii", array($meId, $meId));
+    foreach ($gr['rows'] as $c) {
+        $boot['convos'][] = array('k' => 'g', 'id' => (int)$c['id'], 'name' => $c['name'], 'hue' => chat_group_hue($c['id']),
+            'logo' => chat_group_logo_url($c['logo'], $c['gphoto']), 'club' => (int)$c['club_id'], 'project' => (int)$c['project_id'],
+            'members' => (int)$c['members'], 'ts' => (int)$c['ts'], 'mid' => (int)$c['mid'], 'unread' => (int)$c['unread'], 'muted' => (bool)$c['muted'],
+            'last' => array('mine' => ((int)$c['sender_id'] === $meId), 'kind' => $c['kind'] ?? 'msg', 'gone' => !empty($c['deleted_at']),
+                            'body' => (string)($c['body'] ?? ''), 'file' => !empty($c['file_path']) ? (chat_is_image($c['file_mime']) ? 'image' : 'file') : false,
+                            'sender' => $c['s_first'] ?? ''));
+    }
+    usort($boot['convos'], function ($a, $b) { return $b['ts'] <=> $a['ts']; });
 
-$setupMissing = !$convos['ok'];
-$list = $convos['rows'];
+    // ---- the open conversation ----
+    if ($wantG > 0) {
+        $g = load_group($conn, $wantG, $meId);
+        if ($g) {
+            $pf = chat_pref($conn, $meId, 'g', $wantG);
+            $tr = db_run($conn, "SELECT $GRP_COLS FROM group_messages m LEFT JOIN users u ON u.id = m.sender_id
+                WHERE m.group_id = ? AND m.id > ? ORDER BY m.id DESC LIMIT 100", "ii", array($wantG, $pf['cleared']));
+            $thread = array();
+            foreach (array_reverse($tr['rows']) as $row) $thread[] = out_msg($row, 'g');
+            $cnt = db_run($conn, "SELECT COUNT(*) AS n FROM chat_group_members WHERE group_id = ?", "i", array($wantG));
+            db_run($conn, "UPDATE chat_group_members SET last_read_id = (SELECT COALESCE(MAX(id),0) FROM group_messages WHERE group_id = ?) WHERE group_id = ? AND user_id = ?", "iii", array($wantG, $wantG, $meId));
+            $boot['open'] = array('k' => 'g', 'id' => (int)$g['id'], 'name' => $g['name'], 'hue' => chat_group_hue($g['id']),
+                'logo' => group_logo($conn, $g, $logoOk), 'club' => (int)$g['club_id'], 'project' => (int)$g['project_id'],
+                'members' => (int)$cnt['rows'][0]['n'], 'admin' => ($g['role'] === 'admin' && empty($g['club_id']) && empty($g['project_id'])), 'muted' => (bool)$pf['muted'],
+                'allowed' => true, 'thread' => $thread, 'channel' => 'private-group-' . (int)$g['id'], 'seen' => false);
+        } else {
+            $boot['open'] = array('k' => 'g', 'missing' => true);
+        }
+    } elseif ($wantU !== '') {
+        $p = get_user_row($conn, $wantU);
+        if ($p && (int)$p['id'] !== $meId) {
+            $pid = (int)$p['id'];
+            $pf = chat_pref($conn, $meId, 'u', $pid);
+            $tr = db_run($conn, "SELECT $DM_COLS FROM messages m
+                WHERE ((m.sender_id = ? AND m.recipient_id = ?) OR (m.sender_id = ? AND m.recipient_id = ?)) AND m.id > ?
+                ORDER BY m.id DESC LIMIT 100", "iiiii", array($meId, $pid, $pid, $meId, $pf['cleared']));
+            $thread = array();
+            foreach (array_reverse($tr['rows']) as $row) $thread[] = out_msg($row, 'u');
+            $seen = false;
+            if ($tr['rows']) { $lm = $tr['rows'][0]; $seen = ((int)$lm['sender_id'] === $meId && (int)$lm['is_read'] === 1 && empty($lm['deleted_at'])); }
 
-// ---- the open conversation ----
-$thread = array();
-$allowed = false;
-$seenInit = false;
-if ($partner && !$setupMissing) {
-    $allowed = can_message($conn, $me['id'], $partner);
-    $tr = db_run($conn,
-        "SELECT id, sender_id, body, is_read, UNIX_TIMESTAMP(created_at) AS ts FROM messages
-         WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)
-         ORDER BY id DESC LIMIT 100",
-        "iiii", array($me['id'], $partner['id'], $partner['id'], $me['id']));
-    $thread = array_reverse($tr['rows']);
-    if ($thread) {
-        $lastM = $thread[count($thread) - 1];
-        $seenInit = ((int)$lastM['sender_id'] === (int)$me['id'] && (int)$lastM['is_read'] === 1);
+            $r = db_run($conn, "UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ? AND is_read = 0", "ii", array($meId, $pid));
+            if ($r['ok'] && $r['affected'] > 0) chat_push(array($pid), 'seen', array('by' => $meId));
+
+            $boot['open'] = array_merge(person_out($p), array('k' => 'u', 'muted' => (bool)$pf['muted'],
+                'blockedByMe' => chat_blocked_by_me($conn, $meId, $pid), 'blockedMe' => chat_blocked_me($conn, $meId, $pid),
+                'allowed' => can_message($conn, $meId, $p), 'thread' => $thread, 'seen' => $seen,
+                'channel' => chat_channel($meId, $pid)));
+        } else {
+            $boot['open'] = array('k' => 'u', 'missing' => true);
+        }
+    }
+
+    // the chat I'm looking at is read
+    if ($boot['open'] && !empty($boot['open']['id'])) {
+        foreach ($boot['convos'] as &$cv) {
+            if ($cv['k'] === $boot['open']['k'] && $cv['id'] === $boot['open']['id']) $cv['unread'] = 0;
+        }
+        unset($cv);
     }
 }
 
 $flash = flash_get();
 $message = $flash ? $flash[0] : "";
 $message_class = $flash ? $flash[1] : "";
-
-function day_label($ts) {
-    $d = date('Y-m-d', $ts);
-    if ($d === date('Y-m-d')) return 'Today';
-    if ($d === date('Y-m-d', strtotime('-1 day'))) return 'Yesterday';
-    return date('M j, Y', $ts);
-}
-function one_line($s, $n) {
-    return str_cut(trim(preg_replace('/\s+/', ' ', (string)$s)), $n);
-}
+$title = ($boot['open'] && !empty($boot['open']['name'])) ? $boot['open']['name'] . ' | ' : '';
+$hasThread = ($wantU !== '' || $wantG > 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?php echo $partner ? e(full_name($partner)) . ' | ' : ''; ?>Messages | Camigo</title>
+    <title><?php echo e($title); ?>Messages | Camigo</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="messages.css?v=<?php echo (int)@filemtime(__DIR__ . '/messages.css'); ?>">
 </head>
-<body>
+<body class="page-messages">
 
 <?php include("topbar.php"); ?>
 
-<main class="main">
+<main class="main main-wide">
 
     <?php if ($message != "") { ?>
         <div class="msg <?php echo e($message_class); ?>"><?php echo e($message); ?></div>
@@ -186,391 +563,51 @@ function one_line($s, $n) {
 
     <?php if ($setupMissing) { ?>
 
-        <div class="msg error">Messaging isn't set up yet. Run <strong>messages.sql</strong> in phpMyAdmin.</div>
+        <div class="msg error">Messaging couldn't finish setting itself up. Run <strong>messages.sql</strong> in phpMyAdmin, then reload this page.</div>
 
     <?php } else { ?>
 
-    <div class="chat <?php echo $want !== '' ? 'has-thread' : ''; ?>">
-
-        <!-- ---------- conversations ---------- -->
-        <aside class="chat-list">
+    <div class="chat <?php echo $hasThread ? 'has-thread' : ''; ?>" id="chat">
+        <aside class="chat-list" id="chat-list">
             <div class="chat-list-head">
-                <h1>Messages</h1>
-                <a href="students" class="btn-sm btn-ghost">New message</a>
-            </div>
-
-            <div class="chat-items">
-                <?php if (!$list) { ?>
-                    <p class="empty chat-none">No conversations yet. Find someone in the <a href="students">student directory</a> and say hi.</p>
-                <?php } else { foreach ($list as $c) {
-                    $isActive = $partner && (int)$partner['id'] === (int)$c['id'];
-                    $un = (int)$c['unread'];
-                ?>
-                    <a href="messages?u=<?php echo e(urlencode($c['username'])); ?>" data-uid="<?php echo (int)$c['id']; ?>" class="convo <?php echo $isActive ? 'active' : ''; ?> <?php echo $un > 0 ? 'unread' : ''; ?>">
-                        <div class="dir-avatar"><?php echo avatar_inner($c); ?></div>
-                        <div class="convo-main">
-                            <div class="convo-top">
-                                <strong><?php echo e(full_name($c)); ?></strong>
-                                <span class="convo-time"><?php echo e(time_ago($c['ts'])); ?></span>
-                            </div>
-                            <div class="convo-prev"><?php echo ((int)$c['sender_id'] === (int)$me['id']) ? 'You: ' : ''; ?><?php echo e(one_line($c['body'], 70)); ?></div>
-                        </div>
-                        <?php if ($un > 0) { ?><span class="convo-badge"><?php echo $un > 9 ? '9+' : $un; ?></span><?php } ?>
+                <h1>Chats</h1>
+                <div class="head-actions">
+                    <button type="button" class="icon-btn" id="btn-new-group" title="Create group" aria-label="Create group">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c0-3 2.7-5 6-5s6 2 6 5"/><path d="M18 8v6M15 11h6"/></svg>
+                    </button>
+                    <a href="students" class="icon-btn" title="New message" aria-label="New message">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17v3z"/><path d="M14.5 7.5l3 3"/></svg>
                     </a>
-                <?php } } ?>
+                </div>
             </div>
+            <div class="chat-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>
+                <input type="search" id="list-search" placeholder="Search chats" autocomplete="off" aria-label="Search chats">
+            </div>
+            <div class="chat-tabs" role="tablist" id="chat-tabs">
+                <button type="button" role="tab" class="on" data-f="all">All</button>
+                <button type="button" role="tab" data-f="unread">Unread <span class="tab-n" id="tab-unread" hidden></span></button>
+                <button type="button" role="tab" data-f="groups">Groups</button>
+            </div>
+            <div class="chat-items" id="chat-items"></div>
         </aside>
 
-        <!-- ---------- open conversation ---------- -->
-        <section class="chat-pane">
-
-            <?php if ($want === '') { ?>
-
-                <div class="chat-empty">
-                    <div class="lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-8L6.5 20.5V16.5H5A1.5 1.5 0 013.5 15V6A1.5 1.5 0 015 4.5z"/></svg></div>
-                    <h2>Your messages</h2>
-                    <p class="empty">Pick a conversation, or start a new one from the <a href="students">student directory</a>.</p>
-                </div>
-
-            <?php } elseif (!$partner) { ?>
-
-                <div class="chat-empty">
-                    <h2>Student not found</h2>
-                    <p class="empty">We couldn't find anyone with that username. <a href="students">Browse students</a></p>
-                </div>
-
-            <?php } else { ?>
-
-                <div class="pane-head">
-                    <a href="messages" class="pane-back" aria-label="Back to conversations">&larr;</a>
-                    <div class="dir-avatar"><?php echo avatar_inner($partner); ?></div>
-                    <div class="pane-who">
-                        <strong><?php echo e(full_name($partner)); ?></strong>
-                        <small>@<?php echo e($partner['username']); ?></small>
-                    </div>
-                    <a href="profile?u=<?php echo e(urlencode($partner['username'])); ?>" class="btn-sm btn-ghost">View profile</a>
-                </div>
-
-                <div class="thread" id="thread">
-                    <?php if (!$thread) { ?>
-                        <p class="thread-empty">This is the start of your conversation with <?php echo e($partner['first_name']); ?>. Say hello.</p>
-                    <?php } else {
-                        $lastDay = ''; $lastSender = 0;
-                        foreach ($thread as $m) {
-                            $day = date('Y-m-d', $m['ts']);
-                            if ($day !== $lastDay) { echo '<div class="day">' . e(day_label($m['ts'])) . '</div>'; $lastDay = $day; $lastSender = 0; }
-                            $mine = ((int)$m['sender_id'] === (int)$me['id']);
-                            $first = ((int)$m['sender_id'] !== $lastSender);
-                            $lastSender = (int)$m['sender_id'];
-                    ?>
-                        <div class="bubble <?php echo $mine ? 'me' : 'them'; ?> <?php echo $first ? 'first' : ''; ?>" data-id="<?php echo (int)$m['id']; ?>" data-ts="<?php echo (int)$m['ts']; ?>">
-                            <?php echo nl2br(e($m['body'])); ?>
-                            <time data-ts="<?php echo (int)$m['ts']; ?>"><?php echo e(date('g:i A', $m['ts'])); ?></time>
-                        </div>
-                    <?php } } ?>
-                    <div class="typing" id="typing" hidden aria-label="<?php echo e($partner['first_name']); ?> is typing"><span></span><span></span><span></span></div>
-                    <div class="seen" id="seen" <?php echo $seenInit ? '' : 'hidden'; ?>>Seen</div>
-                </div>
-
-                <?php if ($allowed) { ?>
-                    <div class="composer-error" id="send-error" hidden></div>
-                    <form method="POST" class="composer" id="composer">
-                        <?php echo csrf_field(); ?>
-                        <input type="hidden" name="send" value="1">
-                        <input type="hidden" name="u" value="<?php echo e($partner['username']); ?>">
-                        <textarea name="body" id="msg-body" rows="1" maxlength="1000" placeholder="Write a message" aria-label="Message" required></textarea>
-                        <button type="submit" class="btn-sm btn-dark">Send</button>
-                    </form>
-                <?php } else { ?>
-                    <div class="composer-note">This student isn't taking new messages.</div>
-                <?php } ?>
-
-            <?php } ?>
-
-        </section>
+        <section class="chat-pane" id="chat-pane"></section>
     </div>
+
+    <div class="modal" id="modal" hidden>
+        <div class="modal-card" role="dialog" aria-modal="true" id="modal-card"></div>
+    </div>
+    <div class="toast" id="toast" hidden></div>
 
     <?php } ?>
 
 </main>
 
-<?php if ($partner && !$setupMissing) { ?>
-<script>
-window.CHAT = <?php echo json_encode(array(
-    'me'              => (int)$me['id'],
-    'partner'         => (int)$partner['id'],
-    'partnerName'     => full_name($partner),
-    'partnerUsername' => $partner['username'],
-    'partnerPhoto'    => safe_photo($partner),
-    'partnerInitial'  => first_letter($partner['first_name']),
-    'channel'         => (function_exists('chat_channel') ? chat_channel($me['id'], $partner['id']) : ''),
-    'csrf'            => csrf_token(),
-    'seen'            => $seenInit,
-), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
-</script>
+<?php if (!$setupMissing) { ?>
+<script>window.CHAT_BOOT = <?php echo json_encode($boot, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
+<script src="messages.js?v=<?php echo (int)@filemtime(__DIR__ . '/messages.js'); ?>"></script>
 <?php } ?>
-
-<script>
-(function () {
-    var C = window.CHAT || null;
-    var RT = window.CamigoRT || null;
-    var thread = document.getElementById("thread");
-    var ta = document.getElementById("msg-body");
-    var form = document.getElementById("composer");
-    var items = document.querySelector(".chat-items");
-    var typingEl = document.getElementById("typing");
-    var seenEl = document.getElementById("seen");
-    var errEl = document.getElementById("send-error");
-
-    if (RT && C) RT.openPartner = C.partner;
-
-    // ---------- small helpers ----------
-    function pad(n) { return n < 10 ? "0" + n : "" + n; }
-    function fmtTime(ts) {
-        var d = new Date(ts * 1000), h = d.getHours(), ap = h >= 12 ? "PM" : "AM";
-        h = h % 12 || 12;
-        return h + ":" + pad(d.getMinutes()) + " " + ap;
-    }
-    function dayKey(ts) { var d = new Date(ts * 1000); return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); }
-    function dayLabel(ts) {
-        var d = new Date(ts * 1000), now = new Date(), y = new Date(); y.setDate(now.getDate() - 1);
-        if (dayKey(ts) === dayKey(now / 1000)) return "Today";
-        if (dayKey(ts) === dayKey(y / 1000)) return "Yesterday";
-        return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-    }
-    function oneLine(s, n) { return String(s).replace(/\s+/g, " ").trim().slice(0, n); }
-    function nearBottom() { return !thread || thread.scrollHeight - thread.scrollTop - thread.clientHeight < 160; }
-    function toBottom() { if (thread) thread.scrollTop = thread.scrollHeight; }
-
-    // show every time in the viewer's own timezone
-    document.querySelectorAll("time[data-ts]").forEach(function (t) { t.textContent = fmtTime(+t.dataset.ts); });
-    toBottom();
-
-    // ---------- the chat thread ----------
-    function lastBubble() {
-        var b = thread ? thread.querySelectorAll(".bubble") : [];
-        return b.length ? b[b.length - 1] : null;
-    }
-
-    function setSeen(on) {
-        if (!seenEl) return;
-        var last = lastBubble();
-        seenEl.hidden = !(on && last && last.classList.contains("me"));
-    }
-
-    function addBubble(m, mine, pending) {
-        if (m.id && thread.querySelector('.bubble[data-id="' + m.id + '"]')) return null;
-
-        var empty = thread.querySelector(".thread-empty");
-        if (empty) empty.remove();
-
-        var last = lastBubble(), first = !last || last.classList.contains("me") !== mine;
-        if (!last || dayKey(+last.dataset.ts) !== dayKey(m.ts)) {
-            var day = document.createElement("div");
-            day.className = "day";
-            day.textContent = dayLabel(m.ts);
-            thread.insertBefore(day, typingEl);
-            first = true;
-        }
-
-        var el = document.createElement("div");
-        el.className = "bubble " + (mine ? "me" : "them") + (first ? " first" : "") + (pending ? " pending" : "");
-        el.dataset.id = m.id || "";
-        el.dataset.ts = m.ts;
-        String(m.body).split("\n").forEach(function (line, i) {
-            if (i) el.appendChild(document.createElement("br"));
-            el.appendChild(document.createTextNode(line));
-        });
-        var t = document.createElement("time");
-        t.dataset.ts = m.ts;
-        t.textContent = fmtTime(m.ts);
-        el.appendChild(t);
-        thread.insertBefore(el, typingEl);
-        return el;
-    }
-
-    var typingTimer = null;
-    function hideTyping() { if (typingEl) typingEl.hidden = true; clearTimeout(typingTimer); }
-    function showTyping() {
-        if (!typingEl) return;
-        var stick = nearBottom();
-        typingEl.hidden = false;
-        if (stick) toBottom();
-        clearTimeout(typingTimer);
-        typingTimer = setTimeout(hideTyping, 4500);
-    }
-
-    // ---------- the conversation list on the left ----------
-    function touchConvo(uid, info, text, mine, bump) {
-        if (!items) return;
-        var none = items.querySelector(".chat-none");
-        if (none) none.remove();
-
-        var el = items.querySelector('.convo[data-uid="' + uid + '"]');
-        if (!el) {
-            el = document.createElement("a");
-            el.className = "convo";
-            el.dataset.uid = uid;
-            el.href = "messages?u=" + encodeURIComponent(info.username);
-            var av = document.createElement("div");
-            av.className = "dir-avatar";
-            if (info.photo) { var img = document.createElement("img"); img.src = "uploads/avatars/" + info.photo; img.alt = ""; av.appendChild(img); }
-            else { av.textContent = info.initial; }
-            var main = document.createElement("div"); main.className = "convo-main";
-            var top = document.createElement("div"); top.className = "convo-top";
-            var nm = document.createElement("strong"); nm.textContent = info.name;
-            var tm = document.createElement("span"); tm.className = "convo-time";
-            top.appendChild(nm); top.appendChild(tm);
-            var pv = document.createElement("div"); pv.className = "convo-prev";
-            main.appendChild(top); main.appendChild(pv);
-            el.appendChild(av); el.appendChild(main);
-            if (C && uid === C.partner) el.classList.add("active");
-        }
-        el.querySelector(".convo-prev").textContent = (mine ? "You: " : "") + oneLine(text, 70);
-        el.querySelector(".convo-time").textContent = "Just now";
-
-        if (bump) {
-            var badge = el.querySelector(".convo-badge");
-            if (!badge) { badge = document.createElement("span"); badge.className = "convo-badge"; badge.dataset.n = "0"; el.appendChild(badge); }
-            var n = (+badge.dataset.n || (badge.textContent === "9+" ? 9 : +badge.textContent) || 0) + 1;
-            badge.dataset.n = n;
-            badge.textContent = n > 9 ? "9+" : n;
-            el.classList.add("unread");
-        }
-        items.insertBefore(el, items.firstChild);
-    }
-
-    function clearConvoBadge(uid) {
-        if (!items) return;
-        var el = items.querySelector('.convo[data-uid="' + uid + '"]');
-        if (!el) return;
-        var b = el.querySelector(".convo-badge");
-        if (b) b.remove();
-        el.classList.remove("unread");
-    }
-
-    // ---------- telling the server I've read it ----------
-    var pendingRead = false;
-    function markRead() {
-        if (!C || !form) return;
-        if (document.hidden) { pendingRead = true; return; }
-        pendingRead = false;
-        var fd = new FormData();
-        fd.append("read", "1"); fd.append("ajax", "1");
-        fd.append("csrf", C.csrf); fd.append("u", C.partnerUsername);
-        fetch(window.location.href, { method: "POST", body: fd, credentials: "same-origin" })
-            .then(function (r) { return r.json(); })
-            .then(function (j) {
-                if (j && j.ok) { if (RT) RT.setBadge(j.unread); clearConvoBadge(C.partner); }
-            }).catch(function () {});
-    }
-    document.addEventListener("visibilitychange", function () { if (!document.hidden && pendingRead) markRead(); });
-
-    // ---------- live events ----------
-    if (RT) {
-        RT.userChannel.bind("new-message", function (d) {
-            var open = !!(C && d.from === C.partner);
-            var info = { username: d.username, name: d.name, photo: d.photo, initial: d.initial };
-
-            if (open) {
-                hideTyping();
-                var stick = nearBottom();
-                addBubble({ id: d.id, ts: d.ts, body: d.body }, false, false);
-                setSeen(false);
-                if (stick) toBottom();
-                markRead();
-                touchConvo(d.from, info, d.body, false, document.hidden);
-            } else {
-                touchConvo(d.from, info, d.body, false, true);
-            }
-        });
-
-        RT.userChannel.bind("seen", function (d) {
-            if (C && d.by === C.partner) { C.seen = true; setSeen(true); }
-        });
-
-        // reconnecting after a drop: reload once so nothing is missed
-        var wasDown = false;
-        RT.pusher.connection.bind("state_change", function (s) {
-            if (s.current === "unavailable" || s.current === "failed" || s.current === "disconnected") wasDown = true;
-            if (s.current === "connected" && wasDown) {
-                wasDown = false;
-                if (!ta || ta.value.trim() === "") location.reload();
-            }
-        });
-    }
-
-    // ---------- typing indicator ----------
-    var chat = null, lastTyping = 0;
-    if (RT && C) {
-        chat = RT.pusher.subscribe(C.channel);
-        chat.bind("client-typing", function (d) { if (d && d.from === C.partner) showTyping(); });
-    }
-
-    // ---------- composer ----------
-    if (C && ta && form) {
-        var grow = function () { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 140) + "px"; };
-
-        ta.addEventListener("input", function () {
-            grow();
-            var now = Date.now();
-            if (chat && chat.subscribed && now - lastTyping > 2500) {
-                lastTyping = now;
-                chat.trigger("client-typing", { from: C.me });
-            }
-        });
-
-        // Enter sends, Shift+Enter adds a new line
-        ta.addEventListener("keydown", function (e) {
-            if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-                e.preventDefault();
-                if (ta.value.trim() !== "") { form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event("submit", { cancelable: true })); }
-            }
-        });
-
-        form.addEventListener("submit", function (e) {
-            e.preventDefault();
-            var text = ta.value.trim();
-            if (!text) return;
-
-            var fd = new FormData(form);
-            fd.append("ajax", "1");
-
-            // show it instantly, confirm it in the background
-            var ts = Math.floor(Date.now() / 1000);
-            var el = addBubble({ id: 0, ts: ts, body: text }, true, true);
-            setSeen(false);
-            toBottom();
-            ta.value = "";
-            grow();
-            errEl.hidden = true;
-            touchConvo(C.partner, { username: C.partnerUsername, name: C.partnerName, photo: C.partnerPhoto, initial: C.partnerInitial }, text, true, false);
-
-            fetch(window.location.href, { method: "POST", body: fd, credentials: "same-origin" })
-                .then(function (r) { return r.json(); })
-                .then(function (j) {
-                    if (j && j.ok) { el.dataset.id = j.message.id; el.classList.remove("pending"); }
-                    else { el.classList.remove("pending"); el.classList.add("failed"); errEl.textContent = (j && j.error) || "That message didn't send."; errEl.hidden = false; }
-                })
-                .catch(function () {
-                    el.classList.remove("pending"); el.classList.add("failed");
-                    errEl.textContent = "That message didn't send. Check your connection.";
-                    errEl.hidden = false;
-                });
-        });
-
-        if (!/Mobi|Android/i.test(navigator.userAgent)) ta.focus();
-    }
-
-    // ---------- fallback: only when the live connection isn't working ----------
-    setInterval(function () {
-        if (document.hidden) return;
-        if (ta && ta.value.trim() !== "") return;
-        if (RT && RT.pusher.connection.state === "connected") return;
-        location.reload();
-    }, 20000);
-})();
-</script>
 
 </body>
 </html>

@@ -36,6 +36,10 @@ if ($chan === 'private-user-' . $me) {
         $r = db_run($conn, "SELECT id FROM users WHERE id = ? LIMIT 1", "i", array($other));
         $ok = (bool)$r['rows'];
     }
+} elseif (preg_match('/^private-group-(\d+)$/', $chan, $m)) {
+    // a group's channel (typing), only for its members
+    $r = db_run($conn, "SELECT 1 FROM chat_group_members WHERE group_id = ? AND user_id = ? LIMIT 1", "ii", array((int)$m[1], $me));
+    $ok = (bool)$r['rows'];
 }
 
 if (!$ok) deny();

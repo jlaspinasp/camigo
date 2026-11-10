@@ -4,6 +4,8 @@ require("db.php");
 require("auth.php");
 
 $me = require_user_row($conn);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') register_shutdown_function('chat_club_sync_quiet', $conn);
+
 
 // ---- accept / decline ----
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

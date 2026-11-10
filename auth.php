@@ -6,6 +6,7 @@
 if (is_file(__DIR__ . '/pusher_config.php')) {
     require_once __DIR__ . '/pusher_config.php';
 }
+require_once __DIR__ . '/chat-lib.php';
 
 function e($v) {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
@@ -544,8 +545,11 @@ function unread_count($conn, $userId) {
     return ($r['ok'] && $r['rows']) ? (int)$r['rows'][0]['n'] : 0;
 }
 
-// Unread direct messages. Returns 0 if the messages table doesn't exist yet.
+// Unread messages (people + groups). Muted, blocked and cleared chats don't count.
+// Falls back to the plain count if the new chat tables haven't been created yet.
 function unread_messages($conn, $userId) {
+    $n = chat_unread_total($conn, $userId);
+    if ($n !== null) return $n;
     $r = db_run($conn, "SELECT COUNT(*) AS n FROM messages WHERE recipient_id = ? AND is_read = 0", "i", array((int)$userId));
     return ($r['ok'] && $r['rows']) ? (int)$r['rows'][0]['n'] : 0;
 }

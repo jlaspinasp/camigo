@@ -6,6 +6,8 @@ require("events-lib.php");
 require("feed-lib.php");
 
 $me = require_user_row($conn);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') register_shutdown_function('chat_club_sync_quiet', $conn);
+
 
 $categories = club_categories();
 

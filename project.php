@@ -5,6 +5,8 @@ require("auth.php");
 require_once("projects-lib.php");
 
 $me  = require_user_row($conn);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') register_shutdown_function('chat_club_sync_quiet', $conn);
+
 $pid = (int)($_GET['id'] ?? $_POST['project_id'] ?? 0);
 
 // ================= ACTIONS =================
@@ -257,6 +259,17 @@ $tone      = $p ? project_tone($p['id']) : 0;
 $skills    = $p ? project_tags($p['skills']) : array();
 $linkUrl   = ($p && !empty($p['link']) && preg_match('#^https?://#i', $p['link'])) ? $p['link'] : '';
 $canPost   = $p && ($isOwner || $isMember);
+
+// ---- the team's group chat (created automatically; team members are added automatically) ----
+$teamChatId = 0;
+if ($p && ($isOwner || $isMember) && chat_ensure_schema($conn)) {
+    $teamChatId = chat_group_for_project($conn, $pid);
+    if (!$teamChatId || !chat_group_role($conn, $teamChatId, $me['id'])) {
+        chat_club_sync($conn);
+        $teamChatId = chat_group_for_project($conn, $pid);
+    }
+}
+$teamChatHref = $teamChatId ? 'messages?g=' . (int)$teamChatId : 'messages';
 $profileLink = function ($row) use ($me) {
     return ($row['username'] === $me['username']) ? 'profile' : 'profile?u=' . urlencode($row['username']);
 };
@@ -527,6 +540,7 @@ $profileLink = function ($row) use ($me) {
                         <?php } ?>
                         <p class="club-meta" style="margin-top:12px"><?php echo count($applicants); ?> application<?php echo count($applicants) === 1 ? '' : 's'; ?> waiting.</p>
                         <p class="pj-note"><?php echo project_icon('send'); ?><span><?php echo !empty($p['is_open']) ? 'Your project is open. New applications show up on this page and in your notifications.' : 'Applications are closed. Reopen them any time from the top of this page.'; ?></span></p>
+                        <a href="<?php echo e($teamChatHref); ?>" class="btn" style="margin-top:16px"><?php echo project_icon('chat'); ?>Open team chat</a>
 
                     <?php } elseif ($isMember) { ?>
 
@@ -534,7 +548,8 @@ $profileLink = function ($row) use ($me) {
                         <?php foreach ($team as $t) { if ((int)$t['user_id'] === (int)$me['id']) { ?>
                             <p class="club-meta">Your role: <strong><?php echo e(!empty($t['role_label']) ? $t['role_label'] : 'Teammate'); ?></strong></p>
                         <?php } } ?>
-                        <a href="messages?u=<?php echo e(urlencode($p['username'])); ?>" class="btn" style="margin-top:16px"><?php echo project_icon('chat'); ?>Message the founder</a>
+                        <a href="<?php echo e($teamChatHref); ?>" class="btn" style="margin-top:16px"><?php echo project_icon('chat'); ?>Open team chat</a>
+                        <a href="messages?u=<?php echo e(urlencode($p['username'])); ?>" class="btn-sm btn-ghost" style="margin-top:10px;width:100%"><?php echo project_icon('chat'); ?>Message the founder</a>
                         <form method="POST" onsubmit="return confirm('Leave this project?');" style="margin-top:10px">
                             <?php echo csrf_field(); ?>
                             <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
@@ -604,7 +619,7 @@ $profileLink = function ($row) use ($me) {
                         </div>
                     </a>
                     <p class="club-meta" style="margin-top:12px">Posted <?php echo e(time_ago($p['created_ts'])); ?></p>
-                    <?php if (!$isOwner) { ?>
+                    <?php if (!$isOwner && !$isMember) { ?>
                         <a href="messages?u=<?php echo e(urlencode($p['username'])); ?>" class="btn-sm btn-ghost" style="margin-top:12px">Message</a>
                     <?php } ?>
                 </section>

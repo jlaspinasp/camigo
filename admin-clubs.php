@@ -5,6 +5,8 @@ require("auth.php");
 require("events-lib.php");
 
 $me = require_admin($conn);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') register_shutdown_function('chat_club_sync_quiet', $conn);
+
 
 // ---- approve / reject ----
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

@@ -5,6 +5,8 @@ require("auth.php");
 require("events-lib.php");
 
 $me  = require_user_row($conn);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') register_shutdown_function('chat_club_sync_quiet', $conn);
+
 $cid = (int)($_GET['id'] ?? $_POST['club_id'] ?? 0);
 
 // ---- the club (approved clubs only) ----
@@ -33,6 +35,16 @@ $isMember  = ($myRole === 'member' && $myStatus === 'active');
 $isStaff   = ($isOwner || $isOfficer);          // may post announcements and events
 $isInside  = ($isStaff || $isMember);           // any active member of the club
 $canSeePrivate = $isInside;                     // members-only announcements are visible to these people
+
+// ---- the club's group chat (created automatically; members are added automatically) ----
+$clubChatId = 0;
+if ($club && $isInside && chat_ensure_schema($conn)) {
+    $clubChatId = chat_group_for_club($conn, $cid);
+    if (!$clubChatId || !chat_group_role($conn, $clubChatId, $me['id'])) {
+        chat_club_sync($conn);
+        $clubChatId = chat_group_for_club($conn, $cid);
+    }
+}
 
 // ---- club identity + invite-only (club-identity.sql) ----
 $identityReady  = ($club && club_identity_ready($conn));
@@ -414,6 +426,9 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
                     </div>
 
                     <div class="top-actions">
+                        <?php if ($clubChatId) { ?>
+                            <a href="messages?g=<?php echo (int)$clubChatId; ?>" class="btn-sm btn-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-8L6.5 20.5V16.5H5A1.5 1.5 0 013.5 15V6A1.5 1.5 0 015 4.5z"/></svg>Group chat</a>
+                        <?php } ?>
                         <?php if ($isOwner) { ?>
                             <a href="edit-club?id=<?php echo (int)$club['id']; ?>" class="btn-sm btn-ghost">Edit club</a>
                         <?php } else { ?>
