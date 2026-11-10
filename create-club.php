@@ -22,13 +22,13 @@ function club_upload_field($field, $kind, &$error) {
     $up = $_FILES[$field] ?? null;
     if (!$up || ($up['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
     if ($up['error'] !== UPLOAD_ERR_OK) { $error = "That image couldn't be uploaded. Please try a smaller file."; return null; }
-    if ($up['size'] > 2 * 1024 * 1024) { $error = "Images can be up to 2 MB."; return null; }
+    if ($up['size'] > 10 * 1024 * 1024) { $error = "Images can be up to 10 MB."; return null; }
     return save_club_image($up['tmp_name'], $kind, $error);
 }
 
 // a file larger than the server's post limit arrives as an empty form
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
-    $message = "That upload was too large for the server. Try smaller images (up to 2 MB each).";
+    $message = "That upload was too large for the server. Try smaller images (up to 10 MB each).";
     $message_class = "error";
 }
 
@@ -185,7 +185,7 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
             <input type="file" name="logo" id="logo" accept="image/jpeg,image/png,image/webp" hidden>
             <input type="hidden" name="remove_cover" id="remove-cover" value="0">
             <input type="hidden" name="remove_logo" id="remove-logo" value="0">
-            <p class="hint" id="id-msg">JPG, PNG or WebP, up to 2 MB. Covers are cropped wide, logos square.</p>
+            <p class="hint" id="id-msg">JPG, PNG or WebP, up to 10 MB. Covers are cropped wide, logos square.</p>
         </section>
         <?php } else { ?>
             <div class="msg error" style="margin-top:20px">Logos, covers and invite-only clubs need a one-time upgrade. Run <strong>club-identity.sql</strong> in phpMyAdmin to unlock them.</div>
@@ -252,7 +252,7 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
 <?php if ($identity) { ?>
 <script>
 (function () {
-    var MAX = 2 * 1024 * 1024;
+    var MAX = 10 * 1024 * 1024;
     var TYPES = /^image\/(jpeg|png|webp)$/;
     var msg = document.getElementById("id-msg");
     var msgText = msg.textContent;
@@ -271,7 +271,7 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
         function accept(file) {
             if (!file) return false;
             if (!TYPES.test(file.type)) { say("Please choose a JPG, PNG or WebP image."); return false; }
-            if (file.size > MAX) { say("That image is over 2 MB. Please choose a smaller one."); return false; }
+            if (file.size > MAX) { say("That image is over 10 MB. Please choose a smaller one."); return false; }
             calm();
             removeField.value = "0";
             o.show(URL.createObjectURL(file));

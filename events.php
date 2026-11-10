@@ -8,7 +8,7 @@ $me = require_user_row($conn);
 
 // ---- which list ----
 $tab = $_GET['tab'] ?? 'upcoming';
-if (!in_array($tab, array('upcoming', 'mine', 'exclusive', 'going', 'past'), true)) $tab = 'upcoming';
+if (!in_array($tab, array('upcoming', 'mine', 'going', 'past'), true)) $tab = 'upcoming';
 $q = trim($_GET['q'] ?? '');
 if (str_len($q) > 60) $q = str_cut($q, 60);
 
@@ -33,8 +33,6 @@ if ($tab === 'mine') {
     $where .= " AND e.club_id IN (SELECT club_id FROM club_members WHERE user_id = ? AND status = 'active')";
     $types .= "i";
     $params[] = (int)$me['id'];
-} elseif ($tab === 'exclusive') {
-    $where .= " AND e.visibility = 'members'";
 } elseif ($tab === 'going') {
     $where .= " AND e.id IN (SELECT event_id FROM event_rsvps WHERE user_id = ?)";
     $types .= "i";
@@ -73,14 +71,12 @@ function tab_url($t, $q) {
 $emptyTitle = array(
     'upcoming' => "No upcoming events yet",
     'mine'     => "Nothing coming up in your clubs",
-    'exclusive' => "No members-only events right now",
     'going'    => "You haven't RSVP'd to anything yet",
     'past'     => "No past events",
 );
 $emptyText = array(
     'upcoming' => "When a club posts an event, it shows up here.",
     'mine'     => "Join a club, or check back when your clubs plan something.",
-    'exclusive' => "Events your clubs keep for their own members will appear here. Outsiders never see them.",
     'going'    => "Find something you like and press “I'm going”.",
     'past'     => "Events that already happened will be listed here.",
 );
@@ -121,14 +117,16 @@ $emptyText = array(
     <div class="tabs">
         <a href="<?php echo e(tab_url('upcoming', $q)); ?>" class="<?php echo $tab === 'upcoming' ? 'active' : ''; ?>">Upcoming</a>
         <a href="<?php echo e(tab_url('mine', $q)); ?>" class="<?php echo $tab === 'mine' ? 'active' : ''; ?>">My clubs</a>
-        <a href="<?php echo e(tab_url('exclusive', $q)); ?>" class="<?php echo $tab === 'exclusive' ? 'active' : ''; ?>"><?php echo event_icon('lock'); ?>Members only</a>
         <a href="<?php echo e(tab_url('going', $q)); ?>" class="<?php echo $tab === 'going' ? 'active' : ''; ?>">I'm going</a>
         <a href="<?php echo e(tab_url('past', $q)); ?>" class="<?php echo $tab === 'past' ? 'active' : ''; ?>">Past</a>
     </div>
 
     <form method="GET" class="filters">
         <?php if ($tab !== 'upcoming') { ?><input type="hidden" name="tab" value="<?php echo e($tab); ?>"><?php } ?>
-        <input type="text" name="q" maxlength="60" placeholder="Search by event, club or place" value="<?php echo e($q); ?>">
+        <label class="ev-search">
+            <?php echo event_icon('search'); ?>
+            <input type="text" name="q" maxlength="60" placeholder="Search by event, club or place" value="<?php echo e($q); ?>">
+        </label>
         <button type="submit" class="btn-sm btn-dark">Search</button>
         <?php if ($filtered) { ?><a href="<?php echo e(tab_url($tab, '')); ?>" class="cancel">Clear</a><?php } ?>
     </form>

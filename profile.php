@@ -138,6 +138,64 @@ if (!function_exists('social_icon')) {
     }
 }
 
+// Playful "nothing here yet" copy for someone else's profile. One stable line per person, so it doesn't flicker on reload.
+if (!function_exists('pf_empty_copy')) {
+    function pf_empty_copy($kind, $name, $seed) {
+        $all = array(
+            'bio' => array(
+                array('🕵️', "$name's bio is a mystery", "No bio yet. Say hi and get the story the old-fashioned way."),
+                array('⏳', "Bio loading...", "$name is still thinking of something cool to say."),
+                array('☕', "This bio is on a coffee break", "It'll be back. Probably."),
+                array('🦥', "$name hasn't written a bio yet", "Too busy being mysterious. Or napping."),
+            ),
+            'clubs' => array(
+                array('🦄', "No clubs yet", "$name is a free agent for now."),
+                array('🪑', "There's an empty seat", "$name hasn't joined a club yet. Maybe save them a spot?"),
+                array('🏝️', "Flying solo", "No clubs on $name's radar so far."),
+            ),
+            'projects' => array(
+                array('🧪', "Nothing brewing... yet", "$name hasn't joined or started a project."),
+                array('🛠️', "The workshop is quiet", "No projects here yet. Got an idea to pitch?"),
+                array('🌱', "Still a seed", "$name's first project hasn't sprouted yet."),
+            ),
+            'interests' => array(
+                array('🎨', "A blank canvas", "$name hasn't picked any interests yet."),
+                array('🫥', "Still figuring it out", "No interests added. Ask what they're into!"),
+                array('🔮', "Interests unknown", "The crystal ball is cloudy."),
+            ),
+            'now' => array(
+                array('🎧', "Nothing on repeat", "No \"currently into\" yet."),
+                array('👀', "Suspiciously quiet", "$name hasn't shared what they're into right now."),
+                array('🌙', "Taking a break", "Nothing here at the moment."),
+            ),
+            'links' => array(
+                array('🥷', "Off the grid", "No links added yet."),
+                array('🐚', "No links yet", "$name hasn't shared any socials."),
+                array('📵', "Low-key online", "No socials to show."),
+            ),
+        );
+        $list = isset($all[$kind]) ? $all[$kind] : $all['bio'];
+        return $list[abs((int)$seed) % count($list)];
+    }
+}
+if (!function_exists('pf_empty_html')) {
+    function pf_empty_html($kind, $name, $seed, $compact = false) {
+        $c = pf_empty_copy($kind, $name, $seed);
+        $t = $c[1] . (preg_match('/[.!?]$/', $c[1]) ? '' : '.');
+        $line = '<p class="pf-empty-line">' . e($t) . ' ' . e($c[2]) . '</p>';
+        if ($kind === 'clubs' || $kind === 'projects') {
+            // an invisible card sets the height, so the empty row is as tall as one with content
+            return '<div class="pf-empty-rail"><div class="pf-club pf-sizer" aria-hidden="true"><div class="cc-media pf-media"></div>'
+                . '<div class="pf-club-body"><span class="club-tile pf-club-logo"></span><span class="pf-club-txt"><strong>&nbsp;</strong><em>&nbsp;</em></span></div></div>'
+                . $line . '</div>';
+        }
+        return $line;
+    }
+}
+$pfName = $row ? trim((string)($row['first_name'] ?? '')) : '';
+if ($pfName === '') $pfName = 'This person';
+$pfSeed = $row ? (int)($row['id'] ?? 0) : 0;
+
 // "Currently into": only the rows this person filled in
 $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_list($row['currently_into']) : array();
 ?>
@@ -253,6 +311,8 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
                         </div>
                     <?php } elseif ($isOwn) { ?>
                         <p class="pf-hint"><a href="edit-profile">Add your links</a></p>
+                    <?php } else { ?>
+                        <?php echo pf_empty_html('links', $pfName, $pfSeed, true); ?>
                     <?php } ?>
 
                     <?php if ($isOwn) { ?>
@@ -261,15 +321,15 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
                         <a href="messages?u=<?php echo e(urlencode($row['username'])); ?>" class="btn-sm btn-dark pf-btn">Message</a>
                     <?php } ?>
 
-                    <?php if ($interests || $isOwn) { ?>
-                        <h2 class="pf-side-h">Interests</h2>
-                        <?php if ($interests) { ?>
-                            <div class="chip-row">
-                                <?php foreach ($interests as $t) { ?><span class="chip"><?php echo e($t); ?></span><?php } ?>
-                            </div>
-                        <?php } else { ?>
-                            <p class="pf-hint"><a href="edit-profile">Add your interests</a></p>
-                        <?php } ?>
+                    <h2 class="pf-side-h">Interests</h2>
+                    <?php if ($interests) { ?>
+                        <div class="chip-row">
+                            <?php foreach ($interests as $t) { ?><span class="chip"><?php echo e($t); ?></span><?php } ?>
+                        </div>
+                    <?php } elseif ($isOwn) { ?>
+                        <p class="pf-hint"><a href="edit-profile">Add your interests</a></p>
+                    <?php } else { ?>
+                        <?php echo pf_empty_html('interests', $pfName, $pfSeed, true); ?>
                     <?php } ?>
 
                     <?php if ($currently) { ?>
@@ -279,9 +339,13 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
                                 <div><dt><?php echo e($c[0]); ?></dt><dd><?php echo e($c[1]); ?></dd></div>
                             <?php } ?>
                         </dl>
-                    <?php } elseif ($isOwn && array_key_exists('currently_into', $row)) { ?>
+                    <?php } elseif (array_key_exists('currently_into', $row)) { ?>
                         <h2 class="pf-side-h">Currently into</h2>
-                        <p class="pf-hint"><a href="edit-profile">Share what you're into right now</a></p>
+                        <?php if ($isOwn) { ?>
+                            <p class="pf-hint"><a href="edit-profile">Share what you're into right now</a></p>
+                        <?php } else { ?>
+                            <?php echo pf_empty_html('now', $pfName, $pfSeed, true); ?>
+                        <?php } ?>
                     <?php } ?>
                 </aside>
 
@@ -298,47 +362,52 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
                         </section>
                     <?php } ?>
 
-                    <?php if (!empty($row['bio']) || $isOwn) { ?>
+                    <?php if (true) { ?>
                         <section class="pf-card pf-about">
                             <div class="pf-about-art" aria-hidden="true">
                                 <svg viewBox="0 0 120 120" fill="none">
                                     <defs>
                                         <linearGradient id="pfb-body" x1="22" y1="14" x2="92" y2="96" gradientUnits="userSpaceOnUse">
-                                            <stop offset="0" stop-color="#ffffff"/>
-                                            <stop offset="0.5" stop-color="#e4e4e7"/>
-                                            <stop offset="1" stop-color="#8a8a92"/>
+                                            <stop offset="0" stop-color="#52525a"/>
+                                            <stop offset="0.55" stop-color="#232327"/>
+                                            <stop offset="1" stop-color="#0a0a0b"/>
                                         </linearGradient>
                                         <linearGradient id="pfb-edge" x1="20" y1="90" x2="98" y2="30" gradientUnits="userSpaceOnUse">
-                                            <stop offset="0" stop-color="#5c5c63"/>
-                                            <stop offset="1" stop-color="#f4f4f5"/>
+                                            <stop offset="0" stop-color="#0a0a0b"/>
+                                            <stop offset="1" stop-color="#a1a1aa"/>
                                         </linearGradient>
                                         <radialGradient id="pfb-shine" cx="0.3" cy="0.2" r="0.6">
-                                            <stop offset="0" stop-color="#fff" stop-opacity="0.95"/>
+                                            <stop offset="0" stop-color="#fff" stop-opacity="0.75"/>
                                             <stop offset="1" stop-color="#fff" stop-opacity="0"/>
                                         </radialGradient>
                                         <filter id="pfb-glow" x="-40%" y="-40%" width="180%" height="180%">
-                                            <feGaussianBlur stdDeviation="6"/>
+                                            <feGaussianBlur stdDeviation="7"/>
                                         </filter>
                                     </defs>
-                                    <ellipse cx="60" cy="62" rx="44" ry="36" fill="#ffffff" opacity="0.28" filter="url(#pfb-glow)"/>
-                                    <path d="M30 28h58a14 14 0 0 1 14 14v28a14 14 0 0 1-14 14H64L44 100V84H30a14 14 0 0 1-14-14V42a14 14 0 0 1 14-14z" fill="#3a3a40" transform="translate(0 5)"/>
+                                    <ellipse cx="60" cy="66" rx="44" ry="34" fill="#0a0a0b" opacity="0.18" filter="url(#pfb-glow)"/>
+                                    <path d="M30 28h58a14 14 0 0 1 14 14v28a14 14 0 0 1-14 14H64L44 100V84H30a14 14 0 0 1-14-14V42a14 14 0 0 1 14-14z" fill="#0a0a0b" transform="translate(0 5)"/>
                                     <path d="M30 28h58a14 14 0 0 1 14 14v28a14 14 0 0 1-14 14H64L44 100V84H30a14 14 0 0 1-14-14V42a14 14 0 0 1 14-14z" fill="url(#pfb-body)" stroke="url(#pfb-edge)" stroke-width="2"/>
                                     <path d="M30 32h58a10 10 0 0 1 10 10v6c-14 6-44 8-78 0v-6a10 10 0 0 1 10-10z" fill="url(#pfb-shine)" opacity="0.8"/>
-                                    <circle cx="42" cy="56" r="6" fill="#111113"/>
-                                    <circle cx="60" cy="56" r="6" fill="#111113"/>
-                                    <circle cx="78" cy="56" r="6" fill="#111113"/>
-                                    <circle cx="40.5" cy="54" r="1.8" fill="#fff" opacity="0.9"/>
-                                    <circle cx="58.5" cy="54" r="1.8" fill="#fff" opacity="0.9"/>
-                                    <circle cx="76.5" cy="54" r="1.8" fill="#fff" opacity="0.9"/>
-                                    <path class="sp sp1" d="M100 10l2.6 7.4L110 20l-7.4 2.6L100 30l-2.6-7.4L90 20l7.4-2.6z" fill="#ffffff"/>
-                                    <path class="sp sp2" d="M14 12l1.8 5.2L21 19l-5.2 1.8L14 26l-1.8-5.2L7 19l5.2-1.8z" fill="#fff"/>
+                                    <circle cx="42" cy="56" r="6" fill="#ffffff"/>
+                                    <circle cx="60" cy="56" r="6" fill="#ffffff"/>
+                                    <circle cx="78" cy="56" r="6" fill="#ffffff"/>
+                                    <circle cx="43.5" cy="57.5" r="2.2" fill="#0a0a0b" opacity="0.9"/>
+                                    <circle cx="61.5" cy="57.5" r="2.2" fill="#0a0a0b" opacity="0.9"/>
+                                    <circle cx="79.5" cy="57.5" r="2.2" fill="#0a0a0b" opacity="0.9"/>
+                                    <path class="sp sp1" d="M100 10l2.6 7.4L110 20l-7.4 2.6L100 30l-2.6-7.4L90 20l7.4-2.6z" fill="#0a0a0b"/>
+                                    <path class="sp sp2" d="M14 12l1.8 5.2L21 19l-5.2 1.8L14 26l-1.8-5.2L7 19l5.2-1.8z" fill="#27272a"/>
                                     <path class="sp sp3" d="M106 84l1.6 4.4L112 90l-4.4 1.6L106 96l-1.6-4.4L100 90l4.4-1.6z" fill="#a1a1aa"/>
                                 </svg>
                             </div>
                             <?php if (!empty($row['bio'])) { ?>
                                 <p class="pf-bio"><?php echo nl2br(e($row['bio'])); ?></p>
-                            <?php } else { ?>
+                            <?php } elseif ($isOwn) { ?>
                                 <p class="pf-bio empty">Say something about yourself. <a href="edit-profile">Add a bio</a></p>
+                            <?php } else { $bc = pf_empty_copy('bio', $pfName, $pfSeed); ?>
+                                <div class="pf-bio-empty">
+                                    <strong><span aria-hidden="true"><?php echo e($bc[0]); ?></span> <?php echo e($bc[1]); ?></strong>
+                                    <span><?php echo e($bc[2]); ?></span>
+                                </div>
                             <?php } ?>
                         </section>
                     <?php } ?>
@@ -371,16 +440,15 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
                         <?php } elseif ($isOwn) { ?>
                             <p class="empty">You haven't joined any clubs yet. <a href="clubs">Browse clubs</a></p>
                         <?php } else { ?>
-                            <p class="empty">No clubs to show yet.</p>
+                            <?php echo pf_empty_html('clubs', $pfName, $pfSeed); ?>
                         <?php } ?>
                     </section>
 
-                    <?php if ($myProjects || $isOwn) { ?>
+                    <?php if (true) { ?>
                         <section class="pf-card" data-rail>
                             <div class="pf-row">
                                 <h2 class="pf-h">Projects</h2>
                                 <div class="pf-row-end">
-                                    <?php if ($isOwn) { ?><a href="create-project" class="club-meta">Post a project</a><?php } ?>
                                     <?php if ($myProjects) { ?>
                                 <div class="pf-arrows" hidden>
                                     <button type="button" aria-label="Scroll left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
@@ -407,8 +475,10 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
                                         </a>
                                     <?php } ?>
                                 </div>
-                            <?php } else { ?>
+                            <?php } elseif ($isOwn) { ?>
                                 <p class="empty">You haven't joined a project yet. <a href="projects">Find one</a> or <a href="create-project">post your own</a>.</p>
+                            <?php } else { ?>
+                                <?php echo pf_empty_html('projects', $pfName, $pfSeed); ?>
                             <?php } ?>
                         </section>
                     <?php } ?>

@@ -419,6 +419,7 @@ $wantG = (int)($_GET['g'] ?? 0);
 $boot = array('me' => $meId, 'meName' => full_name($me), 'csrf' => csrf_token(), 'rt' => $rt, 'convos' => array(), 'open' => null,
               'maxFile' => chat_max_file(), 'maxFiles' => CHAT_MAX_FILES, 'groupMax' => CHAT_GROUP_MAX,
               'accept' => '.' . implode(',.', array_keys(chat_allowed_types())));
+$boot['draft'] = str_cut(trim((string)($_GET['draft'] ?? '')), 1000);   // text typed in the Students card
 $setupMissing = !$schemaOk;
 
 if (!$setupMissing) {

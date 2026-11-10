@@ -326,7 +326,14 @@ function parse_interests($raw, &$error, $max = 8) {
     return implode(',', $out);
 }
 
-// ---- profile photos: re-drawn as a 400x400 JPEG with a random name ----
+// Gentle sharpening after a big downscale so photos stay crisp instead of soft.
+function sharpen_after_resize($img, $srcW, $dstW) {
+    if ($dstW > 0 && $srcW / $dstW >= 1.4 && function_exists('imageconvolution')) {
+        @imageconvolution($img, array(array(-1, -1, -1), array(-1, 16, -1), array(-1, -1, -1)), 8, 0);
+    }
+}
+
+// ---- profile photos: re-drawn as a square JPEG (up to 800x800) with a random name ----
 function avatar_dir() {
     return __DIR__ . '/uploads/avatars';
 }
@@ -381,9 +388,12 @@ function save_avatar($tmpPath, &$error) {
     $sx = (int)(($w - $side) / 2);
     $sy = (int)(($h - $side) / 2);
 
-    $dst = imagecreatetruecolor(400, 400);
+    // up to 800px (sharp on retina screens); a small photo is never scaled UP, that only adds blur
+    $out = max(1, min(800, $side));
+    $dst = imagecreatetruecolor($out, $out);
     imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
-    imagecopyresampled($dst, $src, 0, 0, $sx, $sy, 400, 400, $side, $side);
+    imagecopyresampled($dst, $src, 0, 0, $sx, $sy, $out, $out, $side, $side);
+    sharpen_after_resize($dst, $side, $out);
 
     $dir = avatar_dir();
     if (!is_dir($dir)) {
@@ -399,7 +409,7 @@ function save_avatar($tmpPath, &$error) {
     }
 
     $name = bin2hex(random_bytes(12)) . '.jpg';
-    $ok = @imagejpeg($dst, $dir . '/' . $name, 85);
+    $ok = @imagejpeg($dst, $dir . '/' . $name, 90);
 
     imagedestroy($src);
     imagedestroy($dst);
@@ -430,8 +440,8 @@ function import_google_photo($url) {
         return null;
     }
 
-    // ask for a larger version (…=s96-c becomes …=s400-c)
-    $url = preg_replace('/=s\d+-c$/', '=s400-c', $url);
+    // ask for a larger version (…=s96-c becomes …=s800-c)
+    $url = preg_replace('/=s\d+-c$/', '=s800-c', $url);
 
     $ch = curl_init($url);
     curl_setopt_array($ch, array(
@@ -714,13 +724,15 @@ function save_club_image($tmpPath, $kind, &$error, $dir = null) {
         $tw = max(1, min(3840, $cw));
         $th = (int)round($tw * $rh / $rw);
     } else {
-        $tw = 400;
-        $th = 400;
+        // logos: up to 800px, never scaled up
+        $tw = max(1, min(800, $cw));
+        $th = $tw;
     }
 
     $dst = imagecreatetruecolor($tw, $th);
     imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
     imagecopyresampled($dst, $src, 0, 0, $sx, $sy, $tw, $th, $cw, $ch);
+    sharpen_after_resize($dst, $cw, $tw);
 
     if ($dir === null) $dir = club_image_dir();
     if (!is_dir($dir)) {
@@ -736,7 +748,7 @@ function save_club_image($tmpPath, $kind, &$error, $dir = null) {
 
     $name = bin2hex(random_bytes(12)) . '.jpg';
     if ($kind === 'cover') imageinterlace($dst, 1);   // progressive: loads blurry-to-sharp instead of top-down
-    $ok = @imagejpeg($dst, $dir . '/' . $name, ($kind === 'cover') ? 93 : 86);
+    $ok = @imagejpeg($dst, $dir . '/' . $name, ($kind === 'cover') ? 95 : 90);
 
     imagedestroy($src);
     imagedestroy($dst);
@@ -768,4 +780,30 @@ function club_tile_html($club, $size = '', $tag = 'div') {
 // profile cover photos live in their own folder
 function user_cover_dir() {
     return __DIR__ . '/uploads/covers';
+}
+
+// Icon for a social network (shared by the profile page and the student directory)
+if (!function_exists('social_icon')) {
+    function social_icon($key) {
+        $solid = array(
+            'github'   => 'M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12',
+            'facebook' => 'M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z',
+            'linkedin' => 'M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z',
+        );
+        $line = array(
+            'instagram' => '<rect x="3" y="3" width="18" height="18" rx="5.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.6" cy="6.4" r="0.5" fill="currentColor"/>',
+            'youtube'   => '<rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/>',
+            'discord'   => '<path d="M7 6.5c1.6-.8 3.2-1.1 5-1.1s3.4.3 5 1.1c1.6 2.4 2.5 5 2.7 8-1.3 1-2.7 1.6-4.2 2l-.9-1.5c-1.7.5-3.5.5-5.2 0l-.9 1.5c-1.5-.4-2.9-1-4.2-2 .2-3 1.1-5.6 2.7-8z"/><circle cx="9.3" cy="12" r="1.1" fill="currentColor"/><circle cx="14.7" cy="12" r="1.1" fill="currentColor"/>',
+            'tiktok'    => '<path d="M14 4v10.5a3.5 3.5 0 1 1-3.5-3.5"/><path d="M14 4c.3 2.3 1.8 3.8 4 4"/>',
+            'x'         => '<path d="M5 4l14 16M19 4L5 20"/>',
+            'twitch'    => '<path d="M5 3h15v11l-4 4h-4l-3 3v-3H5z"/><path d="M12 8v4M16 8v4"/>',
+            'spotify'   => '<circle cx="12" cy="12" r="9.5"/><path d="M7 9.5c3.5-1 7.5-.7 10.5 1M7.5 12.5c3-.8 6-.5 8.5 1M8 15.3c2.3-.6 4.5-.4 6.5.7"/>',
+            'website'   => '<circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19"/><path d="M12 2.5a14.5 14.5 0 0 1 3.8 9.5A14.5 14.5 0 0 1 12 21.5 14.5 14.5 0 0 1 8.2 12 14.5 14.5 0 0 1 12 2.5z"/>',
+        );
+        if (isset($solid[$key])) {
+            return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="' . $solid[$key] . '"/></svg>';
+        }
+        $d = isset($line[$key]) ? $line[$key] : $line['website'];
+        return '<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' . $d . '</g></svg>';
+    }
 }

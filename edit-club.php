@@ -29,7 +29,7 @@ $message    = "";
 
 // a file larger than the server's post limit arrives as an empty form, so the save button never registers
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
-    $message = "That upload was too large for the server. Try smaller images (up to 2 MB each).";
+    $message = "That upload was too large for the server. Try smaller images (up to 10 MB each).";
 }
 
 // Reads one uploaded image field. Returns the saved file name, or null (sets $error if something was wrong).
@@ -42,8 +42,8 @@ function club_upload_field($field, $kind, &$error) {
         $error = "That image couldn't be uploaded. Please try a smaller file.";
         return null;
     }
-    if ($up['size'] > 2 * 1024 * 1024) {
-        $error = "Images can be up to 2 MB.";
+    if ($up['size'] > 10 * 1024 * 1024) {
+        $error = "Images can be up to 10 MB.";
         return null;
     }
     return save_club_image($up['tmp_name'], $kind, $error);
@@ -207,7 +207,7 @@ if ($identity && !empty($club['invite_only']) && !empty($club['invite_token'])) 
             <input type="file" name="logo" id="logo" accept="image/jpeg,image/png,image/webp" hidden>
             <input type="hidden" name="remove_cover" id="remove-cover" value="0">
             <input type="hidden" name="remove_logo" id="remove-logo" value="0">
-            <p class="hint" id="id-msg">JPG, PNG or WebP, up to 2 MB. Covers are cropped wide, logos square.</p>
+            <p class="hint" id="id-msg">JPG, PNG or WebP, up to 10 MB. Covers are cropped wide, logos square.</p>
         </section>
         <?php } else { ?>
             <div class="msg error" style="margin-top:20px">Logos, covers and invite-only clubs need a one-time upgrade. Run <strong>club-identity.sql</strong> in phpMyAdmin to unlock them.</div>
@@ -269,7 +269,7 @@ if ($identity && !empty($club['invite_only']) && !empty($club['invite_token'])) 
 <?php if ($identity) { ?>
 <script>
 (function () {
-    var MAX = 2 * 1024 * 1024;
+    var MAX = 10 * 1024 * 1024;
     var TYPES = /^image\/(jpeg|png|webp)$/;
     var msg = document.getElementById("id-msg");
     var msgText = msg.textContent;
@@ -288,7 +288,7 @@ if ($identity && !empty($club['invite_only']) && !empty($club['invite_token'])) 
         function accept(file) {
             if (!file) return false;
             if (!TYPES.test(file.type)) { say("Please choose a JPG, PNG or WebP image."); return false; }
-            if (file.size > MAX) { say("That image is over 2 MB. Please choose a smaller one."); return false; }
+            if (file.size > MAX) { say("That image is over 10 MB. Please choose a smaller one."); return false; }
             calm();
             removeField.value = "0";
             o.show(URL.createObjectURL(file));

@@ -1136,10 +1136,23 @@
     document.getElementById("list-search").addEventListener("input", function (e) { S.q = e.target.value.trim(); renderList(); });
     document.getElementById("chat-tabs").addEventListener("click", function (e) {
         var b = e.target.closest("button[data-f]"); if (!b) return;
-        S.filter = b.dataset.f;
-        Array.prototype.forEach.call(this.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
-        renderList();
+        setFilter(b.dataset.f);
     });
+
+    // opening a chat reloads the page, so remember which tab you were on
+    function setFilter(f) {
+        S.filter = f;
+        try { sessionStorage.setItem("camigo_chat_tab", f); } catch (x) {}
+        Array.prototype.forEach.call(document.querySelectorAll("#chat-tabs button[data-f]"), function (x) { x.classList.toggle("on", x.dataset.f === f); });
+        renderList();
+    }
+    try {
+        var savedTab = sessionStorage.getItem("camigo_chat_tab");
+        if (savedTab === "unread" || savedTab === "groups") {
+            S.filter = savedTab;
+            Array.prototype.forEach.call(document.querySelectorAll("#chat-tabs button[data-f]"), function (x) { x.classList.toggle("on", x.dataset.f === savedTab); });
+        }
+    } catch (x) {}
 
     // when you open a group from a chat that's in the list, show it with its latest info
     if (S.open && S.open.k === "g") { var gc = findConvo("g", S.open.id); if (gc) { gc.members = S.open.members; } }
@@ -1148,6 +1161,12 @@
     renderPane();
     bindRealtime();
     if (S.open) markRead();
+
+    // text typed in a student's card on the Students page lands in the composer, ready to send
+    if (B.draft && S.open && S.open.k === "u" && !S.open.missing && el.ta) {
+        el.ta.value = B.draft; grow(); updateSend(); el.ta.focus();
+        try { history.replaceState(null, "", "messages?u=" + encodeURIComponent(S.open.username || "")); } catch (x) {}
+    }
 
     // the live connection is optional; without it the page refreshes itself now and then
     setInterval(function () {

@@ -57,6 +57,7 @@ function event_when_label($ev) {
 // ---------- small bits ----------
 function event_icon($name) {
     $p = array(
+        'search'   => '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
         'clock'    => '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
         'pin'      => '<path d="M12 21s-6.5-5.2-6.5-10.5a6.5 6.5 0 0113 0C18.5 15.8 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.3"/>',
         'users'    => '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M17.5 14.5c2.5 0 4 1.5 4 4"/>',
@@ -159,8 +160,8 @@ function event_postable_clubs($conn, $userId) {
 // Returns array('ok' => bool, 'rows' => [...]). $where may use ? marks; pass their types and values.
 // Every row has: going (count), me_going (0/1), faces (a few people who are going and have public profiles).
 function events_query($conn, $meId, $where, $types, $params, $order, $limit) {
-    $sql = "SELECT e.id, e.club_id, e.title, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility, UNIX_TIMESTAMP(e.created_at) AS created_ts,
-                   c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo" : "") . ",
+    $sql = "SELECT e.id, e.club_id, e.title, e.description, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility, UNIX_TIMESTAMP(e.created_at) AS created_ts,
+                   c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo, c.cover AS club_cover" : "") . ",
                    (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id) AS going,
                    (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id AND r.user_id = ?) AS me_going,
                    " . (club_identity_ready($conn) ? "(c.invite_only = 1 AND NOT EXISTS (SELECT 1 FROM club_members hm WHERE hm.club_id = e.club_id AND hm.user_id = ? AND hm.status = 'active'))" : "0") . " AS hide_faces
@@ -334,6 +335,10 @@ function render_event_card($ev, $back) {
     $excl    = (($ev['visibility'] ?? 'public') === 'members');
     ?>
     <article class="ev-card<?php echo $state === 'over' ? ' is-over' : ''; ?><?php echo $excl ? ' is-exclusive' : ''; ?>">
+        <a class="ev-cover" href="event?id=<?php echo $id; ?>" tabindex="-1" aria-hidden="true" data-g="<?php echo (int)$ev['club_id'] % 6; ?>">
+            <?php if (!empty($ev['club_cover']) && club_image_ok($ev['club_cover'])) { ?><img src="uploads/clubs/<?php echo e($ev['club_cover']); ?>" alt="" loading="lazy" decoding="async"><?php } ?>
+        </a>
+        <div class="ev-inner">
         <a class="ev-date t<?php echo $id % 3; ?>" href="event?id=<?php echo $id; ?>" aria-label="<?php echo e($s->format('F j')); ?>">
             <small><?php echo e($s->format('M')); ?></small>
             <b><?php echo e($s->format('j')); ?></b>
@@ -342,7 +347,7 @@ function render_event_card($ev, $back) {
 
         <div class="ev-body">
             <div class="ev-top">
-                <a class="ev-club" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo e($ev['club_name']); ?></a>
+                <a class="ev-club" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo club_tile_html(array('id' => $ev['club_id'], 'name' => $ev['club_name'], 'logo' => $ev['club_logo'] ?? null), 'xs', 'span'); ?><span><?php echo e($ev['club_name']); ?></span></a>
                 <?php if ($excl) { ?><span class="badge members"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>
                 <?php if ($state === 'live') { ?><span class="badge live">Live now</span>
                 <?php } elseif ($when !== '' && $state === 'upcoming') { ?><span class="badge soon"><?php echo e($when); ?></span><?php } ?>
@@ -350,6 +355,9 @@ function render_event_card($ev, $back) {
             </div>
 
             <h3><a href="event?id=<?php echo $id; ?>"><?php echo e($ev['title']); ?></a></h3>
+
+            <?php $blurb = trim(preg_replace('/\s+/u', ' ', (string)($ev['description'] ?? ''))); ?>
+            <?php if ($blurb !== '') { ?><p class="ev-blurb"><?php echo e(str_cut($blurb, 220)); ?></p><?php } ?>
 
             <div class="ev-meta">
                 <span><?php echo event_icon('clock'); ?><?php echo e(event_time_range($ev)); ?></span>
@@ -384,6 +392,7 @@ function render_event_card($ev, $back) {
                     </form>
                 <?php } ?>
             </div>
+        </div>
         </div>
     </article>
     <?php

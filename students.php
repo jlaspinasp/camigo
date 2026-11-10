@@ -5,89 +5,16 @@ require("auth.php");
 
 $me = require_user_row($conn);
 
-$years   = year_levels();
 $perPage = 24;
 
 // who may appear in the directory: public, finished profiles
 $VISIBLE = "(u.profile_visibility IS NULL OR u.profile_visibility = 'public') AND u.birthday IS NOT NULL";
 
-// ================= INVITE A STUDENT TO A CLUB =================
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-    $action = $_POST['action'] ?? '';
-    $uid    = (int)($_POST['user_id'] ?? 0);
-    $cid    = (int)($_POST['club_id'] ?? 0);
-
-    if (!csrf_ok() || $action !== 'invite' || $uid <= 0 || $cid <= 0) {
-        flash_set("Your session expired. Please try again.", "error");
-    } else {
-        // only an active owner of an approved club can invite
-        $own = db_run($conn,
-            "SELECT c.name FROM club_members m JOIN clubs c ON c.id = m.club_id AND c.status = 'approved'
-             WHERE m.club_id = ? AND m.user_id = ? AND m.role = 'owner' AND m.status = 'active' LIMIT 1",
-            "ii", array($cid, $me['id']));
-
-        $tg = db_run($conn,
-            "SELECT u.id, u.first_name FROM users u WHERE u.id = ? AND u.id <> ? AND " . $VISIBLE . " LIMIT 1",
-            "ii", array($uid, $me['id']));
-
-        if (!$own['rows']) {
-            flash_set("Only the owner of a club can send invites.", "error");
-        } elseif (!$tg['rows']) {
-            flash_set("That student isn't available to invite.", "error");
-        } else {
-            $first = $tg['rows'][0]['first_name'];
-            $club  = $own['rows'][0]['name'];
-
-            $ex = db_run($conn, "SELECT status FROM club_members WHERE club_id = ? AND user_id = ? LIMIT 1", "ii", array($cid, $uid));
-            if ($ex['rows']) {
-                flash_set(($ex['rows'][0]['status'] === 'active')
-                    ? $first . " is already in " . $club . "."
-                    : $first . " already asked to join " . $club . ". You can accept them in Join requests.", "error");
-            } else {
-                $link = 'club?id=' . $cid;
-                if (club_identity_ready($conn)) {
-                    $ik = db_run($conn, "SELECT invite_only, invite_token FROM clubs WHERE id = ? LIMIT 1", "i", array($cid));
-                    if ($ik['rows'] && (int)$ik['rows'][0]['invite_only'] === 1 && !empty($ik['rows'][0]['invite_token'])) {
-                        $link .= '&invite=' . $ik['rows'][0]['invite_token'];
-                    }
-                }
-                $dup = db_run($conn,
-                    "SELECT id FROM notifications WHERE user_id = ? AND type = 'club_invite' AND link = ?
-                     AND created_at > (NOW() - INTERVAL 7 DAY) LIMIT 1",
-                    "is", array($uid, $link));
-
-                if ($dup['rows']) {
-                    flash_set("You already invited " . $first . " to " . $club . " this week.", "error");
-                } elseif (notify($conn, $uid, 'club_invite', full_name($me) . ' invited you to join ' . $club . '.', $link)) {
-                    flash_set("Invite sent to " . $first . ".", "success");
-                } else {
-                    flash_set("We couldn't send that invite. Please try again.", "error");
-                }
-            }
-        }
-    }
-
-    // return to the same search
-    $back = array();
-    $bq = str_cut(trim($_POST['q'] ?? ''), 60);
-    if ($bq !== '') $back['q'] = $bq;
-    if (in_array($_POST['year'] ?? '', $years, true)) $back['year'] = $_POST['year'];
-    if (in_array($_POST['sort'] ?? '', array('new', 'shared'), true)) $back['sort'] = $_POST['sort'];
-    if ((int)($_POST['page'] ?? 1) > 1) $back['page'] = (int)$_POST['page'];
-    header("Location: students" . ($back ? "?" . http_build_query($back) : ""));
-    exit();
-}
-
 // ================= SEARCH =================
 $q    = trim(preg_replace('/\s+/', ' ', $_GET['q'] ?? ''));
 $q    = str_cut($q, 60);
-$year = $_GET['year'] ?? '';
-$sort = $_GET['sort'] ?? 'name';
 $page = max(1, (int)($_GET['page'] ?? 1));
 
-if (!in_array($year, $years, true)) $year = '';
-if (!in_array($sort, array('name', 'new', 'shared'), true)) $sort = 'name';
 
 $where   = " WHERE u.id <> ? AND " . $VISIBLE;
 $wTypes  = "i";
@@ -103,11 +30,6 @@ if ($q !== '') {
         array_push($wParams, $like, $like, $like, $like, $like);
     }
 }
-if ($year !== '') {
-    $where .= " AND u.year_level = ?";
-    $wTypes .= "s";
-    $wParams[] = $year;
-}
 
 $cnt = db_run($conn, "SELECT COUNT(*) AS n FROM users u" . $where, $wTypes, $wParams);
 $setupMissing = !$cnt['ok'];
@@ -118,53 +40,54 @@ $offset = ($page - 1) * $perPage;
 
 $students = array();
 if (!$setupMissing && $total > 0) {
-    $order = array(
-        'name'   => "u.first_name ASC, u.last_name ASC",
-        'new'    => "u.id DESC",
-        'shared' => "shared DESC, u.first_name ASC",
-    );
 
-    $sql = "SELECT u.id, u.username, u.first_name, u.middle_initial, u.last_name, u.course, u.year_level, u.interests, u.photo,
-                (SELECT COUNT(*) FROM club_members a
-                 JOIN club_members b ON b.club_id = a.club_id AND b.user_id = ? AND b.status = 'active'
-                 JOIN clubs c ON c.id = a.club_id AND c.status = 'approved'
-                 WHERE a.user_id = u.id AND a.status = 'active') AS shared
-            FROM users u" . $where . " ORDER BY " . $order[$sort] . " LIMIT ? OFFSET ?";
-
-    $res = db_run($conn, $sql, "i" . $wTypes . "ii", array_merge(array($me['id']), $wParams, array($perPage, $offset)));
-    $students = $res['rows'];
-}
-
-// ---- clubs I own (for the Invite button) ----
-$ownedClubs = db_run($conn,
-    "SELECT c.id, c.name FROM club_members m JOIN clubs c ON c.id = m.club_id AND c.status = 'approved'
-     WHERE m.user_id = ? AND m.role = 'owner' AND m.status = 'active' ORDER BY c.name ASC",
-    "i", array($me['id']))['rows'];
-
-// which of these students are already in (or asked to join) my clubs
-$inClub = array();
-if ($ownedClubs && $students) {
-    $uids = implode(',', array_map('intval', array_column($students, 'id')));
-    $cids = implode(',', array_map('intval', array_column($ownedClubs, 'id')));
-    $mr = db_run($conn, "SELECT user_id, club_id FROM club_members WHERE user_id IN ($uids) AND club_id IN ($cids)");
-    foreach ($mr['rows'] as $row) {
-        $inClub[$row['user_id'] . ':' . $row['club_id']] = true;
+    // cover, thought bubble and social links only exist once their migrations have been run
+    $extra = "";
+    foreach (array('cover', 'status_emoji', 'status_text') as $col) {
+        if (array_key_exists($col, $me)) $extra .= ", u." . $col;
     }
+    foreach (array_keys(social_networks()) as $col) {
+        if (array_key_exists($col, $me)) $extra .= ", u." . $col;
+    }
+
+    $sql = "SELECT u.id, u.username, u.first_name, u.middle_initial, u.last_name, u.course, u.year_level, u.interests, u.photo" . $extra . "
+            FROM users u" . $where . " ORDER BY u.first_name ASC, u.last_name ASC LIMIT ? OFFSET ?";
+
+    $res = db_run($conn, $sql, $wTypes . "ii", array_merge($wParams, array($perPage, $offset)));
+    $students = $res['rows'];
 }
 
 $flash = flash_get();
 $message = $flash ? $flash[0] : "";
 $message_class = $flash ? $flash[1] : "";
 
-$filtered = ($q !== '' || $year !== '');
+$filtered = ($q !== '');
 
 function dir_url($over) {
-    global $q, $year, $sort, $page;
-    $a = array_merge(array('q' => $q, 'year' => $year, 'sort' => $sort, 'page' => $page), $over);
+    global $q, $page;
+    $a = array_merge(array('q' => $q, 'page' => $page), $over);
     foreach ($a as $k => $v) {
-        if ($v === '' || $v === null || ($k === 'sort' && $v === 'name') || ($k === 'page' && (int)$v <= 1)) unset($a[$k]);
+        if ($v === '' || $v === null || ($k === 'page' && (int)$v <= 1)) unset($a[$k]);
     }
     return 'students' . ($a ? '?' . http_build_query($a) : '');
+}
+
+// Playful "nothing here yet" copy (same lines as the profile page). One stable line per student.
+function dir_empty($kind, $name, $seed) {
+    $all = array(
+        'interests' => array(
+            array('🎨', "A blank canvas.", "$name hasn't picked any interests yet."),
+            array('🫥', "Still figuring it out.", "Ask what they're into!"),
+            array('🔮', "Interests unknown.", "The crystal ball is cloudy."),
+        ),
+        'links' => array(
+            array('🥷', "Off the grid.", "No links added yet."),
+            array('🐚', "No links yet.", "$name hasn't shared any socials."),
+            array('📵', "Low-key online.", "No socials to show."),
+        ),
+    );
+    $c = $all[$kind][abs((int)$seed) % count($all[$kind])];
+    return '<p class="dir-empty"><span class="dir-empty-tx">' . e($c[2]) . '</span></p>';
 }
 
 function dir_name($r) {
@@ -192,26 +115,13 @@ function dir_name($r) {
 
     <header class="dir-hero">
         <h1 class="page-title">Students</h1>
-        <p class="page-sub">Find classmates by name, course or interest, and open their profiles.<?php if ($ownedClubs) { ?> You can also invite them to the clubs you own.<?php } ?></p>
+        <p class="page-sub">Find classmates by name, course or interest, and open their profiles.</p>
 
         <form method="GET" action="students" class="dir-search" role="search">
             <div class="dir-field">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
                 <input type="search" name="q" maxlength="60" placeholder="Search by name, course or interest" value="<?php echo e($q); ?>" aria-label="Search students" autocomplete="off">
             </div>
-
-            <select name="year" aria-label="Year level">
-                <option value="">Any year</option>
-                <?php foreach ($years as $y) { ?>
-                    <option value="<?php echo e($y); ?>" <?php echo ($year === $y) ? 'selected' : ''; ?>><?php echo e($y); ?></option>
-                <?php } ?>
-            </select>
-
-            <select name="sort" aria-label="Sort by">
-                <option value="name"   <?php echo $sort === 'name'   ? 'selected' : ''; ?>>Name A to Z</option>
-                <option value="shared" <?php echo $sort === 'shared' ? 'selected' : ''; ?>>Most shared clubs</option>
-                <option value="new"    <?php echo $sort === 'new'    ? 'selected' : ''; ?>>Newest</option>
-            </select>
 
             <button type="submit" class="btn-sm btn-dark">Search</button>
         </form>
@@ -228,10 +138,6 @@ function dir_name($r) {
     <?php } else { ?>
 
         <div class="dir-bar">
-            <span class="dir-count">
-                <?php if ($total === 0) { echo 'No students found'; }
-                      else { echo $total . ' student' . ($total === 1 ? '' : 's'); if ($q !== '') echo ' matching &ldquo;' . e($q) . '&rdquo;'; } ?>
-            </span>
             <?php if ($filtered) { ?><a href="students" class="cancel">Clear search</a><?php } ?>
         </div>
 
@@ -240,7 +146,7 @@ function dir_name($r) {
             <section class="panel center">
                 <h2><?php echo $filtered ? "Nobody matches that search" : "No students to show yet"; ?></h2>
                 <p class="empty">
-                    <?php if ($filtered) { ?>Try fewer words, a different spelling, or any year level.
+                    <?php if ($filtered) { ?>Try fewer words or a different spelling.
                     <?php } else { ?>Students with public profiles will appear here.<?php } ?>
                 </p>
             </section>
@@ -254,74 +160,58 @@ function dir_name($r) {
                     if (!empty($s['course']))     $line[] = $s['course'];
                     if (!empty($s['year_level'])) $line[] = $s['year_level'];
                     $allTags = !empty($s['interests']) ? array_values(array_filter(explode(',', $s['interests']))) : array();
-                    $tags = array_slice($allTags, 0, 3);
-                    $more = count($allTags) - count($tags);
-                    $shared = (int)$s['shared'];
+                    // render a generous batch; the card's fit script hides what doesn't fit and adds "+N"
+                    $shownTags = array_slice($allTags, 0, 30);
+                    $extraTags = count($allTags) - count($shownTags);
 
-                    // my clubs this student could still be invited to
-                    $invitable = array();
-                    foreach ($ownedClubs as $oc) {
-                        if (empty($inClub[$s['id'] . ':' . $oc['id']])) $invitable[] = $oc;
-                    }
                 ?>
+                    <?php
+                        $cv  = (!empty($s['cover']) && club_image_ok($s['cover'])) ? $s['cover'] : '';
+                        $sEm = trim((string)($s['status_emoji'] ?? ''));
+                        $sTx = trim((string)($s['status_text'] ?? ''));
+
+                        $links = array();
+                        foreach (social_networks() as $key => $net) {
+                            if (!empty($s[$key]) && preg_match('#^https?://#i', $s[$key])) $links[] = array($net[0], $s[$key], $key);
+                        }
+                    ?>
                     <article class="dir-card">
-                        <div class="dir-top">
+                        <div class="dir-banner<?php echo $cv ? ' has-img' : ''; ?>"<?php if ($cv) { ?> style="background-image:url('uploads/covers/<?php echo e($cv); ?>')"<?php } else { ?> data-g="<?php echo (int)$s['id'] % 6; ?>"<?php } ?>></div>
+                        <a href="messages?u=<?php echo e(urlencode($s['username'])); ?>" class="dir-msg" aria-label="Message <?php echo e($s['first_name']); ?>" title="Message <?php echo e($s['first_name']); ?>"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5c-5.25 0-9.5 3.7-9.5 8.4 0 2.5 1.2 4.7 3.2 6.2-.1 1.3-.6 2.6-1.6 3.7a.6.6 0 00.5 1c2-.1 3.6-.8 4.8-1.7.8.2 1.7.3 2.6.3 5.25 0 9.5-3.7 9.5-8.5S17.25 2.5 12 2.5z"/><circle cx="7.5" cy="11.25" r="1.35" fill="#111"/><circle cx="12" cy="11.25" r="1.35" fill="#111"/><circle cx="16.5" cy="11.25" r="1.35" fill="#111"/></svg></a>
+
+                        <div class="dir-body">
                             <div class="dir-avatar"><?php echo avatar_inner($s); ?></div>
+
+                            <?php if ($sEm !== '' || $sTx !== '') { ?>
+                                <div class="dir-bubble">
+                                    <i class="b1"></i><i class="b2"></i>
+                                    <div class="dir-pill<?php echo ($sTx === '') ? ' only-emoji' : ''; ?>">
+                                        <?php if ($sEm !== '') { ?><span class="em"><?php echo e($sEm); ?></span><?php } ?>
+                                        <?php if ($sTx !== '') { ?><span class="tx"><?php echo e($sTx); ?></span><?php } ?>
+                                    </div>
+                                </div>
+                            <?php } ?>
+
                             <div class="dir-id">
                                 <h3><a class="dir-link" href="profile?u=<?php echo e(urlencode($s['username'])); ?>"><?php echo e($name); ?></a></h3>
                                 <span class="dir-user">@<?php echo e($s['username']); ?></span>
                             </div>
-                        </div>
 
-                        <?php if ($line) { ?>
-                            <p class="dir-course"><?php echo e(implode(' · ', $line)); ?></p>
-                        <?php } else { ?>
-                            <p class="dir-course none">No course added</p>
-                        <?php } ?>
+                            <p class="dir-meta<?php echo $line ? '' : ' none'; ?>"<?php if ($line) { ?> title="<?php echo e(implode(' · ', $line)); ?>"<?php } ?>><?php echo $line ? e(implode(' · ', $line)) : 'No course yet'; ?></p>
 
-                        <?php if ($tags) { ?>
-                            <div class="dir-tags">
-                                <?php foreach ($tags as $t) { ?><span class="chip"><?php echo e($t); ?></span><?php } ?>
-                                <?php if ($more > 0) { ?><span class="dir-more">+<?php echo (int)$more; ?></span><?php } ?>
-                            </div>
-                        <?php } ?>
-
-                        <div class="dir-foot">
-                            <?php if ($shared > 0) { ?>
-                                <span class="dir-shared"><?php echo $shared; ?> shared club<?php echo $shared === 1 ? '' : 's'; ?></span>
-                            <?php } else { ?>
-                                <span class="dir-shared none">No shared clubs</span>
-                            <?php } ?>
-
-                            <div class="dir-actions">
-                                <a class="dir-btn" href="messages?u=<?php echo e(urlencode($s['username'])); ?>">Message</a>
-
-                                <?php if ($invitable) { ?>
-                                    <form method="POST" class="dir-invite-form">
-                                        <?php echo csrf_field(); ?>
-                                        <input type="hidden" name="action" value="invite">
-                                        <input type="hidden" name="user_id" value="<?php echo (int)$s['id']; ?>">
-                                        <input type="hidden" name="q" value="<?php echo e($q); ?>">
-                                        <input type="hidden" name="year" value="<?php echo e($year); ?>">
-                                        <input type="hidden" name="sort" value="<?php echo e($sort); ?>">
-                                        <input type="hidden" name="page" value="<?php echo (int)$page; ?>">
-
-                                        <?php if (count($invitable) === 1) { ?>
-                                            <button type="submit" name="club_id" value="<?php echo (int)$invitable[0]['id']; ?>" class="dir-btn" title="Invite to <?php echo e($invitable[0]['name']); ?>">Invite</button>
-                                        <?php } else { ?>
-                                            <details class="dir-invite">
-                                                <summary class="dir-btn">Invite</summary>
-                                                <div class="dir-menu">
-                                                    <span class="menu-label">Invite to which club?</span>
-                                                    <?php foreach ($invitable as $ic) { ?>
-                                                        <button type="submit" name="club_id" value="<?php echo (int)$ic['id']; ?>"><?php echo e($ic['name']); ?></button>
-                                                    <?php } ?>
-                                                </div>
-                                            </details>
-                                        <?php } ?>
-                                    </form>
+                            <div class="dir-social<?php echo $links ? '' : ' is-empty'; ?>">
+                                <?php foreach (array_slice($links, 0, 6) as $l) { ?>
+                                    <a href="<?php echo e($l[1]); ?>" target="_blank" rel="noopener noreferrer nofollow" aria-label="<?php echo e($l[0]); ?>" title="<?php echo e($l[0]); ?>"><?php echo social_icon($l[2]); ?></a>
                                 <?php } ?>
+                                <?php if (!$links) echo dir_empty('links', $s['first_name'], $s['id']); ?>
                             </div>
+
+                            <h4 class="dir-h">Interests</h4>
+                            <div class="chip-row dir-chips" data-fit data-extra="<?php echo (int)$extraTags; ?>">
+                                <?php if ($shownTags) { foreach ($shownTags as $t) { ?><span class="chip"><?php echo e(trim($t)); ?></span><?php } }
+                                      else { echo dir_empty('interests', $s['first_name'], $s['id']); } ?>
+                            </div>
+
                         </div>
                     </article>
                 <?php } ?>
@@ -342,12 +232,39 @@ function dir_name($r) {
 </main>
 
 <script>
-// close an open "Invite to club" menu when you click elsewhere
-document.addEventListener("click", function (e) {
-    document.querySelectorAll(".dir-invite[open]").forEach(function (d) {
-        if (!d.contains(e.target)) d.removeAttribute("open");
-    });
-});
+// Interests: show only the chips that fit in the card's two rows, then a "+N" chip for the rest.
+(function () {
+    function fit(box) {
+        var chips = Array.prototype.slice.call(box.querySelectorAll(".chip:not(.chip-more)"));
+        var old = box.querySelector(".chip-more");
+        if (old) old.remove();
+        if (!chips.length) return;
+
+        var extra = parseInt(box.getAttribute("data-extra"), 10) || 0;
+        chips.forEach(function (c) { c.hidden = false; });
+
+        function fits(el) { return el.offsetTop + el.offsetHeight <= box.clientHeight + 1; }
+        if (!extra && chips.every(fits)) return;
+
+        var more = document.createElement("span");
+        more.className = "chip chip-more";
+        box.appendChild(more);
+
+        // hide chips from the end until the last visible chip and the "+N" chip both sit inside the two rows
+        for (var n = chips.length; n >= 0; n--) {
+            chips.forEach(function (c, i) { c.hidden = i >= n; });
+            more.textContent = "+" + (chips.length - n + extra);
+            more.title = chips.slice(n).map(function (c) { return c.textContent; }).join(", ");
+            if (n === chips.length && !extra) continue;
+            if (fits(more) && (n === 0 || fits(chips[n - 1]))) return;
+        }
+    }
+    function run() { document.querySelectorAll("[data-fit]").forEach(fit); }
+    run();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(run);
+    var t; window.addEventListener("resize", function () { clearTimeout(t); t = setTimeout(run, 120); });
+})();
+
 </script>
 
 </body>
