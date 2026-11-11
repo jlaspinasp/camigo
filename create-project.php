@@ -13,7 +13,16 @@ foreach (event_postable_clubs($conn, $me['id']) as $c) {
     $clubChoices[(int)$c['id']] = $c['name'];
 }
 
+// project banner: an upload is optional (without one the project keeps its coloured cover)
+$bannerReady = projects_banner_ready($conn);
+$bannerCur   = '';
+$bannerTone  = 0;
+
 $message = "";
+// a file larger than the server's post limit arrives as an empty form
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+    $message = "That upload was too large for the server. Try a smaller image (up to 10 MB).";
+}
 $f = array('title' => '', 'tagline' => '', 'category' => '', 'stage' => 'idea', 'description' => '', 'skills' => '', 'link' => '', 'is_open' => 1, 'club_id' => 0);
 $fRoles = array();
 
@@ -50,12 +59,33 @@ if (isset($_POST['post'])) {
             } elseif ($running['ok'] && $running['rows'] && (int)$running['rows'][0]['n'] >= PROJECT_MAX_RUNNING) {
                 $error = "You're already running " . PROJECT_MAX_RUNNING . " projects. Mark one as launched, or delete one, before posting another.";
             } else {
-                $r = db_run($conn,
-                    "INSERT INTO projects (owner_id, club_id, title, tagline, description, category, stage, skills, link, is_open)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    "iisssssssi",
-                    array($me['id'], $clubId > 0 ? $clubId : null, $clean['title'], $clean['tagline'], $clean['description'],
-                          $clean['category'], $clean['stage'], $clean['skills'], $clean['link'], $clean['is_open']));
+                // the banner: saved only once everything else checks out, so a rejected form leaves no stray file
+                $bannerName = null;
+                if ($bannerReady) {
+                    $bannerName = project_banner_upload('banner', $error);
+                } elseif (!empty($_FILES['banner']['name'])) {
+                    $error = "Project banners need a one-time upgrade. Run projects-banner.sql in phpMyAdmin.";
+                }
+
+                $r = array('ok' => false, 'errno' => 0);
+                if ($error === "") {
+                    if ($bannerReady) {
+                        $r = db_run($conn,
+                            "INSERT INTO projects (owner_id, club_id, title, tagline, description, category, stage, skills, link, is_open, banner)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "iisssssssis",
+                            array($me['id'], $clubId > 0 ? $clubId : null, $clean['title'], $clean['tagline'], $clean['description'],
+                                  $clean['category'], $clean['stage'], $clean['skills'], $clean['link'], $clean['is_open'], $bannerName));
+                    } else {
+                        $r = db_run($conn,
+                            "INSERT INTO projects (owner_id, club_id, title, tagline, description, category, stage, skills, link, is_open)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "iisssssssi",
+                            array($me['id'], $clubId > 0 ? $clubId : null, $clean['title'], $clean['tagline'], $clean['description'],
+                                  $clean['category'], $clean['stage'], $clean['skills'], $clean['link'], $clean['is_open']));
+                    }
+                    if (!$r['ok']) project_banner_delete($bannerName);   // nothing was posted, so don't keep the image
+                }
 
                 if ($r['ok']) {
                     $pid = (int)mysqli_insert_id($conn);
@@ -79,8 +109,8 @@ if (isset($_POST['post'])) {
                     header("Location: project?id=" . $pid);
                     exit();
                 }
-                $error = ($r['errno'] == 1146 || $r['errno'] == 1054)
-                    ? "Projects aren't set up yet. Run projects.sql in phpMyAdmin."
+                if ($error === "") $error = ($r['errno'] == 1146 || $r['errno'] == 1054)
+                    ? "Projects aren't set up yet. Run projects.sql, then projects-banner.sql in phpMyAdmin."
                     : "Something went wrong. Please try again.";
             }
         }
@@ -119,7 +149,7 @@ if (isset($_POST['post'])) {
         <div class="msg error" style="margin-top:20px"><?php echo e($message); ?></div>
     <?php } ?>
 
-    <form method="POST" class="pj-form">
+    <form method="POST" enctype="multipart/form-data" class="pj-form">
         <?php echo csrf_field(); ?>
 
         <?php include("project-fields.php"); ?>

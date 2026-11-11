@@ -1,6 +1,7 @@
 <?php
 session_start();
 require("db.php");
+require("validate-lib.php");
 
 if (!isset($_SESSION['username'])) {
     header("Location: login");
@@ -39,14 +40,14 @@ if (isset($_POST['save'])) {
     }
 
     $d = DateTime::createFromFormat('Y-m-d', $birthday);
-    $validDate = $d && $d->format('Y-m-d') === $birthday && $birthday <= date('Y-m-d');
+    $validDate = birthday_ok($birthday);
 
-    if (!preg_match('/^[A-Za-z0-9._]{3,30}$/', $username)) {
+    if (!username_ok($username)) {
         $message = "Usernames need 3 to 30 letters, numbers, dots or underscores.";
     } elseif ($middle_initial !== "" && !preg_match('/^\p{L}$/u', $middle_initial)) {
         $message = "Middle initial must be a single letter.";
     } elseif (!$validDate) {
-        $message = "Please enter a valid birthday.";
+        $message = "You need to be at least " . MIN_AGE . " to join Camigo.";
     } else {
 
         $stmt = mysqli_prepare($conn, "UPDATE users SET username = ?, middle_initial = ?, birthday = ? WHERE id = ?");
@@ -123,7 +124,7 @@ function val($post, $fallback) {
 
                 <div class="field">
                     <label for="birthday">Birthday</label>
-                    <input type="date" name="birthday" id="birthday" max="<?php echo date('Y-m-d'); ?>" required
+                    <input type="date" name="birthday" id="birthday" max="<?php echo min_birthday_date(); ?>" required
                            value="<?php echo val('birthday', $user['birthday']); ?>">
                 </div>
 

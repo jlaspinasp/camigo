@@ -51,9 +51,6 @@ $res = events_query($conn, $me['id'], $where, $types, $params, $order, $LIMIT);
 $setupMissing = !$res['ok'];
 $events = $res['rows'];
 
-// can this person post events?
-$owned = $setupMissing ? array() : event_postable_clubs($conn, $me['id']);
-
 $flash = flash_get();
 $message = $flash ? $flash[0] : "";
 $message_class = $flash ? $flash[1] : "";
@@ -75,7 +72,7 @@ $emptyTitle = array(
     'past'     => "No past events",
 );
 $emptyText = array(
-    'upcoming' => "When a club posts an event, it shows up here.",
+    'upcoming' => "When someone posts an event, it shows up here.",
     'mine'     => "Join a club, or check back when your clubs plan something.",
     'going'    => "Find something you like and press “I'm going”.",
     'past'     => "Events that already happened will be listed here.",
@@ -104,11 +101,10 @@ $emptyText = array(
                 <h1 class="page-title">Events</h1>
                 <p class="page-sub">See what's happening around campus and let the organizers know you're coming.</p>
             </div>
-            <?php if ($owned) { ?>
-                <div class="top-actions">
-                    <a href="create-event" class="btn-sm btn-dark">Post an event</a>
-                </div>
-            <?php } ?>
+            <?php // always shown: unverified students are sent to the verification page by create-event ?>
+            <div class="top-actions">
+                <a href="create-event" class="btn-sm btn-dark">Post an event</a>
+            </div>
         </div>
 
         <form method="GET" action="events" class="dir-search" role="search">

@@ -498,7 +498,17 @@ function club_categories() {
 
 // ================= NOTIFICATIONS =================
 
+// What shows in place of a person whose account was deleted. Their posts, updates and messages stay, without a name.
+const DELETED_USER = 'Deleted user';
+
+// True for a row that was LEFT JOINed to users and found nobody (the author's account is gone).
+// Only meaningful for rows that select users.username; a row without that column is never "gone".
+function user_gone($row) {
+    return is_array($row) && array_key_exists('username', $row) && $row['username'] === null;
+}
+
 function full_name($row) {
+    if (user_gone($row)) return DELETED_USER;
     return trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
 }
 
@@ -510,9 +520,10 @@ function str_cut($s, $max) {
 // Sends one notification. Never breaks the page if the table doesn't exist yet.
 function notify($conn, $userId, $type, $message, $link = null) {
     if (!$userId) return false;
+    // selecting from users means nothing is written for an account that was deleted
     $r = db_run($conn,
-        "INSERT INTO notifications (user_id, type, message, link) VALUES (?, ?, ?, ?)",
-        "isss", array((int)$userId, $type, str_cut($message, 255), $link));
+        "INSERT INTO notifications (user_id, type, message, link) SELECT id, ?, ?, ? FROM users WHERE id = ?",
+        "sssi", array($type, str_cut($message, 255), $link, (int)$userId));
     return $r['ok'];
 }
 
@@ -768,6 +779,52 @@ function delete_club_image($name, $dir = null) {
     if (club_image_ok($name)) {
         @unlink(($dir === null ? club_image_dir() : $dir) . '/' . $name);
     }
+}
+
+// Deletes a club and everything that hangs off it. $cb is the full clubs row.
+// $by says who did it ('an admin' / 'its owner'); $exceptUserId is the person doing it (no need to tell them).
+// Returns true when the club row was removed.
+function club_delete_everything($conn, $cb, $by = 'an admin', $note = '', $exceptUserId = 0) {
+    $id = (int)$cb['id'];
+
+    // everyone who should hear about it, collected before the rows go
+    $people = array();
+    if (!empty($cb['created_by'])) $people[(int)$cb['created_by']] = true;
+    foreach (db_run($conn, "SELECT user_id FROM club_members WHERE club_id = ? AND status = 'active'", "i", array($id))['rows'] as $m) {
+        $people[(int)$m['user_id']] = true;
+    }
+    unset($people[(int)$exceptUserId]);
+
+    // banner files of this club's events (read before the rows go; the column only exists after events-banner.sql)
+    $evBanners = array();
+    $bc = @mysqli_query($conn, "SHOW COLUMNS FROM events LIKE 'banner'");
+    if ($bc && mysqli_num_rows($bc) > 0) {
+        foreach (db_run($conn, "SELECT banner FROM events WHERE club_id = ? AND banner IS NOT NULL", "i", array($id))['rows'] as $b) $evBanners[] = $b['banner'];
+    }
+
+    // children first, then the club itself
+    $evIn = "(SELECT id FROM events WHERE club_id = ?)";
+    db_run($conn, "DELETE FROM event_reminders WHERE event_id IN $evIn", "i", array($id));
+    db_run($conn, "DELETE FROM event_rsvps WHERE event_id IN $evIn", "i", array($id));
+    db_run($conn, "DELETE FROM events WHERE club_id = ?", "i", array($id));
+    db_run($conn, "DELETE FROM club_posts WHERE club_id = ?", "i", array($id));
+    db_run($conn, "DELETE FROM club_members WHERE club_id = ?", "i", array($id));
+    db_run($conn, "UPDATE projects SET club_id = NULL WHERE club_id = ?", "i", array($id));   // projects stay, just no longer tied to a club
+    db_run($conn, "DELETE FROM notifications WHERE link = ?", "s", array('club?id=' . $id));  // old links would lead nowhere
+    $r = db_run($conn, "DELETE FROM clubs WHERE id = ?", "i", array($id));
+
+    if (!($r['ok'] && $r['affected'] > 0)) return false;
+
+    delete_club_image($cb['logo'] ?? null);
+    delete_club_image($cb['cover'] ?? null);
+    foreach ($evBanners as $b) delete_club_image($b, __DIR__ . '/uploads/events');
+    if (($cb['status'] ?? '') === 'approved') {
+        foreach (array_keys($people) as $uid) {
+            notify($conn, $uid, 'club_update',
+                'The club "' . $cb['name'] . '" was deleted by ' . $by . '.' . ($note !== '' ? ' Reason: ' . $note : ''));
+        }
+    }
+    return true;
 }
 
 // The square club mark: the logo if there is one, otherwise the first letter on a colour tile.

@@ -11,10 +11,12 @@ function feed_kinds() {
 
 // Newest announcements and events from the clubs this person is an active member of.
 // Members-only items are included, because the person is in those clubs.
-function club_feed($conn, $userId, $limit) {
+function club_feed($conn, $userId, $limit, $offset = 0, $type = 'all') {
     $items = array();
+    $need  = (int)$limit + (int)$offset;   // each source is fetched far enough to fill this page after merging
 
     // announcements (works before and after club-announcements.sql)
+    if ($type !== 'event') {
     $cc = mysqli_query($conn, "SHOW COLUMNS FROM club_posts LIKE 'kind'");
     $ready = ($cc && mysqli_num_rows($cc) > 0);
     $cols = $ready ? ", p.title, p.kind, p.visibility" : "";
@@ -25,19 +27,22 @@ function club_feed($conn, $userId, $limit) {
          FROM club_posts p
          JOIN clubs c ON c.id = p.club_id AND c.status = 'approved'
          JOIN club_members m ON m.club_id = p.club_id AND m.user_id = ? AND m.status = 'active'
-         JOIN users u ON u.id = p.user_id
-         ORDER BY p.created_at DESC LIMIT " . (int)$limit,
+         LEFT JOIN users u ON u.id = p.user_id
+         ORDER BY p.created_at DESC LIMIT " . $need,
         "i", array((int)$userId));
     foreach ($pr['rows'] as $r) { $r['type'] = 'post'; $items[] = $r; }
+    }
 
     // events that are still ahead, newest posted first
+    if ($type !== 'post') {
     $er = events_query($conn, $userId,
         EVENT_END_SQL . " >= ? AND e.club_id IN (SELECT club_id FROM club_members WHERE user_id = ? AND status = 'active')",
-        "si", array(event_now_sql(), (int)$userId), "e.created_at DESC", $limit);
+        "si", array(event_now_sql(), (int)$userId), "e.created_at DESC", $need);
     foreach ($er['rows'] as $r) { $r['type'] = 'event'; $r['ts'] = (int)($r['created_ts'] ?? 0); $items[] = $r; }
+    }
 
     usort($items, function ($a, $b) { return (int)$b['ts'] <=> (int)$a['ts']; });
-    return array_slice($items, 0, $limit);
+    return array_slice($items, (int)$offset, (int)$limit);
 }
 
 // one card in the feed
@@ -60,25 +65,31 @@ function render_feed_item($it) {
         $link    = 'club?id=' . $clubId . '#updates';
         ?>
         <article class="hf" data-type="post">
+            <a class="hf-open" href="<?php echo e($link); ?>" aria-label="Open this announcement in <?php echo e($it['club_name']); ?>"></a>
             <div class="hf-head">
                 <a class="hf-club" href="club?id=<?php echo $clubId; ?>">
                     <?php echo club_tile_html(array('id' => $clubId, 'name' => $it['club_name'], 'logo' => $it['club_logo'] ?? null), 'sm', 'span'); ?>
-                    <span><strong><?php echo e($it['club_name']); ?></strong><em>Announcement &middot; <?php echo e($when); ?></em></span>
+                    <span><strong><?php echo e($it['club_name']); ?></strong><em>
+                        <span class="hf-kind k-<?php echo e($kind); ?>"><?php echo event_icon($kinds[$kind][1]); ?><?php echo e($kinds[$kind][0]); ?></span>
+                        <span class="hf-dot">&middot;</span><?php echo e($when); ?>
+                        <?php if ($members) { ?><span class="hf-dot">&middot;</span><span class="hf-note"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>
+                    </em></span>
                 </a>
-                <span class="hf-tags">
-                    <span class="ann-kind k-<?php echo e($kind); ?>"><?php echo event_icon($kinds[$kind][1]); ?><?php echo e($kinds[$kind][0]); ?></span>
-                    <?php if ($members) { ?><span class="badge members"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>
-                </span>
             </div>
             <?php if ($title !== '') { ?><h3 class="hf-title"><a href="<?php echo e($link); ?>"><?php echo e($title); ?></a></h3><?php } ?>
             <p class="hf-text" data-hf-text><?php echo e($text); ?></p>
-            <button type="button" class="hf-expand" hidden>See more</button>
             <div class="hf-foot">
+                <?php if (user_gone($it)) { ?>
                 <span class="hf-by">
                     <span class="faces"><span class="face"><?php echo avatar_inner($it); ?></span></span>
                     <span>By <?php echo e(full_name($it)); ?></span>
                 </span>
-                <a class="hf-link" href="<?php echo e($link); ?>">Read in club &rarr;</a>
+                <?php } else { ?>
+                <span class="hf-by">
+                    <a class="hf-author" href="profile?u=<?php echo e(urlencode($it['username'])); ?>"><span class="faces"><span class="face"><?php echo avatar_inner($it); ?></span></span></a>
+                    <span>By <a class="hf-author" href="profile?u=<?php echo e(urlencode($it['username'])); ?>"><?php echo e(full_name($it)); ?></a></span>
+                </span>
+                <?php } ?>
             </div>
         </article>
         <?php
@@ -96,32 +107,36 @@ function render_feed_item($it) {
     $members = (($it['visibility'] ?? 'public') === 'members');
     $soon    = event_when_label($it);
     $faces   = $it['faces'] ?? array();
+    $desc    = str_replace(array("\r\n", "\r"), "\n", trim((string)($it['description'] ?? '')));
+    $desc    = preg_replace('/\s*\n\s*/u', ' ', $desc);
+    $desc    = str_cut($desc, 400);
     ?>
     <article class="hf" data-type="event">
+        <a class="hf-open" href="event?id=<?php echo $id; ?>" aria-label="Open event: <?php echo e($it['title']); ?>"></a>
         <div class="hf-head">
             <a class="hf-club" href="club?id=<?php echo $clubId; ?>">
                 <?php echo club_tile_html(array('id' => $clubId, 'name' => $it['club_name'], 'logo' => $it['club_logo'] ?? null), 'sm', 'span'); ?>
-                <span><strong><?php echo e($it['club_name']); ?></strong><em>New event &middot; <?php echo e($when); ?></em></span>
+                <span><strong><?php echo e($it['club_name']); ?></strong><em>
+                    New event <span class="hf-dot">&middot;</span><?php echo e($when); ?>
+                    <?php if ($members) { ?><span class="hf-dot">&middot;</span><span class="hf-note"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>
+                    <?php if ($state === 'live') { ?><span class="hf-dot">&middot;</span><span class="hf-note hf-live">Live now</span>
+                    <?php } elseif ($soon !== '') { ?><span class="hf-dot">&middot;</span><span class="hf-note"><?php echo e($soon); ?></span><?php } ?>
+                </em></span>
             </a>
-            <span class="hf-tags">
-                <?php if ($members) { ?><span class="badge members"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>
-                <?php if ($state === 'live') { ?><span class="badge live">Live now</span>
-                <?php } elseif ($soon !== '') { ?><span class="badge soon"><?php echo e($soon); ?></span><?php } ?>
-            </span>
         </div>
 
         <div class="hf-event">
-            <a class="ev-date t<?php echo $id % 3; ?>" href="event?id=<?php echo $id; ?>" aria-label="<?php echo e($s->format('F j')); ?>">
+            <a class="date-badge" href="event?id=<?php echo $id; ?>" aria-label="<?php echo e($s->format('l, F j')); ?>">
                 <small><?php echo e($s->format('M')); ?></small>
                 <b><?php echo e($s->format('j')); ?></b>
-                <span><?php echo e($s->format('D')); ?></span>
             </a>
             <div class="hf-ev-main">
                 <h3 class="hf-title"><a href="event?id=<?php echo $id; ?>"><?php echo e($it['title']); ?></a></h3>
                 <div class="ev-meta">
-                    <span><?php echo event_icon('clock'); ?><?php echo e(event_time_range($it)); ?></span>
+                    <span><?php echo event_icon('clock'); ?><?php echo e($s->format('D') . ' · ' . event_time_range($it)); ?></span>
                     <span><?php echo event_icon('pin'); ?><?php echo e($it['location']); ?></span>
                 </div>
+                <?php if ($desc !== '') { ?><p class="hf-text hf-ev-desc"><?php echo e($desc); ?></p><?php } ?>
             </div>
         </div>
 
@@ -132,18 +147,6 @@ function render_feed_item($it) {
                 <?php } ?>
                 <span><?php echo $going === 0 ? 'Be the first to join' : $going . ($cap > 0 ? ' / ' . $cap : '') . ' going'; ?></span>
             </div>
-            <form method="POST" action="event" class="ev-rsvp-form">
-                <?php echo csrf_field(); ?>
-                <input type="hidden" name="event_id" value="<?php echo $id; ?>">
-                <input type="hidden" name="back" value="dashboard">
-                <?php if ($meGoing) { ?>
-                    <button type="submit" name="action" value="unrsvp" class="btn-sm going" title="Click to cancel your RSVP"><?php echo event_icon('check'); ?>Going</button>
-                <?php } elseif ($full) { ?>
-                    <button type="button" class="btn-sm btn-ghost" disabled>Full</button>
-                <?php } else { ?>
-                    <button type="submit" name="action" value="rsvp" class="btn-sm btn-dark">I’m going</button>
-                <?php } ?>
-            </form>
         </div>
     </article>
     <?php
@@ -158,7 +161,7 @@ function rail_week($conn, $userId) {
     $r = events_query($conn, $userId,
         "e.start_at < ? AND " . EVENT_END_SQL . " >= ? AND (e.club_id IN (SELECT club_id FROM club_members WHERE user_id = ? AND status = 'active') OR e.id IN (SELECT event_id FROM event_rsvps WHERE user_id = ?))",
         "ssii", array($end->format('Y-m-d H:i:s'), event_now_sql(), (int)$userId, (int)$userId),
-        "e.start_at ASC", 8);
+        "e.start_at ASC", 50);
 
     $today = event_now()->format('Y-m-d');
     $tom = event_now(); $tom->modify('+1 day'); $tomorrow = $tom->format('Y-m-d');
@@ -207,7 +210,7 @@ function rail_discover($conn, $userId, $myCategories) {
                 (SELECT COUNT(*) FROM club_members x WHERE x.club_id = c.id AND x.status = 'active') AS members
          FROM clubs c
          WHERE c.status = 'approved'" . (club_identity_ready($conn) ? " AND c.invite_only = 0" : "") . " AND c.id NOT IN (SELECT club_id FROM club_members WHERE user_id = ?)
-         ORDER BY " . $order . ", c.id DESC LIMIT 3",
+         ORDER BY " . $order . ", c.id DESC LIMIT 50",
         $types, $params);
     return $r['rows'];
 }

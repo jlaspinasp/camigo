@@ -7,7 +7,7 @@ require("events-lib.php");
 $me  = require_user_row($conn);
 $eid = (int)($_GET['id'] ?? $_POST['event_id'] ?? 0);
 
-// ================= ACTIONS (RSVP / cancel) =================
+// ================= ACTIONS (RSVP) =================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = $_POST['action'] ?? '';
@@ -20,21 +20,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $r = event_rsvp($conn, $eid, $me['id'], $action === 'rsvp');
         flash_set($r[0], $r[1]);
 
-    } elseif ($action === 'cancel') {
-        $er = db_run($conn, "SELECT id, club_id, title, status, created_by FROM events WHERE id = ? LIMIT 1", "i", array($eid));
-        $row = $er['rows'] ? $er['rows'][0] : null;
-
-        if (!$row || !event_can_cancel($conn, $row, $me['id'])) {
-            flash_set("Only the club owner, or the officer who posted this event, can cancel it.", "error");
-        } elseif ($row['status'] !== 'active') {
-            flash_set("This event is already cancelled.", "error");
-        } else {
-            // tell the people who were going first, while the list still exists
-            event_notify_going($conn, $eid, $me['id'], 'event_cancelled', $row['title'] . ' was cancelled.', 'events');
-            $r = db_run($conn, "UPDATE events SET status = 'cancelled' WHERE id = ?", "i", array($eid));
-            flash_set($r['ok'] ? "The event was cancelled and the people who were going have been told." : "Something went wrong. Please try again.", $r['ok'] ? "success" : "error");
-            $back = $r['ok'] ? 'events' : $back;
-        }
     }
 
     header("Location: " . $back);
@@ -44,9 +29,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ================= THE EVENT =================
 $er = db_run($conn,
     "SELECT e.id, e.club_id, e.created_by, e.title, e.description, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility,
-            c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo" : "") . ", c.category AS club_category
-     FROM events e JOIN clubs c ON c.id = e.club_id AND c.status = 'approved'
-     WHERE e.id = ? LIMIT 1", "i", array($eid));
+            hu.username AS host_username, hu.first_name AS host_first, hu.last_name AS host_last, hu.photo AS host_photo,
+            c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo, c.cover AS club_cover" : "") . (events_banner_ready($conn) ? ", e.banner" : "") . ", c.category AS club_category
+     FROM events e LEFT JOIN clubs c ON c.id = e.club_id LEFT JOIN users hu ON hu.id = e.created_by
+     WHERE e.id = ? AND (e.club_id IS NULL OR c.status = 'approved') LIMIT 1", "i", array($eid));
 $setupMissing = !$er['ok'];
 $ev = $er['rows'] ? $er['rows'][0] : null;
 
@@ -54,8 +40,10 @@ $myRole   = $ev ? club_role($conn, $ev['club_id'], $me['id']) : null;
 $isOwner   = ($myRole === 'owner');
 $isStaff   = ($myRole === 'owner' || $myRole === 'officer');
 $canCancel = $ev ? event_can_cancel($conn, $ev, $me['id']) : false;
+$noClub    = $ev && empty($ev['club_id']);
+$isHosting = $isStaff || ($noClub && (int)$ev['created_by'] === (int)$me['id']);
 $isMember  = $ev ? event_is_club_member($conn, $ev['club_id'], $me['id']) : false;
-$exclusive = $ev && ($ev['visibility'] === 'members');
+$exclusive = $ev && !$noClub && ($ev['visibility'] === 'members');
 $locked    = $exclusive && !$isMember;   // members-only and the viewer is not in the club
 $cancelled = $ev && $ev['status'] !== 'active';
 $state     = $ev ? event_state($ev) : 'over';
@@ -86,7 +74,7 @@ if ($ev && !$locked && !$cancelled && isset($_GET['ics'])) {
         'DTEND:' . $f->format('Ymd\THis\Z'),
         'SUMMARY:' . $esc($ev['title']),
         'LOCATION:' . $esc($ev['location']),
-        'DESCRIPTION:' . $esc($ev['club_name'] . ' - ' . $ev['description']),
+        'DESCRIPTION:' . $esc((!empty($ev['club_name']) ? $ev['club_name'] . ' - ' : '') . $ev['description']),
         'END:VEVENT', 'END:VCALENDAR',
     );
     header('Content-Type: text/calendar; charset=utf-8');
@@ -176,7 +164,7 @@ $selfBack = 'event?id=' . $eid;
 
         <section class="panel center">
             <h2>Event not found</h2>
-            <p class="empty">This event doesn't exist, or its club isn't available. <a href="events">Browse events</a></p>
+            <p class="empty">This event doesn't exist, or it isn't available. <a href="events">Browse events</a></p>
         </section>
 
     <?php } elseif ($locked) { ?>
@@ -197,19 +185,24 @@ $selfBack = 'event?id=' . $eid;
     <?php } else {
         $s = event_dt($ev['start_at']);
         $when = event_when_label($ev);
+        $heroImg = event_image_url($ev);   // own banner, else the club's banner, else '' (a color is used)
     ?>
 
         <p class="crumb"><a href="events">&larr; All events</a></p>
 
-        <section class="ev-hero<?php echo $exclusive ? ' is-exclusive' : ''; ?>">
+        <section class="ev-hero<?php echo $exclusive ? ' is-exclusive' : ''; ?><?php echo $heroImg !== '' ? ' has-banner' : ''; ?>" data-g="<?php echo event_gradient($ev); ?>"<?php if ($heroImg !== '') { ?> style="--ev-banner:url('<?php echo e($heroImg); ?>')"<?php } ?>>
             <div class="ev-badges">
-                <a class="chip" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo e($ev['club_name']); ?></a>
+                <?php if ($noClub) { ?>
+                    <?php $ht = event_host_tags($ev, 'chip'); echo $ht[0]; ?>Hosted by <?php echo e(event_host_name($ev)); ?><?php echo $ht[1]; ?>
+                <?php } else { ?>
+                    <a class="chip" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo e($ev['club_name']); ?></a>
+                <?php } ?>
                 <?php if ($exclusive) { ?><span class="badge members"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>
                 <?php if ($cancelled) { ?><span class="badge rejected">Cancelled</span>
                 <?php } elseif ($state === 'live') { ?><span class="badge live">Live now</span>
                 <?php } elseif ($isOver) { ?><span class="badge ended">Ended</span>
                 <?php } elseif ($when !== '') { ?><span class="badge soon"><?php echo e($when); ?></span><?php } ?>
-                <?php if ($isStaff) { ?><span class="badge approved">You're hosting</span><?php } ?>
+                <?php if ($isHosting) { ?><span class="badge approved">You're hosting</span><?php } ?>
             </div>
 
             <h1><?php echo e($ev['title']); ?></h1>
@@ -220,15 +213,10 @@ $selfBack = 'event?id=' . $eid;
                 <div class="fact"><span class="fi"><?php echo event_icon('pin'); ?></span><div><small>Where</small><strong><?php echo e($ev['location']); ?></strong></div></div>
             </div>
 
-            <?php if ($isStaff && !$cancelled && !$isOver) { ?>
+            <?php if ($isHosting || $canCancel) { ?>
                 <div class="ev-owner">
-                    <a href="edit-event?id=<?php echo $eid; ?>" class="btn-sm btn-light">Edit event</a>
-                    <?php if ($canCancel) { ?>
-                    <form method="POST" onsubmit="return confirm('Cancel this event? Everyone who is going will be told.');">
-                        <?php echo csrf_field(); ?>
-                        <input type="hidden" name="event_id" value="<?php echo $eid; ?>">
-                        <button type="submit" name="action" value="cancel" class="btn-sm btn-light danger">Cancel event</button>
-                    </form>
+                    <?php if ($isHosting) { ?>
+                        <a href="edit-event?id=<?php echo $eid; ?>" class="btn-sm btn-light">Edit event</a>
                     <?php } ?>
                 </div>
             <?php } ?>
@@ -333,10 +321,17 @@ $selfBack = 'event?id=' . $eid;
 
                 <section class="panel ev-host">
                     <small>Hosted by</small>
+                    <?php if ($noClub) { ?>
+<?php $ht = event_host_tags($ev, 'ev-host-row'); echo $ht[0]; ?>
+                            <span class="p-avatar tiny"><?php echo avatar_inner(array('photo' => $ev['host_photo'] ?? null, 'first_name' => $ev['host_first'] ?? '?')); ?></span>
+                            <span><strong><?php echo e(event_host_name($ev)); ?></strong><em>Student host</em></span>
+                        <?php echo $ht[1]; ?>
+                    <?php } else { ?>
                     <a href="club?id=<?php echo (int)$ev['club_id']; ?>" class="ev-host-row">
                         <?php echo club_tile_html(array('id' => $ev['club_id'], 'name' => $ev['club_name'], 'logo' => $ev['club_logo'] ?? null), '', 'span'); ?>
                         <span><strong><?php echo e($ev['club_name']); ?></strong><em><?php echo e($ev['club_category']); ?></em></span>
                     </a>
+                    <?php } ?>
                 </section>
             </aside>
         </div>

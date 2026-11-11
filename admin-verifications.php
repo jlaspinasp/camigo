@@ -42,12 +42,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $ready) {
                     flash_set("That ID number is already verified on another account. Reject this request, or remove the other verification first.", "error");
                 } else {
                     $r = db_run($conn,
-                        "UPDATE verifications SET status = 'approved', id_number = NULL, proof = NULL, review_note = NULL, reviewed_by = ?, reviewed_at = NOW()
+                        "UPDATE verifications SET status = 'approved', id_number = NULL, proof = NULL, proof2 = NULL, review_note = NULL, reviewed_by = ?, reviewed_at = NOW()
                          WHERE id = ? AND status = 'pending'",
                         "ii", array($me['id'], $id));
                     if ($r['ok'] && $r['affected'] > 0) {
                         db_run($conn, "UPDATE users SET is_verified = 1, verified_at = NOW() WHERE id = ?", "i", array($v['user_id']));
                         delete_proof($v['proof']);
+                        delete_proof($v['proof2'] ?? '');
                         notify($conn, $v['user_id'], 'verify_approved',
                             "You're verified. You can now create clubs, events and projects.", 'verify-account');
                         flash_set("Account verified.", "success");
@@ -60,11 +61,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $ready) {
         } elseif ($action === 'reject') {
 
             $r = db_run($conn,
-                "UPDATE verifications SET status = 'rejected', id_number = NULL, proof = NULL, review_note = ?, reviewed_by = ?, reviewed_at = NOW()
+                "UPDATE verifications SET status = 'rejected', id_number = NULL, proof = NULL, proof2 = NULL, review_note = ?, reviewed_by = ?, reviewed_at = NOW()
                  WHERE id = ? AND status = 'pending'",
                 "sii", array($note, $me['id'], $id));
             if ($r['ok'] && $r['affected'] > 0) {
                 delete_proof($v['proof']);
+                        delete_proof($v['proof2'] ?? '');
                 notify($conn, $v['user_id'], 'verify_rejected',
                     "Your verification request wasn't approved." . ($note !== '' ? ' Reason: ' . $note : '') . ' You can send a new one after ' . VERIFY_WAIT_HOURS . ' hours.',
                     'verify-account');
@@ -123,7 +125,7 @@ if ($ready) {
     if ($q !== '') $found = admin_verified_search($conn, $q, ADMIN_PEEK, 0);
 }
 
-$proofLabels = array('id' => 'School ID (front)', 'enrollment' => 'Enrollment proof');
+$proofLabels = array('id' => 'School ID (front)', 'enrollment' => 'Study load', 'both' => 'School ID + Study load');
 $adminActive = 'verifications';
 ?>
 <!DOCTYPE html>
@@ -181,14 +183,17 @@ $adminActive = 'verifications';
                     if (!empty($v['year_level'])) $courseLine[] = $v['year_level'];
                 ?>
                     <article class="va-item">
-                        <?php if (proof_ok($v['proof'] ?? '')) { ?>
-                            <a class="va-thumb" href="verification-proof?id=<?php echo (int)$v['id']; ?>" target="_blank" rel="noopener">
-                                <img src="verification-proof?id=<?php echo (int)$v['id']; ?>" alt="Proof sent by <?php echo e($typedName); ?>">
-                                <span>Open full size</span>
-                            </a>
-                        <?php } else { ?>
-                            <div class="va-gone">The photo file is missing. Reject this request so the student can send it again.</div>
-                        <?php } ?>
+                        <div class="va-thumbs">
+                            <?php foreach (array(1 => array('proof', 'School ID'), 2 => array('proof2', 'Study load')) as $n => $pp) {
+                                if (proof_ok($v[$pp[0]] ?? '')) { ?>
+                                <a class="va-thumb" href="verification-proof?id=<?php echo (int)$v['id']; ?>&amp;n=<?php echo $n; ?>" target="_blank" rel="noopener">
+                                    <img src="verification-proof?id=<?php echo (int)$v['id']; ?>&amp;n=<?php echo $n; ?>" alt="<?php echo e($pp[1]); ?> sent by <?php echo e($typedName); ?>">
+                                    <span><?php echo e($pp[1]); ?> &middot; open full size</span>
+                                </a>
+                            <?php } else { ?>
+                                <div class="va-gone"><?php echo e($pp[1]); ?> photo is missing. Reject this request so the student can send it again.</div>
+                            <?php } } ?>
+                        </div>
 
                         <div class="va-body">
                             <div class="va-head">

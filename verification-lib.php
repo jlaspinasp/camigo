@@ -23,6 +23,16 @@ function verify_ready($conn) {
     return $ready;
 }
 
+// Has verification-two-proofs.sql been run? (adds the second photo column)
+function verify_two_ready($conn) {
+    static $ok = null;
+    if ($ok === null) {
+        $a = @mysqli_query($conn, "SHOW COLUMNS FROM verifications LIKE 'proof2'");
+        $ok = ($a && mysqli_num_rows($a) > 0);
+    }
+    return $ok;
+}
+
 // Admins count as verified from the start.
 function user_is_verified($row) {
     return (($row['role'] ?? 'user') === 'admin') || !empty($row['is_verified']);

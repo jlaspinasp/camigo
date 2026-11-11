@@ -78,6 +78,48 @@ function project_tone($id) {
     return (int)$id % 3;
 }
 
+// ---------- banners ----------
+
+// Has projects-banner.sql been run? (projects.banner holds the file name of an uploaded project banner)
+function projects_banner_ready($conn) {
+    static $ok = null;
+    if ($ok === null) {
+        $a = @mysqli_query($conn, "SHOW COLUMNS FROM projects LIKE 'banner'");
+        $ok = ($a && mysqli_num_rows($a) > 0);
+    }
+    return $ok;
+}
+
+function project_banner_dir() {
+    return __DIR__ . '/uploads/projects';
+}
+
+// Reads the uploaded banner field. Returns the saved file name, or null (sets $error only if something went wrong;
+// no file chosen is not an error). Same JPG/PNG/WebP re-draw as club covers (10:3 crop).
+function project_banner_upload($field, &$error) {
+    $up = $_FILES[$field] ?? null;
+    if (!$up || ($up['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+    if ($up['error'] !== UPLOAD_ERR_OK) { $error = "That image couldn't be uploaded. Please try a smaller file."; return null; }
+    if ($up['size'] > 10 * 1024 * 1024) { $error = "Images can be up to 10 MB."; return null; }
+    return save_club_image($up['tmp_name'], 'cover', $error, project_banner_dir());
+}
+
+function project_banner_delete($name) {
+    delete_club_image($name, project_banner_dir());
+}
+
+// The file name of a project's banner (read it before the project row is deleted), or null.
+function project_banner_of($conn, $projectId) {
+    if (!projects_banner_ready($conn)) return null;
+    $r = db_run($conn, "SELECT banner FROM projects WHERE id = ? LIMIT 1", "i", array((int)$projectId));
+    return ($r['rows'] && !empty($r['rows'][0]['banner'])) ? $r['rows'][0]['banner'] : null;
+}
+
+// Web path of the uploaded banner, or '' (then the project keeps its coloured cover).
+function project_banner_url($p) {
+    return (!empty($p['banner']) && club_image_ok($p['banner'])) ? 'uploads/projects/' . $p['banner'] : '';
+}
+
 function pj_lower($s) {
     return function_exists('mb_strtolower') ? mb_strtolower((string)$s, 'UTF-8') : strtolower((string)$s);
 }
@@ -117,6 +159,7 @@ function project_status($p, $roles) {
 function project_get($conn, $projectId) {
     $r = db_run($conn,
         "SELECT p.id, p.owner_id, p.club_id, p.title, p.tagline, p.description, p.category, p.stage, p.skills, p.link, p.is_open,
+                " . (projects_banner_ready($conn) ? "p.banner," : "") . "
                 UNIX_TIMESTAMP(p.created_at) AS created_ts, UNIX_TIMESTAMP(p.updated_at) AS updated_ts,
                 u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility,
                 c.name AS club_name
@@ -133,6 +176,7 @@ function project_get($conn, $projectId) {
 // Every row gets: roles (with filled), faces (a few team members), team_n, my_role, my_status.
 function project_query($conn, $meId, $where, $types, $params, $order, $limit) {
     $sql = "SELECT p.id, p.owner_id, p.club_id, p.title, p.tagline, p.category, p.stage, p.skills, p.is_open,
+                   " . (projects_banner_ready($conn) ? "p.banner," : "") . "
                    UNIX_TIMESTAMP(p.created_at) AS created_ts,
                    u.username, u.first_name, u.last_name, u.photo, u.profile_visibility,
                    c.name AS club_name,
@@ -315,8 +359,9 @@ function render_project_card($p, $interests = array()) {
     $team   = (int)$p['team_n'];
     $showRoles = array_slice($roles, 0, 3);
     ?>
+    <?php $bnUrl = project_banner_url($p); ?>
     <article class="pj-card">
-        <div class="pj-cover t<?php echo $tone; ?>">
+        <div class="pj-cover t<?php echo $tone; ?><?php echo $bnUrl !== '' ? ' has-banner' : ''; ?>"<?php if ($bnUrl !== '') { ?> style="--pj-banner:url('<?php echo e($bnUrl); ?>')"<?php } ?>>
             <span class="pj-cover-ic"><?php echo project_category_icon($p['category']); ?></span>
             <div class="pj-cover-top">
                 <?php echo project_stage_badge($p['stage']); ?>

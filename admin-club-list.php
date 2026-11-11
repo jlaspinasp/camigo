@@ -23,33 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$cb) {
             flash_set("That club no longer exists.", "error");
         } else {
-            // everyone who should hear about it, collected before the rows go
-            $people = array();
-            if (!empty($cb['created_by'])) $people[(int)$cb['created_by']] = true;
-            foreach (db_run($conn, "SELECT user_id FROM club_members WHERE club_id = ? AND status = 'active'", "i", array($id))['rows'] as $m) {
-                $people[(int)$m['user_id']] = true;
-            }
-
-            // children first, then the club itself
-            $evIn = "(SELECT id FROM events WHERE club_id = ?)";
-            db_run($conn, "DELETE FROM event_reminders WHERE event_id IN $evIn", "i", array($id));
-            db_run($conn, "DELETE FROM event_rsvps WHERE event_id IN $evIn", "i", array($id));
-            db_run($conn, "DELETE FROM events WHERE club_id = ?", "i", array($id));
-            db_run($conn, "DELETE FROM club_posts WHERE club_id = ?", "i", array($id));
-            db_run($conn, "DELETE FROM club_members WHERE club_id = ?", "i", array($id));
-            db_run($conn, "UPDATE projects SET club_id = NULL WHERE club_id = ?", "i", array($id));   // projects stay, just no longer tied to a club
-            db_run($conn, "DELETE FROM notifications WHERE link = ?", "s", array('club?id=' . $id));  // old links would lead nowhere
-            $r = db_run($conn, "DELETE FROM clubs WHERE id = ?", "i", array($id));
-
-            if ($r['ok'] && $r['affected'] > 0) {
-                delete_club_image($cb['logo'] ?? null);
-                delete_club_image($cb['cover'] ?? null);
-                if ($cb['status'] === 'approved') {
-                    foreach (array_keys($people) as $uid) {
-                        notify($conn, $uid, 'club_update',
-                            'The club "' . $cb['name'] . '" was deleted by an admin.' . ($note !== '' ? ' Reason: ' . $note : ''));
-                    }
-                }
+            if (club_delete_everything($conn, $cb, 'an admin', $note)) {
                 flash_set("Club deleted.", "success");
             } else {
                 flash_set("Couldn't delete that club. Please try again.", "error");

@@ -246,7 +246,7 @@ if ($club && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    $dest = (($_POST['back'] ?? '') === 'dashboard') ? 'dashboard' : 'club?id=' . $cid . $hash;
+    $dest = ((($_POST['back'] ?? '') === 'dashboard') ? 'dashboard' : 'club?id=' . $cid . $hash);
     header("Location: " . $dest);
     exit();
 }
@@ -277,7 +277,7 @@ if ($club) {
         $pr = db_run($conn,
             "SELECT p.id, p.title, p.kind, p.visibility, p.body, p.pinned, (p.edited_at IS NOT NULL) AS edited, UNIX_TIMESTAMP(p.created_at) AS ts,
                     u.username, u.first_name, u.last_name, u.photo, pm.role AS author_role
-             FROM club_posts p JOIN users u ON u.id = p.user_id
+             FROM club_posts p LEFT JOIN users u ON u.id = p.user_id
              LEFT JOIN club_members pm ON pm.club_id = p.club_id AND pm.user_id = p.user_id AND pm.status = 'active'
              WHERE p.club_id = ? AND (p.visibility = 'public' OR 1 = ?) ORDER BY p.pinned DESC, p.id DESC LIMIT " . ($postLimit + 1),
             "ii", array($cid, $canSeePrivate ? 1 : 0));
@@ -291,7 +291,7 @@ if ($club) {
         $pr = db_run($conn,
             "SELECT p.id, p.body, p.pinned, UNIX_TIMESTAMP(p.created_at) AS ts,
                     u.username, u.first_name, u.last_name, u.photo, pm.role AS author_role
-             FROM club_posts p JOIN users u ON u.id = p.user_id
+             FROM club_posts p LEFT JOIN users u ON u.id = p.user_id
              LEFT JOIN club_members pm ON pm.club_id = p.club_id AND pm.user_id = p.user_id AND pm.status = 'active'
              WHERE p.club_id = ? ORDER BY p.pinned DESC, p.id DESC LIMIT " . ($postLimit + 1),
             "i", array($cid));
@@ -371,6 +371,7 @@ function member_line($m) {
 
 $n = (int)$memberTotal;
 $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_last'] ?? '')) : '';
+if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_USER;   // the person who started it deleted their account
 
 ?>
 <!DOCTYPE html>
@@ -544,7 +545,8 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
                         $title    = $p['title'] ?? '';
                         $kinds    = array('announcement' => array('Announcement', 'megaphone'), 'reminder' => array('Reminder', 'bell'), 'important' => array('Important', 'alert'));
                         if (!isset($kinds[$kind])) $kind = 'announcement';
-                        $plink    = ($p['username'] === $me['username']) ? 'profile' : 'profile?u=' . urlencode($p['username']);
+                        $gone     = user_gone($p);   // the author deleted their account: shown as "Deleted user", no profile to open
+                        $plink    = $gone ? '' : (($p['username'] === $me['username']) ? 'profile' : 'profile?u=' . urlencode($p['username']));
                         $fullDate = (new DateTime('@' . (int)$p['ts']))->setTimezone(event_tz())->format('M j, Y \a\t g:i A');
                     ?>
                         <article id="post-<?php echo (int)$p['id']; ?>" class="ann k-<?php echo e($kind); ?><?php echo $isPinned ? ' pinned' : ''; ?><?php echo $vis === 'members' ? ' is-members' : ''; ?>">
@@ -561,10 +563,12 @@ $creator = $club ? trim(($club['creator_first'] ?? '') . ' ' . ($club['creator_l
                             <button type="button" class="ann-more" hidden>Read more</button>
 
                             <div class="ann-foot">
-                                <a href="<?php echo e($plink); ?>" class="ann-by">
+                                <<?php echo $gone ? 'span' : 'a href="' . e($plink) . '"'; ?> class="ann-by<?php echo $gone ? ' is-gone' : ''; ?>">
                                     <span class="p-avatar tiny"><?php echo avatar_inner($p); ?></span>
-                                    <span><strong><?php echo e(full_name($p)); ?></strong><em><?php echo e(($p['author_role'] ?? '') === 'owner' ? 'Club owner' : ((($p['author_role'] ?? '') === 'officer') ? 'Club officer' : 'Former officer')); ?><?php echo !empty($p['edited']) ? ' · Edited' : ''; ?></em></span>
-                                </a>
+                                    <span><strong><?php echo e(full_name($p)); ?></strong><em><?php
+                                        $roleTxt = $gone ? '' : (($p['author_role'] ?? '') === 'owner' ? 'Club owner' : ((($p['author_role'] ?? '') === 'officer') ? 'Club officer' : 'Former officer'));
+                                        echo e(trim($roleTxt . (!empty($p['edited']) ? ($roleTxt !== '' ? ' · ' : '') . 'Edited' : ''))); ?></em></span>
+                                </<?php echo $gone ? 'span' : 'a'; ?>>
 
                                 <?php if ($isStaff) { ?>
                                     <div class="ann-actions">

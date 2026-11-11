@@ -33,13 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'Your event "' . $ev['title'] . '" was removed by an admin.' . ($note !== '' ? ' Reason: ' . $note : ''), 'events');
             }
 
-            // children first, then the event itself
-            db_run($conn, "DELETE FROM event_reminders WHERE event_id = ?", "i", array($id));
-            db_run($conn, "DELETE FROM event_rsvps WHERE event_id = ?", "i", array($id));
-            db_run($conn, "DELETE FROM notifications WHERE link = ?", "s", array('event?id=' . $id));  // old links would lead nowhere
-            $r = db_run($conn, "DELETE FROM events WHERE id = ?", "i", array($id));
-
-            flash_set(($r['ok'] && $r['affected'] > 0) ? "Event deleted." : "Couldn't delete that event. Please try again.", ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
+            $ok = event_delete_rows($conn, $id);
+            flash_set($ok ? "Event deleted." : "Couldn't delete that event. Please try again.", $ok ? "success" : "error");
         }
     }
 

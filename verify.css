@@ -261,3 +261,15 @@
 .va-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .va-back { display: inline-block; margin-bottom: 12px; font-size: 14px; color: var(--muted); }
 .va-back:hover { color: var(--indigo); }
+
+/* two proof photos side by side */
+.vf-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.vf-slot { display: flex; flex-direction: column; margin: 0; min-width: 0; }
+.vf-slot-label { display: block; font-size: 14px; font-weight: 700; }
+.vf-slot-help { flex: 1 0 auto; margin: 3px 0 10px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.vf-slot .vf-file { flex-wrap: wrap; }
+.vf-slot .vf-drop { min-height: 170px; }
+.vf-proof-thumbs { display: flex; flex-wrap: wrap; gap: 12px; }
+.vf-proof-thumbs .vf-proof-thumb { flex: 1 1 200px; max-width: 280px; }
+.va-thumbs { display: grid; gap: 10px; align-content: start; }
+@media (max-width: 720px) { .vf-slots { grid-template-columns: 1fr; } }

@@ -49,7 +49,19 @@ function club_upload_field($field, $kind, &$error) {
     return save_club_image($up['tmp_name'], $kind, $error);
 }
 
-if (isset($_POST['save'])) {
+if (isset($_POST['delete_club'])) {
+
+    if (!csrf_ok()) {
+        $message = "Your session expired. Please try again.";
+    } elseif (club_delete_everything($conn, $club, 'its owner', '', (int)$me['id'])) {
+        flash_set("Your club was deleted.", "success");
+        header("Location: clubs");
+        exit();
+    } else {
+        $message = "Something went wrong. Please try again.";
+    }
+
+} elseif (isset($_POST['save'])) {
 
     $category    = $_POST['category'] ?? '';
     $description = trim($_POST['description'] ?? '');
@@ -263,6 +275,11 @@ if ($identity && !empty($club['invite_only']) && !empty($club['invite_token'])) 
             <a href="club?id=<?php echo (int)$club['id']; ?>" class="cancel">Cancel</a>
         </div>
     </form>
+
+    <?php
+    $dzKind = 'club'; $dzName = $club['name']; $dzField = 'delete_club'; $dzIdField = 'club_id'; $dzIdValue = $club['id'];
+    include("danger-zone.php");
+    ?>
 
 </main>
 

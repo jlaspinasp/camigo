@@ -102,9 +102,29 @@ function event_is_club_staff($conn, $clubId, $userId) {
 
 // Owners can cancel any event; officers only the events they posted themselves
 function event_can_cancel($conn, $ev, $userId) {
+    // no hosting club: the person who posted it can cancel it
+    if (empty($ev['club_id'])) return (isset($ev['created_by']) && (int)$ev['created_by'] === (int)$userId);
     $role = club_role($conn, $ev['club_id'], $userId);
     if ($role === 'owner') return true;
     return ($role === 'officer' && isset($ev['created_by']) && (int)$ev['created_by'] === (int)$userId);
+}
+
+// Removes an event and the rows that hang off it. Returns true when the event row was deleted.
+function event_delete_rows($conn, $eventId) {
+    $id = (int)$eventId;
+    // its banner file goes with it (read before the row is gone)
+    $banner = null;
+    if (events_banner_ready($conn)) {
+        $b = db_run($conn, "SELECT banner FROM events WHERE id = ? LIMIT 1", "i", array($id));
+        $banner = $b['rows'] ? $b['rows'][0]['banner'] : null;
+    }
+    db_run($conn, "DELETE FROM event_reminders WHERE event_id = ?", "i", array($id));
+    db_run($conn, "DELETE FROM event_rsvps WHERE event_id = ?", "i", array($id));
+    db_run($conn, "DELETE FROM notifications WHERE link = ?", "s", array('event?id=' . $id));  // old links would lead nowhere
+    $r = db_run($conn, "DELETE FROM events WHERE id = ?", "i", array($id));
+    $gone = ($r['ok'] && $r['affected'] > 0);
+    if ($gone && $banner) event_banner_delete($banner);
+    return $gone;
 }
 
 // Is this person an active member (owner, officer or regular member) of the club?
@@ -149,25 +169,94 @@ function event_purge_outsider_rsvps($conn, $eventId, $clubId) {
 // Approved clubs this person owns or is an officer of (they can post events for these)
 function event_postable_clubs($conn, $userId) {
     $r = db_run($conn,
-        "SELECT c.id, c.name FROM clubs c
+        "SELECT c.id, c.name" . (club_identity_ready($conn) ? ", c.cover" : "") . " FROM clubs c
          JOIN club_members m ON m.club_id = c.id AND m.user_id = ? AND m.role IN ('owner', 'officer') AND m.status = 'active'
          WHERE c.status = 'approved' ORDER BY c.name ASC",
         "i", array((int)$userId));
     return $r['rows'];
 }
 
+// Has events-no-club.sql been run? (events.club_id must be allowed to be empty so an event can have no hosting club)
+function events_clubless_ready($conn) {
+    static $ok = null;
+    if ($ok === null) {
+        $a = @mysqli_query($conn, "SHOW COLUMNS FROM events LIKE 'club_id'");
+        $row = $a ? mysqli_fetch_assoc($a) : null;
+        $ok = ($row && strtoupper((string)$row['Null']) === 'YES');
+    }
+    return $ok;
+}
+
+// Has events-banner.sql been run? (events.banner holds the file name of an uploaded event banner)
+function events_banner_ready($conn) {
+    static $ok = null;
+    if ($ok === null) {
+        $a = @mysqli_query($conn, "SHOW COLUMNS FROM events LIKE 'banner'");
+        $ok = ($a && mysqli_num_rows($a) > 0);
+    }
+    return $ok;
+}
+
+function event_banner_dir() {
+    return __DIR__ . '/uploads/events';
+}
+
+// Reads the uploaded banner field. Returns the saved file name, or null (sets $error only if something went wrong;
+// no file chosen is not an error). Same JPG/PNG/WebP re-draw as club covers (10:3 crop).
+function event_banner_upload($field, &$error) {
+    $up = $_FILES[$field] ?? null;
+    if (!$up || ($up['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+    if ($up['error'] !== UPLOAD_ERR_OK) { $error = "That image couldn't be uploaded. Please try a smaller file."; return null; }
+    if ($up['size'] > 10 * 1024 * 1024) { $error = "Images can be up to 10 MB."; return null; }
+    return save_club_image($up['tmp_name'], 'cover', $error, event_banner_dir());
+}
+
+function event_banner_delete($name) {
+    delete_club_image($name, event_banner_dir());
+}
+
+// Which image does this event show? Its own banner first, then its club's banner, otherwise none (a colour is used).
+// Needs the banner / club_cover columns from events_query (or the same names from your own query).
+// Returns the web path, or '' when there is no image.
+function event_image_url($ev) {
+    if (!empty($ev['banner']) && club_image_ok($ev['banner'])) return 'uploads/events/' . $ev['banner'];
+    if (!empty($ev['club_id']) && !empty($ev['club_cover']) && club_image_ok($ev['club_cover'])) return 'uploads/clubs/' . $ev['club_cover'];
+    return '';
+}
+
+// The colour (0-5) used when there is no image. Stable per event, so it doesn't change on reload.
+function event_gradient($ev) {
+    return (int)(!empty($ev['club_id']) ? $ev['club_id'] : ($ev['id'] ?? 0)) % 6;
+}
+
+// Name of the person who posted an event that has no club (needs the host_first / host_last columns from events_query)
+function event_host_name($ev) {
+    $n = full_name(array('first_name' => $ev['host_first'] ?? '', 'last_name' => $ev['host_last'] ?? ''));
+    return $n !== '' ? $n : DELETED_USER;   // the host deleted their account; the event stays
+}
+
+// Opening and closing tag for a host: a profile link, or a plain span when the host's account is gone.
+function event_host_tags($ev, $class) {
+    if (!empty($ev['host_username'])) {
+        return array('<a class="' . e($class) . '" href="profile?u=' . e(urlencode($ev['host_username'])) . '">', '</a>');
+    }
+    return array('<span class="' . e($class) . '">', '</span>');
+}
+
 // ---------- reading events ----------
 // Returns array('ok' => bool, 'rows' => [...]). $where may use ? marks; pass their types and values.
 // Every row has: going (count), me_going (0/1), faces (a few people who are going and have public profiles).
 function events_query($conn, $meId, $where, $types, $params, $order, $limit) {
-    $sql = "SELECT e.id, e.club_id, e.title, e.description, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility, UNIX_TIMESTAMP(e.created_at) AS created_ts,
+    $sql = "SELECT e.id, e.club_id, e.title, e.description, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility, UNIX_TIMESTAMP(e.created_at) AS created_ts," . (events_banner_ready($conn) ? " e.banner," : "") . "
+                   e.created_by, hu.username AS host_username, hu.first_name AS host_first, hu.last_name AS host_last, hu.photo AS host_photo,
                    c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo, c.cover AS club_cover" : "") . ",
                    (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id) AS going,
                    (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id AND r.user_id = ?) AS me_going,
                    " . (club_identity_ready($conn) ? "(c.invite_only = 1 AND NOT EXISTS (SELECT 1 FROM club_members hm WHERE hm.club_id = e.club_id AND hm.user_id = ? AND hm.status = 'active'))" : "0") . " AS hide_faces
             FROM events e
-            JOIN clubs c ON c.id = e.club_id AND c.status = 'approved'
-            WHERE e.status = 'active' AND " . EVENT_VISIBLE_SQL . " AND " . $where . "
+            LEFT JOIN clubs c ON c.id = e.club_id
+            LEFT JOIN users hu ON hu.id = e.created_by
+            WHERE e.status = 'active' AND (e.club_id IS NULL OR c.status = 'approved') AND " . EVENT_VISIBLE_SQL . " AND " . $where . "
             ORDER BY " . $order . " LIMIT " . (int)$limit;
 
     $withHide = club_identity_ready($conn);
@@ -222,8 +311,8 @@ function events_query($conn, $meId, $where, $types, $params, $order, $limit) {
 function event_rsvp($conn, $eventId, $userId, $go) {
     $er = db_run($conn,
         "SELECT e.id, e.club_id, e.title, e.status, e.visibility, e.capacity, e.start_at, e.end_at
-         FROM events e JOIN clubs c ON c.id = e.club_id AND c.status = 'approved'
-         WHERE e.id = ? LIMIT 1", "i", array((int)$eventId));
+         FROM events e LEFT JOIN clubs c ON c.id = e.club_id
+         WHERE e.id = ? AND (e.club_id IS NULL OR c.status = 'approved') LIMIT 1", "i", array((int)$eventId));
     if (!$er['rows']) return array("That event doesn't exist.", "error");
 
     $ev = $er['rows'][0];
@@ -256,6 +345,7 @@ function event_rsvp($conn, $eventId, $userId, $go) {
 
 // ---------- notifications ----------
 function event_notify_members($conn, $clubId, $exceptUserId, $message, $link) {
+    if (empty($clubId)) return;   // no hosting club, nobody to notify
     db_run($conn,
         "INSERT INTO notifications (user_id, type, message, link)
          SELECT user_id, 'event_new', ?, ? FROM club_members
@@ -334,14 +424,14 @@ function render_event_card($ev, $back) {
     $faces   = $ev['faces'] ?? array();
     $excl    = (($ev['visibility'] ?? 'public') === 'members');
     $blurb   = trim(preg_replace('/\s+/u', ' ', (string)($ev['description'] ?? '')));
-    $hasCover = (!empty($ev['club_cover']) && club_image_ok($ev['club_cover']));
+    $imgUrl   = event_image_url($ev);
     $showWhen = ($state === 'upcoming' && $when !== '');
     $showFull = ($full && $state !== 'over');
     $hasFlags = ($excl || $state === 'live' || $state === 'over' || $showWhen || $showFull);
     ?>
     <article class="evc<?php echo $state === 'over' ? ' is-over' : ''; ?><?php echo $excl ? ' is-exclusive' : ''; ?>">
-        <div class="evc-cover" data-g="<?php echo (int)$ev['club_id'] % 6; ?>">
-            <?php if ($hasCover) { ?><img src="uploads/clubs/<?php echo e($ev['club_cover']); ?>" alt="" loading="lazy" decoding="async"><?php } ?>
+        <div class="evc-cover" data-g="<?php echo event_gradient($ev); ?>">
+            <?php if ($imgUrl !== '') { ?><img src="<?php echo e($imgUrl); ?>" alt="" loading="lazy" decoding="async"><?php } ?>
 
             <div class="evc-date" aria-hidden="true">
                 <small><?php echo e($s->format('M')); ?></small>
@@ -360,7 +450,11 @@ function render_event_card($ev, $back) {
         </div>
 
         <div class="evc-body">
-            <a class="evc-club" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo club_tile_html(array('id' => $ev['club_id'], 'name' => $ev['club_name'], 'logo' => $ev['club_logo'] ?? null), 'xs', 'span'); ?><span><?php echo e($ev['club_name']); ?></span></a>
+            <?php if (!empty($ev['club_id'])) { ?>
+                <a class="evc-club" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo club_tile_html(array('id' => $ev['club_id'], 'name' => $ev['club_name'], 'logo' => $ev['club_logo'] ?? null), 'xs', 'span'); ?><span><?php echo e($ev['club_name']); ?></span></a>
+            <?php } else { ?>
+                <?php $ht = event_host_tags($ev, 'evc-club'); echo $ht[0]; ?><span class="p-avatar tiny"><?php echo avatar_inner(array('photo' => $ev['host_photo'] ?? null, 'first_name' => $ev['host_first'] ?? '?')); ?></span><span>Hosted by <?php echo e(event_host_name($ev)); ?></span><?php echo $ht[1]; ?>
+            <?php } ?>
 
             <h3 class="evc-title"><a href="event?id=<?php echo $id; ?>"><?php echo e($ev['title']); ?></a></h3>
 

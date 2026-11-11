@@ -128,7 +128,25 @@ function old_val($k) {
     return isset($_POST[$k]) ? e($_POST[$k]) : "";
 }
 
-$mine = db_run($conn, "SELECT name, category, status, review_note, created_at FROM clubs WHERE created_by = ? ORDER BY id DESC LIMIT 20", "i", array($me['id']));
+// ---- delete one of my own requests that hasn't been approved (approved clubs are deleted from the club page) ----
+if (isset($_POST['delete_request'])) {
+    $did = (int)($_POST['club_id'] ?? 0);
+    if (!csrf_ok()) {
+        $message = "Your session expired. Please try again.";
+        $message_class = "error";
+    } else {
+        $cr = db_run($conn, "SELECT * FROM clubs WHERE id = ? AND created_by = ? AND status IN ('pending', 'rejected') LIMIT 1", "ii", array($did, $me['id']));
+        if ($cr['rows'] && club_delete_everything($conn, $cr['rows'][0], 'its owner', '', (int)$me['id'])) {
+            $message = "Your club request was deleted.";
+            $message_class = "success";
+        } else {
+            $message = "That request couldn't be deleted. It may already be gone.";
+            $message_class = "error";
+        }
+    }
+}
+
+$mine = db_run($conn, "SELECT id, name, category, status, review_note, created_at FROM clubs WHERE created_by = ? ORDER BY id DESC LIMIT 20", "i", array($me['id']));
 $initial = strtoupper(substr($me['first_name'], 0, 1));
 ?>
 <!DOCTYPE html>
@@ -241,6 +259,13 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
                         <div class="club-meta"><?php echo e($c['category']); ?> &middot; <?php echo e(date('M j, Y', strtotime($c['created_at']))); ?></div>
                         <?php if ($c['status'] === 'rejected' && $c['review_note']) { ?>
                             <p class="club-desc">Admin note: <?php echo e($c['review_note']); ?></p>
+                        <?php } ?>
+                        <?php if ($c['status'] === 'pending' || $c['status'] === 'rejected') { ?>
+                            <form method="POST" class="tool-delete" onsubmit="return confirm('Delete this club request?');">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="club_id" value="<?php echo (int)$c['id']; ?>">
+                                <button type="submit" name="delete_request" value="1" class="btn-sm btn-ghost danger">Delete request</button>
+                            </form>
                         <?php } ?>
                     </div>
                 <?php } ?>

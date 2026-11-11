@@ -2,18 +2,17 @@
 <header class="topbar">
     <?php include("logo.php"); ?>
     <div class="user">
-        <?php if (($me['role'] ?? 'user') === 'admin') { ?><a href="admin-verifications" class="out">Admin</a><?php } ?>
-        <a href="students" class="out">Students</a>
-        <a href="clubs" class="out">Clubs</a>
-        <a href="projects" class="out">Projects</a>
-        <a href="events" class="out">Events</a>
+        <nav class="tb-nav" aria-label="Main">
+            <a href="dashboard" class="tb-link">Home</a>
+            <a href="clubs" class="tb-link">Clubs</a>
+            <a href="projects" class="tb-link">Projects</a>
+            <a href="events" class="tb-link">Events</a>
+            <a href="students" class="tb-link">Students</a>
+            <?php if (($me['role'] ?? 'user') === 'admin') { ?><a href="admin-verifications" class="tb-link">Admin</a><?php } ?>
+        </nav>
         <?php $unreadMsg = unread_messages($conn, $me['id']); include("msg-icon.php"); ?>
         <?php $unread = unread_count($conn, $me['id']); include("bell.php"); ?>
-        <a href="profile" class="me-link">
-            <span class="avatar"><?php echo avatar_inner($me); ?></span>
-            <span class="name"><?php echo e($me['first_name']); ?></span>
-        </a>
-        <a href="logout" class="out">Log out</a>
+        <?php include("profile-menu.php"); ?>
     </div>
 </header>
 <?php $rtUserId = $me['id']; include("realtime.php"); ?>

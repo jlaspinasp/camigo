@@ -37,8 +37,9 @@ function safe_photo($row) {
     return (!empty($row['photo']) && preg_match('/^[a-f0-9]{24}\.jpg$/', $row['photo'])) ? $row['photo'] : '';
 }
 function person_out($u) {
-    return array('id' => (int)$u['id'], 'username' => $u['username'], 'name' => full_name($u),
-                 'photo' => safe_photo($u), 'initial' => first_letter($u['first_name']));
+    $gone = user_gone($u);   // their account was deleted: the chat stays, shown as "Deleted user"
+    return array('id' => (int)$u['id'], 'username' => $gone ? '' : $u['username'], 'name' => full_name($u),
+                 'photo' => safe_photo($u), 'initial' => $gone ? '?' : first_letter($u['first_name']), 'deleted' => $gone);
 }
 
 // a private profile can't be messaged first, but an existing conversation can continue
@@ -66,6 +67,7 @@ function out_msg($r, $k) {
     if ($k === 'g' && $o['kind'] === 'msg') {
         $o['name'] = full_name($r); $o['username'] = $r['username'] ?? '';
         $o['photo'] = safe_photo($r); $o['initial'] = first_letter($r['first_name'] ?? '?');
+        $o['deleted'] = user_gone($r);
     }
     return $o;
 }
@@ -111,9 +113,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['act'])) {
 
     // ---- who is on the other end of a direct chat ----
     $partner = null;
+    $ghostId = 0;   // the other person deleted their account: the old chat stays, but it is read-only
     if ($k === 'u' && $tid > 0) {
         $pr = db_run($conn, "SELECT * FROM users WHERE id = ? LIMIT 1", "i", array($tid));
-        if ($pr['rows'] && (int)$pr['rows'][0]['id'] !== $meId) $partner = $pr['rows'][0];
+        if ($pr['rows']) { if ((int)$pr['rows'][0]['id'] !== $meId) $partner = $pr['rows'][0]; }
+        elseif ($tid !== $meId) $ghostId = $tid;
     }
 
     // ---------- mark as read ----------
@@ -121,6 +125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['act'])) {
         if ($k === 'u' && $partner) {
             $r = db_run($conn, "UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ? AND is_read = 0", "ii", array($meId, $partner['id']));
             if ($r['ok'] && $r['affected'] > 0) chat_push(array($partner['id']), 'seen', array('by' => $meId));
+        } elseif ($k === 'u' && $ghostId) {
+            db_run($conn, "UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ? AND is_read = 0", "ii", array($meId, $ghostId));
         } elseif ($k === 'g' && load_group($conn, $tid, $meId)) {
             db_run($conn, "UPDATE chat_group_members SET last_read_id = (SELECT COALESCE(MAX(id),0) FROM group_messages WHERE group_id = ?) WHERE group_id = ? AND user_id = ?", "iii", array($tid, $tid, $meId));
         }
@@ -136,6 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['act'])) {
         $group = null;
 
         if ($k === 'u') {
+            if ($ghostId) json_out(array('ok' => false, 'error' => "This account was deleted, so you can't reply."));
             if (!$partner) json_out(array('ok' => false, 'error' => "We couldn't find that student."));
             if (chat_blocked_by_me($conn, $meId, $partner['id'])) json_out(array('ok' => false, 'error' => "Unblock " . $partner['first_name'] . " to send a message."));
             if (chat_blocked_me($conn, $meId, $partner['id']))   json_out(array('ok' => false, 'error' => "You can't message this person."));
@@ -223,15 +230,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['act'])) {
     // ---------- delete chat (for me only) ----------
     if ($act === 'clear') {
         if ($k === 'u') {
-            if (!$partner) json_out(array('ok' => false, 'error' => 'Not found.'));
-            $m = db_run($conn, "SELECT COALESCE(MAX(id),0) AS mx FROM messages WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)", "iiii", array($meId, $partner['id'], $partner['id'], $meId));
+            $clearId = $partner ? (int)$partner['id'] : $ghostId;
+            if (!$clearId) json_out(array('ok' => false, 'error' => 'Not found.'));
+            $m = db_run($conn, "SELECT COALESCE(MAX(id),0) AS mx FROM messages WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)", "iiii", array($meId, $clearId, $clearId, $meId));
+            if ($ghostId && !(int)$m['rows'][0]['mx']) json_out(array('ok' => false, 'error' => 'Not found.'));
         } else {
             if (!load_group($conn, $tid, $meId)) json_out(array('ok' => false, 'error' => 'Not found.'));
             $m = db_run($conn, "SELECT COALESCE(MAX(id),0) AS mx FROM group_messages WHERE group_id = ?", "i", array($tid));
             db_run($conn, "UPDATE chat_group_members SET last_read_id = ? WHERE group_id = ? AND user_id = ?", "iii", array((int)$m['rows'][0]['mx'], $tid, $meId));
         }
         chat_pref_set($conn, $meId, $k, $tid, 'cleared_id', (int)$m['rows'][0]['mx']);
-        if ($k === 'u') db_run($conn, "UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ?", "ii", array($meId, $partner['id']));
+        if ($k === 'u') db_run($conn, "UPDATE messages SET is_read = 1 WHERE recipient_id = ? AND sender_id = ?", "ii", array($meId, $clearId));
         json_out(array('ok' => true, 'unread' => $unreadNow()));
     }
 
@@ -415,8 +424,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['act'])) {
 // ================= PAGE =================
 $wantU = trim($_GET['u'] ?? '');
 $wantG = (int)($_GET['g'] ?? 0);
+$wantI = ($wantU === '') ? (int)($_GET['uid'] ?? 0) : 0;   // a chat with someone who deleted their account has no username to open it by
 
-$boot = array('me' => $meId, 'meName' => full_name($me), 'csrf' => csrf_token(), 'rt' => $rt, 'convos' => array(), 'open' => null,
+$boot = array('me' => $meId, 'meName' => full_name($me), 'deletedName' => DELETED_USER, 'csrf' => csrf_token(), 'rt' => $rt, 'convos' => array(), 'open' => null,
               'maxFile' => chat_max_file(), 'maxFiles' => CHAT_MAX_FILES, 'groupMax' => CHAT_GROUP_MAX,
               'accept' => '.' . implode(',.', array_keys(chat_allowed_types())));
 $boot['draft'] = str_cut(trim((string)($_GET['draft'] ?? '')), 1000);   // text typed in the Students card
@@ -430,24 +440,26 @@ if (!$setupMissing) {
 
     // ---- direct chats: the latest message with each person ----
     $dm = db_run($conn,
-        "SELECT u.id, u.username, u.first_name, u.last_name, u.photo,
+        "SELECT IF(m.sender_id = ?, m.recipient_id, m.sender_id) AS pid,
+                u.username, u.first_name, u.last_name, u.photo,
                 m.id AS mid, m.body, m.sender_id, m.deleted_at, m.file_path, m.file_mime, UNIX_TIMESTAMP(m.created_at) AS ts,
                 COALESCE(p.muted, 0) AS muted,
-                (SELECT COUNT(*) FROM messages x WHERE x.sender_id = u.id AND x.recipient_id = ? AND x.is_read = 0 AND x.deleted_at IS NULL AND x.id > COALESCE(p.cleared_id, 0)) AS unread
+                (SELECT COUNT(*) FROM messages x WHERE x.sender_id = IF(m.sender_id = ?, m.recipient_id, m.sender_id) AND x.recipient_id = ? AND x.is_read = 0 AND x.deleted_at IS NULL AND x.id > COALESCE(p.cleared_id, 0)) AS unread
          FROM messages m
-         JOIN users u ON u.id = IF(m.sender_id = ?, m.recipient_id, m.sender_id)
-         LEFT JOIN chat_prefs p ON p.user_id = ? AND p.kind = 'u' AND p.target_id = u.id
+         LEFT JOIN users u ON u.id = IF(m.sender_id = ?, m.recipient_id, m.sender_id)
+         LEFT JOIN chat_prefs p ON p.user_id = ? AND p.kind = 'u' AND p.target_id = IF(m.sender_id = ?, m.recipient_id, m.sender_id)
          WHERE m.id IN (SELECT MAX(id) FROM messages WHERE sender_id = ? OR recipient_id = ? GROUP BY IF(sender_id = ?, recipient_id, sender_id))
            AND m.id > COALESCE(p.cleared_id, 0)
          ORDER BY m.id DESC LIMIT 60",
-        "iiiiii", array($meId, $meId, $meId, $meId, $meId, $meId));
+        "iiiiiiiii", array($meId, $meId, $meId, $meId, $meId, $meId, $meId, $meId, $meId));
     foreach ($dm['rows'] as $c) {
+        $c['id'] = (int)$c['pid'];   // the other person's id, even when their account is gone (username is then NULL)
         $blocked = in_array((int)$c['id'], $blockedIds, true);
         $o = person_out($c);
         $o['k'] = 'u';
         $o['last'] = array('mine' => ((int)$c['sender_id'] === $meId), 'kind' => 'msg', 'gone' => !empty($c['deleted_at']),
                            'body' => (string)$c['body'], 'file' => !empty($c['file_path']) ? (chat_is_image($c['file_mime']) ? 'image' : 'file') : false,
-                           'sender' => $c['first_name']);
+                           'sender' => user_gone($c) ? DELETED_USER : $c['first_name']);
         $o['ts'] = (int)$c['ts'];
         $o['mid'] = (int)$c['mid'];
         $o['unread'] = $blocked ? 0 : (int)$c['unread'];
@@ -478,7 +490,7 @@ if (!$setupMissing) {
             'members' => (int)$c['members'], 'ts' => (int)$c['ts'], 'mid' => (int)$c['mid'], 'unread' => (int)$c['unread'], 'muted' => (bool)$c['muted'],
             'last' => array('mine' => ((int)$c['sender_id'] === $meId), 'kind' => $c['kind'] ?? 'msg', 'gone' => !empty($c['deleted_at']),
                             'body' => (string)($c['body'] ?? ''), 'file' => !empty($c['file_path']) ? (chat_is_image($c['file_mime']) ? 'image' : 'file') : false,
-                            'sender' => $c['s_first'] ?? ''));
+                            'sender' => ($c['s_first'] ?? '') !== '' ? $c['s_first'] : (($c['kind'] ?? '') === 'msg' && !empty($c['mid']) ? DELETED_USER : '')));
     }
     usort($boot['convos'], function ($a, $b) { return $b['ts'] <=> $a['ts']; });
 
@@ -500,8 +512,19 @@ if (!$setupMissing) {
         } else {
             $boot['open'] = array('k' => 'g', 'missing' => true);
         }
-    } elseif ($wantU !== '') {
-        $p = get_user_row($conn, $wantU);
+    } elseif ($wantU !== '' || $wantI > 0) {
+        $deleted = false;
+        if ($wantU !== '') {
+            $p = get_user_row($conn, $wantU);
+        } else {
+            $ur = db_run($conn, "SELECT * FROM users WHERE id = ? LIMIT 1", "i", array($wantI));
+            $p = $ur['rows'] ? $ur['rows'][0] : null;
+            if (!$p && $wantI !== $meId) {
+                // account deleted: only open it when there really is a conversation to read
+                $had = db_run($conn, "SELECT 1 FROM messages WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?) LIMIT 1", "iiii", array($meId, $wantI, $wantI, $meId));
+                if ($had['rows']) { $deleted = true; $p = array('id' => $wantI, 'username' => null, 'first_name' => null, 'last_name' => null, 'photo' => null, 'profile_visibility' => null); }
+            }
+        }
         if ($p && (int)$p['id'] !== $meId) {
             $pid = (int)$p['id'];
             $pf = chat_pref($conn, $meId, 'u', $pid);
@@ -517,8 +540,8 @@ if (!$setupMissing) {
             if ($r['ok'] && $r['affected'] > 0) chat_push(array($pid), 'seen', array('by' => $meId));
 
             $boot['open'] = array_merge(person_out($p), array('k' => 'u', 'muted' => (bool)$pf['muted'],
-                'blockedByMe' => chat_blocked_by_me($conn, $meId, $pid), 'blockedMe' => chat_blocked_me($conn, $meId, $pid),
-                'allowed' => can_message($conn, $meId, $p), 'thread' => $thread, 'seen' => $seen,
+                'blockedByMe' => $deleted ? false : chat_blocked_by_me($conn, $meId, $pid), 'blockedMe' => $deleted ? false : chat_blocked_me($conn, $meId, $pid),
+                'allowed' => $deleted ? false : can_message($conn, $meId, $p), 'thread' => $thread, 'seen' => $seen,
                 'channel' => chat_channel($meId, $pid)));
         } else {
             $boot['open'] = array('k' => 'u', 'missing' => true);
@@ -538,7 +561,7 @@ $flash = flash_get();
 $message = $flash ? $flash[0] : "";
 $message_class = $flash ? $flash[1] : "";
 $title = ($boot['open'] && !empty($boot['open']['name'])) ? $boot['open']['name'] . ' | ' : '';
-$hasThread = ($wantU !== '' || $wantG > 0);
+$hasThread = ($wantU !== '' || $wantI > 0 || $wantG > 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">

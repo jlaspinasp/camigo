@@ -2,15 +2,18 @@
 session_start();
 require("db.php");
 require("auth.php");
+require("validate-lib.php");
 
 $me = require_login($conn);
 
 $ready = verify_ready($conn);
 
-$types = array(
-    'id'         => array('School ID (front)', 'A clear photo of the front of your school ID.'),
-    'enrollment' => array('Enrollment proof', "This term's registration form, or a screenshot of your student portal."),
+// two photos are required: both go in together
+$slots = array(
+    'proof_id'   => array('School ID (front)', 'A clear photo of the front of your school ID.'),
+    'proof_load' => array('Study load', "This term's study load, registration form, or a screenshot of your student portal."),
 );
+$twoReady = $ready && verify_two_ready($conn);
 
 $message = "";
 $message_class = "";
@@ -32,24 +35,24 @@ $isAdmin    = (($me['role'] ?? 'user') === 'admin');
 $isVerified = user_is_verified($me);
 $isPending  = ($latest && $latest['status'] === 'pending');
 $waitLeft   = verify_wait_left($latest);
-$canSubmit  = ($ready && !$isVerified && !$isPending && $waitLeft === 0);
+$canSubmit  = ($ready && $twoReady && !$isVerified && !$isPending && $waitLeft === 0);
 
 $f = array(
     'first_name' => (string)($me['first_name'] ?? ''),
     'last_name'  => (string)($me['last_name'] ?? ''),
     'id_number'  => '',
-    'proof_type' => 'id',
 );
 
 // ---- send a request ----
 if ($canSubmit && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send'])) {
 
-    foreach (array('first_name', 'last_name', 'id_number', 'proof_type') as $k) {
+    foreach (array('first_name', 'last_name', 'id_number') as $k) {
         $f[$k] = trim(preg_replace('/\s+/', ' ', (string)($_POST[$k] ?? '')));
     }
+    $f['first_name'] = proper_name($f['first_name']);
+    $f['last_name']  = proper_name($f['last_name']);
 
     $error = "";
-    $up = $_FILES['proof'] ?? null;
 
     if (!csrf_ok()) {
         $error = "Your session expired. Please try again.";
@@ -59,16 +62,25 @@ if ($canSubmit && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send'])
         $error = "Enter your last name (up to 100 characters).";
     } elseif (verify_id_error($f['id_number']) !== "") {
         $error = verify_id_error($f['id_number']);
-    } elseif (!isset($types[$f['proof_type']])) {
-        $error = "Pick the kind of proof you're sending.";
     } elseif (empty($_POST['confirm'])) {
-        $error = "Please confirm that the photo is yours and the details are correct.";
-    } elseif (!$up || ($up['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
-        $error = "Add a photo of your proof.";
-    } elseif ($up['error'] === UPLOAD_ERR_INI_SIZE || $up['error'] === UPLOAD_ERR_FORM_SIZE || $up['size'] > VERIFY_MAX_UPLOAD) {
-        $error = "That photo is too big. Please choose one under 10 MB.";
-    } elseif ($up['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($up['tmp_name'])) {
-        $error = "Your photo didn't upload. Please try again.";
+        $error = "Please confirm that the photos are yours and the details are correct.";
+    }
+
+    // both photos are checked the same way
+    $ups = array();
+    if ($error === "") {
+        foreach ($slots as $key => $t) {
+            $up = $_FILES[$key] ?? null;
+            if (!$up || ($up['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                $error = "Add a photo of your " . strtolower($t[0]) . ".";
+            } elseif ($up['error'] === UPLOAD_ERR_INI_SIZE || $up['error'] === UPLOAD_ERR_FORM_SIZE || $up['size'] > VERIFY_MAX_UPLOAD) {
+                $error = "Your " . strtolower($t[0]) . " photo is too big. Please choose one under 10 MB.";
+            } elseif ($up['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($up['tmp_name'])) {
+                $error = "Your " . strtolower($t[0]) . " photo didn't upload. Please try again.";
+            }
+            if ($error !== "") break;
+            $ups[$key] = $up;
+        }
     }
 
     // one waiting request at a time (also covers a double click)
@@ -82,13 +94,14 @@ if ($canSubmit && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send'])
     }
 
     if ($error === "") {
-        $file = save_proof_image($up['tmp_name'], $error);
-        if ($file) {
+        $fileId   = save_proof_image($ups['proof_id']['tmp_name'], $error);
+        $fileLoad = $fileId ? save_proof_image($ups['proof_load']['tmp_name'], $error) : null;
+        if ($fileId && $fileLoad) {
             $r = db_run($conn,
-                "INSERT INTO verifications (user_id, first_name, last_name, id_number, id_hash, proof_type, proof, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')",
+                "INSERT INTO verifications (user_id, first_name, last_name, id_number, id_hash, proof_type, proof, proof2, status)
+                 VALUES (?, ?, ?, ?, ?, 'both', ?, ?, 'pending')",
                 "issssss",
-                array($me['id'], $f['first_name'], $f['last_name'], $f['id_number'], verify_hash_id($f['id_number']), $f['proof_type'], $file));
+                array($me['id'], $f['first_name'], $f['last_name'], $f['id_number'], verify_hash_id($f['id_number']), $fileId, $fileLoad));
 
             if ($r['ok']) {
                 // let the admins know
@@ -101,9 +114,9 @@ if ($canSubmit && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send'])
                 header("Location: verify-account");
                 exit();
             }
-            delete_proof($file);
             $error = "Something went wrong. Please try again.";
         }
+        if ($error !== "") { delete_proof($fileId); delete_proof($fileLoad); }
     }
 
     $message = $error;
@@ -162,6 +175,10 @@ $icCross  = '<path d="M6 6l12 12M18 6L6 18"/>';
 
         <div class="msg error" style="margin-top:20px">Verification isn't set up yet. Run <strong>verification.sql</strong> in phpMyAdmin first.</div>
 
+    <?php } elseif (!$twoReady && !$isAdmin && !$isVerified) { ?>
+
+        <div class="msg error" style="margin-top:20px">Verification isn't fully set up yet. Run <strong>verification-two-proofs.sql</strong> in phpMyAdmin first.</div>
+
     <?php } elseif ($isAdmin) { ?>
 
         <section class="panel">
@@ -199,16 +216,21 @@ $icCross  = '<path d="M6 6l12 12M18 6L6 18"/>';
                 <div class="vf-state-ic wait"><?php echo $svg($icClock); ?></div>
                 <div>
                     <h2>Your request is being reviewed</h2>
-                    <p>An admin will check your photo against the details you sent. You'll get a notification as soon as it's decided.</p>
+                    <p>An admin will check your photos against the details you sent. You'll get a notification as soon as it's decided.</p>
                     <dl class="vf-facts">
                         <dt>Sent</dt><dd><?php echo e(date('M j, Y', strtotime($latest['created_at']))); ?></dd>
                         <dt>Name</dt><dd><?php echo e(trim($latest['first_name'] . ' ' . $latest['last_name'])); ?></dd>
                         <?php if (!empty($latest['id_number'])) { ?><dt>ID number</dt><dd>ending in <?php echo e(verify_id_tail($latest['id_number'])); ?></dd><?php } ?>
-                        <dt>Proof</dt><dd><?php echo e(isset($types[$latest['proof_type']]) ? $types[$latest['proof_type']][0] : 'Photo'); ?></dd>
+                        <dt>Proof</dt><dd>School ID + Study load</dd>
                     </dl>
-                    <?php if (proof_ok($latest['proof'] ?? '')) { ?>
-                        <img class="vf-proof-thumb" src="verification-proof?id=<?php echo (int)$latest['id']; ?>" alt="The proof you sent">
-                    <?php } ?>
+                    <div class="vf-proof-thumbs">
+                        <?php if (proof_ok($latest['proof'] ?? '')) { ?>
+                            <img class="vf-proof-thumb" src="verification-proof?id=<?php echo (int)$latest['id']; ?>" alt="The school ID you sent">
+                        <?php } ?>
+                        <?php if (proof_ok($latest['proof2'] ?? '')) { ?>
+                            <img class="vf-proof-thumb" src="verification-proof?id=<?php echo (int)$latest['id']; ?>&amp;n=2" alt="The study load you sent">
+                        <?php } ?>
+                    </div>
                 </div>
             </div>
         </section>
@@ -236,7 +258,7 @@ $icCross  = '<path d="M6 6l12 12M18 6L6 18"/>';
                     <div class="vf-state-ic bad"><?php echo $svg($icClock); ?></div>
                     <div>
                         <h2>Please wait before sending another</h2>
-                        <p>New requests open <?php echo e(verify_wait_text($waitLeft)); ?> after a rejection. Use the time to get a clear photo of your ID or enrollment proof.</p>
+                        <p>New requests open <?php echo e(verify_wait_text($waitLeft)); ?> after a rejection. Use the time to get clear photos of your ID and your study load.</p>
                     </div>
                 </div>
             </section>
@@ -244,9 +266,9 @@ $icCross  = '<path d="M6 6l12 12M18 6L6 18"/>';
         <?php } else { ?>
 
             <ol class="vf-steps">
-                <li><strong>Send your details</strong><span>Your name, ID number and one photo of your proof.</span></li>
-                <li><strong>An admin reviews it</strong><span>They check the photo against what you entered.</span></li>
-                <li><strong>Your photo is deleted</strong><span>Once it's reviewed, only the result is kept.</span></li>
+                <li><strong>Send your details</strong><span>Your name, ID number, and a photo of your school ID and study load.</span></li>
+                <li><strong>An admin reviews it</strong><span>They check both photos against what you entered.</span></li>
+                <li><strong>Your photos are deleted</strong><span>Once it's reviewed, only the result is kept.</span></li>
             </ol>
 
             <form method="POST" enctype="multipart/form-data" id="vf-form">
@@ -274,45 +296,42 @@ $icCross  = '<path d="M6 6l12 12M18 6L6 18"/>';
                 </section>
 
                 <section class="panel vf-panel">
-                    <h2>Your proof</h2>
-                    <p class="vf-lead">Pick one, then add a photo. A school ID alone can be borrowed, so enrollment proof is the stronger choice if you have it.</p>
+                    <h2>Your proofs</h2>
+                    <p class="vf-lead">Add a photo of both. The school ID shows who you are, and your study load shows you're enrolled this term.</p>
 
-                    <div class="vf-types" id="vf-types">
-                        <?php foreach ($types as $key => $t) { ?>
-                            <label class="vf-type<?php echo $f['proof_type'] === $key ? ' on' : ''; ?>">
-                                <input type="radio" name="proof_type" value="<?php echo e($key); ?>" <?php echo $f['proof_type'] === $key ? 'checked' : ''; ?>>
-                                <strong><?php echo e($t[0]); ?></strong>
-                                <span><?php echo e($t[1]); ?></span>
-                            </label>
+                    <div class="vf-slots">
+                        <?php foreach ($slots as $key => $t) { ?>
+                            <div class="field vf-slot" data-slot>
+                                <label class="vf-slot-label"><?php echo e($t[0]); ?></label>
+                                <p class="vf-slot-help"><?php echo e($t[1]); ?></p>
+
+                                <input type="file" name="<?php echo e($key); ?>" accept="image/jpeg,image/png,image/webp" hidden data-input>
+
+                                <div class="vf-drop" data-drop role="button" tabindex="0" aria-label="Choose a photo of your <?php echo e(strtolower($t[0])); ?>">
+                                    <div class="vf-drop-ic"><?php echo $svg($icUpload, 22); ?></div>
+                                    <strong>Choose a photo or drop it here</strong>
+                                    <small>JPG, PNG or WebP, up to 10 MB</small>
+                                </div>
+
+                                <div class="vf-file" data-chosen hidden>
+                                    <img data-prev alt="Preview of your <?php echo e(strtolower($t[0])); ?>">
+                                    <div class="vf-file-info"><strong data-name></strong><span data-size></span></div>
+                                    <button type="button" class="btn-sm btn-ghost" data-remove>Change photo</button>
+                                </div>
+
+                                <div class="hint" data-err role="alert"></div>
+                            </div>
                         <?php } ?>
-                    </div>
-
-                    <div class="field" style="margin-top:16px">
-                        <input type="file" name="proof" id="vf-file" accept="image/jpeg,image/png,image/webp" hidden>
-
-                        <div class="vf-drop" id="vf-drop" role="button" tabindex="0" aria-label="Choose a photo of your proof">
-                            <div class="vf-drop-ic"><?php echo $svg($icUpload, 22); ?></div>
-                            <strong>Choose a photo or drop it here</strong>
-                            <small>JPG, PNG or WebP, up to 10 MB</small>
-                        </div>
-
-                        <div class="vf-file" id="vf-chosen" hidden>
-                            <img id="vf-prev" alt="Preview of your proof">
-                            <div class="vf-file-info"><strong id="vf-name"></strong><span id="vf-size"></span></div>
-                            <button type="button" class="btn-sm btn-ghost" id="vf-remove">Change photo</button>
-                        </div>
-
-                        <div class="hint" id="vf-err" role="alert"></div>
                     </div>
 
                     <div class="vf-note">
                         <?php echo $svg($icLock, 18); ?>
-                        <div><strong>Cover what we don't need.</strong> Hide your birthday and anything else except your name and ID number. Only Camigo admins can see this photo, and it's deleted as soon as it's reviewed.</div>
+                        <div><strong>Cover what we don't need.</strong> Hide your birthday and anything else except your name and ID number. Only Camigo admins can see these photos, and they're deleted as soon as it's reviewed.</div>
                     </div>
 
                     <label class="vf-confirm">
                         <input type="checkbox" name="confirm" value="1" required>
-                        <span>This is my own ID or enrollment proof, and the details above are correct.</span>
+                        <span>These are my own ID and study load, and the details above are correct.</span>
                     </label>
 
                     <div class="vf-submit">
@@ -323,77 +342,79 @@ $icCross  = '<path d="M6 6l12 12M18 6L6 18"/>';
 
             <script>
             (function () {
-                var input = document.getElementById('vf-file');
-                var drop = document.getElementById('vf-drop');
-                var chosen = document.getElementById('vf-chosen');
-                var prev = document.getElementById('vf-prev');
-                var nameEl = document.getElementById('vf-name');
-                var sizeEl = document.getElementById('vf-size');
-                var err = document.getElementById('vf-err');
                 var form = document.getElementById('vf-form');
                 var go = document.getElementById('vf-go');
-                var url = null;
                 var MAX = 10 * 1024 * 1024;
                 var OK = ['image/jpeg', 'image/png', 'image/webp'];
+                var slots = Array.prototype.slice.call(document.querySelectorAll('[data-slot]'));
 
-                function say(text) { err.textContent = text; err.className = text ? 'hint bad' : 'hint'; }
+                slots.forEach(function (slot) {
+                    var input = slot.querySelector('[data-input]');
+                    var drop = slot.querySelector('[data-drop]');
+                    var chosen = slot.querySelector('[data-chosen]');
+                    var prev = slot.querySelector('[data-prev]');
+                    var nameEl = slot.querySelector('[data-name]');
+                    var sizeEl = slot.querySelector('[data-size]');
+                    var err = slot.querySelector('[data-err]');
+                    var url = null;
 
-                function clearFile() {
-                    input.value = '';
-                    if (url) { URL.revokeObjectURL(url); url = null; }
-                    chosen.hidden = true;
-                    drop.hidden = false;
-                }
+                    slot.say = function (text) { err.textContent = text; err.className = text ? 'hint bad' : 'hint'; };
+                    slot.drop = drop;
+                    slot.input = input;
 
-                function showFile(f) {
-                    say('');
-                    if (OK.indexOf(f.type) === -1) { clearFile(); say('Please choose a JPG, PNG or WebP photo.'); return; }
-                    if (f.size > MAX) { clearFile(); say('That photo is over 10 MB. Please choose a smaller one.'); return; }
-                    if (url) URL.revokeObjectURL(url);
-                    url = URL.createObjectURL(f);
-                    prev.src = url;
-                    nameEl.textContent = f.name;
-                    sizeEl.textContent = (f.size / 1048576).toFixed(1) + ' MB';
-                    drop.hidden = true;
-                    chosen.hidden = false;
-                }
+                    function clearFile() {
+                        input.value = '';
+                        if (url) { URL.revokeObjectURL(url); url = null; }
+                        chosen.hidden = true;
+                        drop.hidden = false;
+                    }
 
-                drop.addEventListener('click', function () { input.click(); });
-                drop.addEventListener('keydown', function (e) {
-                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
-                });
-                ['dragenter', 'dragover'].forEach(function (n) {
-                    drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.add('over'); });
-                });
-                ['dragleave', 'drop'].forEach(function (n) {
-                    drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.remove('over'); });
-                });
-                drop.addEventListener('drop', function (e) {
-                    var files = e.dataTransfer && e.dataTransfer.files;
-                    if (!files || !files.length) return;
-                    try { input.files = files; } catch (x) { return; }
-                    showFile(files[0]);
-                });
-                input.addEventListener('change', function () {
-                    if (input.files && input.files[0]) showFile(input.files[0]);
-                });
-                document.getElementById('vf-remove').addEventListener('click', function () { clearFile(); input.click(); });
+                    function showFile(f) {
+                        slot.say('');
+                        if (OK.indexOf(f.type) === -1) { clearFile(); slot.say('Please choose a JPG, PNG or WebP photo.'); return; }
+                        if (f.size > MAX) { clearFile(); slot.say('That photo is over 10 MB. Please choose a smaller one.'); return; }
+                        if (url) URL.revokeObjectURL(url);
+                        url = URL.createObjectURL(f);
+                        prev.src = url;
+                        nameEl.textContent = f.name;
+                        sizeEl.textContent = (f.size / 1048576).toFixed(1) + ' MB';
+                        drop.hidden = true;
+                        chosen.hidden = false;
+                    }
 
-                // proof type cards
-                var cards = document.querySelectorAll('#vf-types .vf-type');
-                Array.prototype.forEach.call(cards, function (c) {
-                    c.querySelector('input').addEventListener('change', function () {
-                        Array.prototype.forEach.call(cards, function (o) {
-                            o.classList.toggle('on', o.querySelector('input').checked);
-                        });
+                    drop.addEventListener('click', function () { input.click(); });
+                    drop.addEventListener('keydown', function (e) {
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
                     });
+                    ['dragenter', 'dragover'].forEach(function (n) {
+                        drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.add('over'); });
+                    });
+                    ['dragleave', 'drop'].forEach(function (n) {
+                        drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+                    });
+                    drop.addEventListener('drop', function (e) {
+                        var files = e.dataTransfer && e.dataTransfer.files;
+                        if (!files || !files.length) return;
+                        try { input.files = files; } catch (x) { return; }
+                        showFile(files[0]);
+                    });
+                    input.addEventListener('change', function () {
+                        if (input.files && input.files[0]) showFile(input.files[0]);
+                    });
+                    slot.querySelector('[data-remove]').addEventListener('click', function () { clearFile(); input.click(); });
                 });
 
                 form.addEventListener('submit', function (e) {
-                    if (!input.files || !input.files[0]) {
+                    var missing = null;
+                    slots.forEach(function (slot) {
+                        if (!slot.input.files || !slot.input.files[0]) {
+                            slot.say('Add a photo for this one.');
+                            if (!missing) missing = slot;
+                        }
+                    });
+                    if (missing) {
                         e.preventDefault();
-                        say('Add a photo of your proof.');
-                        drop.focus();
+                        missing.drop.focus();
                         return;
                     }
                     go.disabled = true;

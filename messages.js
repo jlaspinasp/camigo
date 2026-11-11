@@ -4,6 +4,7 @@
     var B = window.CHAT_BOOT;
     if (!B) return;
     var RT = window.CamigoRT || null;
+    var GONE = B.deletedName || "Deleted user";   // what shows for someone who deleted their account (set by messages.php)
 
     var listEl = document.getElementById("chat-items");
     var paneEl = document.getElementById("chat-pane");
@@ -96,7 +97,7 @@
         return new Date(ts * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" });
     }
     function oneLine(s, n) { s = String(s).replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; }
-    function first(name) { return String(name || "").split(" ")[0]; }
+    function first(name) { return name === GONE ? GONE : String(name || "").split(" ")[0]; }
     function sizeLabel(b) {
         if (b >= 1048576) return (Math.round(b / 104857.6) / 10) + " MB";
         if (b >= 1024) return Math.max(1, Math.round(b / 1024)) + " KB";
@@ -104,7 +105,7 @@
     }
     function ext(name) { var m = /\.([a-z0-9]+)$/i.exec(name || ""); return m ? m[1].toLowerCase() : ""; }
     function profileUrl(u) { return "profile?u=" + encodeURIComponent(u); }
-    function chatUrl(k, id, username) { return k === "g" ? "messages?g=" + id : "messages?u=" + encodeURIComponent(username); }
+    function chatUrl(k, id, username) { return k === "g" ? "messages?g=" + id : username ? "messages?u=" + encodeURIComponent(username) : "messages?uid=" + id; }
     function same(c, k, id) { return c && c.k === k && c.id === id; }
     function openIs(k, id) { return same(S.open, k, id); }
 
@@ -378,14 +379,14 @@
         if (isGroup && !mine) {
             var av = h("div", { class: "row-av" });
             if (lastOf) {
-                var link = h("a", { href: profileUrl(m.username), title: m.name }, [personAvatar({ photo: m.photo, initial: m.initial, name: m.name }, "xs")]);
+                var link = h(m.deleted ? "span" : "a", { href: m.deleted ? null : profileUrl(m.username), title: m.name }, [personAvatar({ photo: m.photo, initial: m.initial, name: m.name }, "xs")]);
                 av.appendChild(link);
             }
             row.appendChild(av);
         }
 
         var stack = h("div", { class: "stack" });
-        if (isGroup && !mine && firstOf) stack.appendChild(h("a", { class: "sender", href: profileUrl(m.username), text: m.name }));
+        if (isGroup && !mine && firstOf) stack.appendChild(h(m.deleted ? "span" : "a", { class: "sender" + (m.deleted ? " is-gone" : ""), href: m.deleted ? null : profileUrl(m.username), text: m.name }));
 
         var line = h("div", { class: "line" });
         var bubble;
@@ -518,15 +519,17 @@
     }
 
     function buildHead(o, isGroup) {
-        var sub = isGroup ? (o.members + " member" + (o.members === 1 ? "" : "s") + (o.club ? " \u00b7 Club chat" : o.project ? " \u00b7 Team chat" : "")) : "@" + o.username;
+        var sub = isGroup ? (o.members + " member" + (o.members === 1 ? "" : "s") + (o.club ? " \u00b7 Club chat" : o.project ? " \u00b7 Team chat" : "")) : o.deleted ? "Account deleted" : "@" + o.username;
         var who = h("div", { class: "pane-who" }, [
-            h("strong", null, [document.createTextNode(o.name), ico("chev", "pane-chev"), o.muted ? ico("bellOff", "mute-ico") : null]),
+            h("strong", null, [document.createTextNode(o.name), o.deleted ? null : ico("chev", "pane-chev"), o.muted ? ico("bellOff", "mute-ico") : null]),
             h("small", { text: sub })
         ]);
         // clicking the name or photo opens the profile (people) or the group details (groups)
         var idBlock = isGroup
             ? h("button", { type: "button", class: "pane-id", "aria-label": o.name + ", group details", onclick: groupInfoModal }, [avatar(o), who])
-            : h("a", { class: "pane-id", href: profileUrl(o.username), "aria-label": o.name + ", view profile" }, [avatar(o), who]);
+            : o.deleted
+                ? h("div", { class: "pane-id is-gone" }, [avatar(o), who])
+                : h("a", { class: "pane-id", href: profileUrl(o.username), "aria-label": o.name + ", view profile" }, [avatar(o), who]);
 
         var more = h("button", { type: "button", class: "icon-btn", title: "More", "aria-label": "Chat options" }, [ico("more")]);
         more.addEventListener("click", function () { openMenu(more, headMenu(o, isGroup)); });
@@ -537,14 +540,14 @@
     }
 
     function headMenu(o, isGroup) {
-        var items = [{ icon: o.muted ? "bell" : "bellOff", label: o.muted ? "Unmute notifications" : "Mute notifications", fn: toggleMute }];
+        var items = o.deleted ? [] : [{ icon: o.muted ? "bell" : "bellOff", label: o.muted ? "Unmute notifications" : "Mute notifications", fn: toggleMute }];
         if (isGroup) {
             if (o.club) items.push({ icon: "club", label: "View club", fn: function () { location.href = "club?id=" + o.club; } });
             if (o.project) items.push({ icon: "club", label: "View project", fn: function () { location.href = "project?id=" + o.project; } });
-        } else {
+        } else if (!o.deleted) {
             items.push({ icon: "block", label: o.blockedByMe ? "Unblock " + first(o.name) : "Block " + first(o.name), fn: o.blockedByMe ? function () { setBlock(false); } : blockModal });
         }
-        items.push("-");
+        if (items.length) items.push("-");
         items.push({ icon: "trash", label: "Delete chat", danger: true, fn: deleteModal });
         if (isGroup && !o.club && !o.project) items.push({ icon: "exit", label: "Leave group", danger: true, fn: leaveModal });
         return items;
@@ -563,6 +566,7 @@
         wrap.innerHTML = "";
         el.composer = el.ta = el.tray = el.emoji = null;
 
+        if (o.k === "u" && o.deleted) { wrap.appendChild(h("div", { class: "composer-note", text: "This account was deleted, so you can't reply to this conversation." })); return; }
         if (o.k === "u" && o.blockedByMe) {
             wrap.appendChild(h("div", { class: "composer-note blocked" }, [
                 h("div", null, [h("strong", { text: "You blocked " + o.name }), h("p", { text: "You can't message each other. Unblock to chat again." })]),

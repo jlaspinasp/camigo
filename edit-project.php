@@ -11,9 +11,19 @@ $p = $pid > 0 ? project_get($conn, $pid) : null;
 $allowed = $p && ((int)$p['owner_id'] === (int)$me['id']);
 
 $message = "";
+// a file larger than the server's post limit arrives as an empty form
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+    $message = "That upload was too large for the server. Try a smaller image (up to 10 MB).";
+}
 $f = array();
 $fRoles = array();
 $clubChoices = array();
+
+// project banner: its own upload, otherwise the project keeps its coloured cover
+$bannerReady = projects_banner_ready($conn);
+$oldBanner   = ($bannerReady && $p && !empty($p['banner']) && club_image_ok($p['banner'])) ? $p['banner'] : '';
+$bannerCur   = $oldBanner;
+$bannerTone  = $pid > 0 ? project_tone($pid) : 0;
 
 if ($allowed) {
     $roles = project_roles($conn, $pid);
@@ -33,7 +43,27 @@ if ($allowed) {
     );
     foreach ($roles as $r) $fRoles[] = array('id' => (int)$r['id'], 'title' => $r['title'], 'spots' => (int)$r['spots']);
 
-    if (isset($_POST['save'])) {
+    if (isset($_POST['delete_project'])) {
+
+        if (!csrf_ok()) {
+            $message = "Your session expired. Please try again.";
+        } else {
+            project_notify_team($conn, $pid, $me['id'], 'project_removed', $p['title'] . ' was removed by its founder.', 'projects');
+            db_run($conn, "DELETE FROM project_updates WHERE project_id = ?", "i", array($pid));
+            db_run($conn, "DELETE FROM project_members WHERE project_id = ?", "i", array($pid));
+            db_run($conn, "DELETE FROM project_roles WHERE project_id = ?", "i", array($pid));
+            db_run($conn, "DELETE FROM notifications WHERE link = ?", "s", array('project?id=' . $pid));
+            $r = db_run($conn, "DELETE FROM projects WHERE id = ? AND owner_id = ?", "ii", array($pid, $me['id']));
+            if ($r['ok'] && $r['affected'] > 0) {
+                if ($oldBanner !== '') project_banner_delete($oldBanner);
+                flash_set("Your project was deleted.", "success");
+                header("Location: projects");
+                exit();
+            }
+            $message = "Something went wrong. Please try again.";
+        }
+
+    } elseif (isset($_POST['save'])) {
 
         foreach (array('title', 'tagline', 'category', 'stage', 'description', 'skills', 'link') as $k) {
             $f[$k] = (string)($_POST[$k] ?? '');
@@ -80,15 +110,36 @@ if ($allowed) {
                 }
             }
 
+            // the banner: a new upload replaces the old one, the x removes it, otherwise it stays as it is
+            $newBanner   = null;
+            $bannerFinal = $oldBanner !== '' ? $oldBanner : null;
             if ($clean && $error === "") {
-                $r = db_run($conn,
-                    "UPDATE projects SET title = ?, tagline = ?, description = ?, category = ?, stage = ?, skills = ?, link = ?, is_open = ?, club_id = ?
-                     WHERE id = ? AND owner_id = ?",
-                    "sssssssiiii",
-                    array($clean['title'], $clean['tagline'], $clean['description'], $clean['category'], $clean['stage'],
-                          $clean['skills'], $clean['link'], $clean['is_open'], $newClub > 0 ? $newClub : null, $pid, $me['id']));
+                if ($bannerReady) {
+                    $newBanner = project_banner_upload('banner', $error);
+                    if ($error === "") {
+                        if ($newBanner !== null)                   $bannerFinal = $newBanner;
+                        elseif (!empty($_POST['remove_banner']))   $bannerFinal = null;
+                    }
+                } elseif (!empty($_FILES['banner']['name'])) {
+                    $error = "Project banners need a one-time upgrade. Run projects-banner.sql in phpMyAdmin.";
+                }
+            }
+
+            if ($clean && $error === "") {
+                $sql    = "UPDATE projects SET title = ?, tagline = ?, description = ?, category = ?, stage = ?, skills = ?, link = ?, is_open = ?, club_id = ?"
+                        . ($bannerReady ? ", banner = ?" : "") . " WHERE id = ? AND owner_id = ?";
+                $types  = "sssssssii" . ($bannerReady ? "s" : "") . "ii";
+                $params = array($clean['title'], $clean['tagline'], $clean['description'], $clean['category'], $clean['stage'],
+                                $clean['skills'], $clean['link'], $clean['is_open'], $newClub > 0 ? $newClub : null);
+                if ($bannerReady) $params[] = $bannerFinal;
+                $params[] = $pid;
+                $params[] = $me['id'];
+                $r = db_run($conn, $sql, $types, $params);
 
                 if ($r['ok']) {
+                    // the old image is no longer used once the new one (or none) is saved
+                    if ($bannerReady && $oldBanner !== '' && $bannerFinal !== $oldBanner) project_banner_delete($oldBanner);
+
                     // roles: update the ones we know, add new ones, drop the ones that were removed
                     $keep = array();
                     foreach ($clean['roles'] as $role) {
@@ -122,6 +173,10 @@ if ($allowed) {
                 $error = "Something went wrong. Please try again.";
             }
         }
+
+        // a failed save shouldn't leave stray uploads behind
+        if ($error !== "" && !empty($newBanner)) project_banner_delete($newBanner);
+
         $message = $error;
     }
 }
@@ -160,7 +215,7 @@ if ($allowed) {
             <div class="msg error" style="margin-top:20px"><?php echo e($message); ?></div>
         <?php } ?>
 
-        <form method="POST" class="pj-form">
+        <form method="POST" enctype="multipart/form-data" class="pj-form">
             <?php echo csrf_field(); ?>
             <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
 
@@ -171,6 +226,11 @@ if ($allowed) {
                 <a href="project?id=<?php echo $pid; ?>" class="cancel">Cancel</a>
             </div>
         </form>
+
+        <?php
+        $dzKind = 'project'; $dzName = $p['title']; $dzField = 'delete_project'; $dzIdField = 'project_id'; $dzIdValue = $pid;
+        include("danger-zone.php");
+        ?>
 
     <?php } ?>
 

@@ -17,7 +17,12 @@ function proof_fail($code) {
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0 || !verify_ready($conn)) proof_fail(404);
 
-$r = db_run($conn, "SELECT user_id, proof, status FROM verifications WHERE id = ? LIMIT 1", "i", array($id));
+// n=1 is the school ID photo, n=2 is the study load photo
+$n = ((int)($_GET['n'] ?? 1) === 2) ? 2 : 1;
+$col = ($n === 2) ? 'proof2' : 'proof';
+if ($n === 2 && !verify_two_ready($conn)) proof_fail(404);
+
+$r = db_run($conn, "SELECT user_id, $col AS proof, status FROM verifications WHERE id = ? LIMIT 1", "i", array($id));
 if (!$r['rows']) proof_fail(404);
 $v = $r['rows'][0];
 

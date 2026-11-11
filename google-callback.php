@@ -3,6 +3,7 @@ session_start();
 require("db.php");
 require("google_config.php");
 require("auth.php");
+require("validate-lib.php");
 
 function fail($msg) {
     $_SESSION['login_error'] = $msg;
@@ -121,8 +122,8 @@ if (!$user) {
         $username = $base . mt_rand(100, 9999);
     }
 
-    $first = $given !== '' ? $given : ($full !== '' ? $full : $base);
-    $last  = $family !== '' ? $family : null;
+    $first = proper_name($given !== '' ? $given : ($full !== '' ? $full : $base));
+    $last  = $family !== '' ? proper_name($family) : null;
     $mi    = "";
     $bday  = null;
     $pass  = null;

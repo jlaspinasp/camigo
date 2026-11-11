@@ -177,16 +177,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $r = db_run($conn, "DELETE FROM project_updates WHERE id = ? AND project_id = ? AND user_id = ?", "iii", array($uid, $pid, $me['id']));
             }
             flash_set(($r['ok'] && $r['affected'] > 0) ? "Update deleted." : "You can't delete that update.", ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
-
-        // ---------- founder: delete the whole project ----------
-        } elseif ($action === 'delete_project' && $isOwner) {
-            project_notify_team($conn, $pid, $me['id'], 'project_removed', $p['title'] . ' was removed by its founder.', 'projects');
-            db_run($conn, "DELETE FROM project_updates WHERE project_id = ?", "i", array($pid));
-            db_run($conn, "DELETE FROM project_members WHERE project_id = ?", "i", array($pid));
-            db_run($conn, "DELETE FROM project_roles WHERE project_id = ?", "i", array($pid));
-            $r = db_run($conn, "DELETE FROM projects WHERE id = ? AND owner_id = ?", "ii", array($pid, $me['id']));
-            flash_set($r['ok'] ? "Your project was deleted." : "Something went wrong. Please try again.", $r['ok'] ? "success" : "error");
-            if ($r['ok']) $dest = "projects";
         }
     }
 
@@ -237,7 +227,7 @@ if ($p) {
 
     $ur = db_run($conn,
         "SELECT up.id, up.user_id, up.body, UNIX_TIMESTAMP(up.created_at) AS ts, u.username, u.first_name, u.last_name, u.photo
-         FROM project_updates up JOIN users u ON u.id = up.user_id
+         FROM project_updates up LEFT JOIN users u ON u.id = up.user_id
          WHERE up.project_id = ? ORDER BY up.id DESC LIMIT 20",
         "i", array($pid));
     $updates = $ur['rows'];
@@ -310,7 +300,8 @@ $profileLink = function ($row) use ($me) {
 
         <p class="crumb"><a href="projects">&larr; All projects</a></p>
 
-        <section class="ev-hero pj-hero t<?php echo $tone; ?>">
+        <?php $heroImg = project_banner_url($p); ?>
+        <section class="ev-hero pj-hero t<?php echo $tone; ?><?php echo $heroImg !== '' ? ' has-banner' : ''; ?>"<?php if ($heroImg !== '') { ?> style="--ev-banner:url('<?php echo e($heroImg); ?>')"<?php } ?>>
             <div class="ev-badges">
                 <span class="chip"><?php echo project_category_icon($p['category']); ?><?php echo e($p['category']); ?></span>
                 <?php echo project_stage_badge($p['stage']); ?>
@@ -335,11 +326,6 @@ $profileLink = function ($row) use ($me) {
                         <?php echo csrf_field(); ?>
                         <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
                         <button type="submit" name="action" value="toggle_open" class="btn-sm btn-light"><?php echo !empty($p['is_open']) ? 'Close applications' : 'Reopen applications'; ?></button>
-                    </form>
-                    <form method="POST" onsubmit="return confirm('Delete this project for good? The team and all updates will be removed.');">
-                        <?php echo csrf_field(); ?>
-                        <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
-                        <button type="submit" name="action" value="delete_project" class="btn-sm btn-light danger">Delete</button>
                     </form>
                 </div>
             <?php } ?>

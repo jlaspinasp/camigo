@@ -167,6 +167,9 @@
 .row.me .stack { align-items: flex-end; }
 .sender { margin: 0 0 3px 12px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .sender:hover { color: var(--indigo); text-decoration: none; }
+.sender.is-gone:hover { color: var(--muted); }
+.pane-id.is-gone { cursor: default; }
+.pane-id.is-gone:hover .av { transform: none; }
 .line { display: flex; align-items: center; gap: 4px; max-width: 100%; }
 .row.me .line { flex-direction: row-reverse; }
 

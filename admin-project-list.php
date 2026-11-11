@@ -27,12 +27,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             project_notify_team($conn, $id, 0, 'project_removed',
                 'The project "' . $p['title'] . '" was removed by an admin.' . ($note !== '' ? ' Reason: ' . $note : ''), 'projects');
 
+            $banner = project_banner_of($conn, $id);   // read before the row is gone
+
             // children first, then the project itself
             db_run($conn, "DELETE FROM project_updates WHERE project_id = ?", "i", array($id));
             db_run($conn, "DELETE FROM project_members WHERE project_id = ?", "i", array($id));
             db_run($conn, "DELETE FROM project_roles WHERE project_id = ?", "i", array($id));
             db_run($conn, "DELETE FROM notifications WHERE link = ?", "s", array('project?id=' . $id));  // old links would lead nowhere
             $r = db_run($conn, "DELETE FROM projects WHERE id = ?", "i", array($id));
+            if ($r['ok'] && $r['affected'] > 0 && $banner) project_banner_delete($banner);
 
             flash_set(($r['ok'] && $r['affected'] > 0) ? "Project deleted." : "Couldn't delete that project. Please try again.", ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
         }

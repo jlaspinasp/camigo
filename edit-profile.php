@@ -2,6 +2,8 @@
 session_start();
 require("db.php");
 require("auth.php");
+require("account-lib.php");
+require("validate-lib.php");
 
 $me = require_user_row($conn);
 
@@ -16,12 +18,38 @@ $message = "";
 $message_class = "";
 $coverCol = array_key_exists('cover', $me);   // true once profile-cover.sql has been run
 
-if (isset($_POST['save'])) {
+if (isset($_POST['delete_account'])) {
+
+    if (!csrf_ok()) {
+        $message = "Your session expired. Please try again.";
+        $message_class = "error";
+    } elseif (($me['role'] ?? 'user') === 'admin') {
+        $message = "Admin accounts can't be deleted here.";
+        $message_class = "error";
+    } elseif (account_has_blockers(account_blockers($conn, $me['id']))) {
+        $message = account_blockers_text(account_blockers($conn, $me['id']));
+        $message_class = "error";
+    } elseif (!empty($me['password']) && !password_verify((string)($_POST['confirm_password'] ?? ''), $me['password'])) {
+        $message = "Incorrect password. Your account was not deleted.";
+        $message_class = "error";
+    } elseif (account_delete_everything($conn, $me)) {
+        $_SESSION = array();
+        session_destroy();
+        session_start();
+        $_SESSION['login_error'] = "Your account was deleted.";
+        header("Location: login");
+        exit();
+    } else {
+        $message = "Something went wrong. Please try again.";
+        $message_class = "error";
+    }
+
+} elseif (isset($_POST['save'])) {
 
     $error = "";
 
-    $first = trim($_POST['first_name'] ?? '');
-    $last  = trim($_POST['last_name'] ?? '');
+    $first = proper_name($_POST['first_name'] ?? '');
+    $last  = proper_name($_POST['last_name'] ?? '');
     $mi    = trim($_POST['middle_initial'] ?? '');
     if ($mi !== "") {
         $mi = function_exists('mb_strtoupper') ? mb_strtoupper($mi, 'UTF-8') : strtoupper($mi);
@@ -35,8 +63,8 @@ if (isset($_POST['save'])) {
         $error = "Your session expired. Please try again.";
     } elseif ($first === '' || str_len($first) > 100) {
         $error = "Please enter your first name (up to 100 characters).";
-    } elseif (str_len($last) > 100) {
-        $error = "Your last name is too long.";
+    } elseif ($last === '' || str_len($last) > 100) {
+        $error = "Please enter your last name (up to 100 characters).";
     } elseif ($mi !== "" && !preg_match('/^\p{L}$/u', $mi)) {
         $error = "Middle initial must be a single letter.";
     } elseif (str_len($bio) > 300) {
@@ -291,11 +319,11 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
                     </div>
                     <div>
                         <label for="last_name">Last name</label>
-                        <input type="text" name="last_name" id="last_name" maxlength="100" value="<?php echo fv('last_name', $me); ?>">
+                        <input type="text" name="last_name" id="last_name" maxlength="100" required value="<?php echo fv('last_name', $me); ?>">
                     </div>
                     <div>
-                        <label for="middle_initial">M.I. <span class="opt">(opt.)</span></label>
-                        <input type="text" name="middle_initial" id="middle_initial" maxlength="1" autocomplete="off" value="<?php echo fv('middle_initial', $me); ?>">
+                        <label for="middle_initial">M.I.</label>
+                        <input type="text" name="middle_initial" id="middle_initial" maxlength="1" autocomplete="off" placeholder="Opt." value="<?php echo fv('middle_initial', $me); ?>">
                     </div>
                 </div>
             </div>
@@ -303,11 +331,11 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
             <div class="field">
                 <div class="two-col">
                     <div>
-                        <label for="course">Course <span class="opt">(optional)</span></label>
-                        <input type="text" name="course" id="course" maxlength="100" placeholder="e.g. BS Computer Science" value="<?php echo fv('course', $me); ?>">
+                        <label for="course">Course</label>
+                        <input type="text" name="course" id="course" maxlength="100" placeholder="Optional, e.g. BS Computer Science" value="<?php echo fv('course', $me); ?>">
                     </div>
                     <div>
-                        <label for="year_level">Year level <span class="opt">(optional)</span></label>
+                        <label for="year_level">Year level</label>
                         <select name="year_level" id="year_level">
                             <option value="">Not set</option>
                             <?php foreach ($years as $y) { ?>
@@ -323,15 +351,15 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
             <h2>About you</h2>
 
             <div class="field">
-                <label for="bio">Bio <span class="opt">(optional)</span></label>
-                <textarea name="bio" id="bio" maxlength="300" placeholder="A line or two about you"><?php echo fv('bio', $me); ?></textarea>
+                <label for="bio">Bio</label>
+                <textarea name="bio" id="bio" maxlength="300" placeholder="Optional. A line or two about you"><?php echo fv('bio', $me); ?></textarea>
                 <div class="hint" id="bio-count"></div>
             </div>
 
             <div class="field">
-                <label for="chip-input">Interests <span class="opt">(add as many as you like)</span></label>
+                <label for="chip-input">Interests</label>
                 <div class="chips" id="chips">
-                    <input type="text" id="chip-input" placeholder="Type an interest and press Enter" maxlength="24" autocomplete="off">
+                    <input type="text" id="chip-input" placeholder="Type an interest, press Enter" maxlength="24" autocomplete="off">
                 </div>
                 <input type="hidden" name="interests" id="interests" value="<?php echo fv('interests', $me); ?>">
             </div>
@@ -340,7 +368,7 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
         <?php if ($hasCurrently) { ?>
         <section class="panel">
             <h2>Currently into</h2>
-            <p class="club-meta">Optional. Tap what fits and fill it in.</p>
+            <p class="club-meta"><span class="opt-word">Optional. </span>Tap what fits and fill it in.</p>
             <?php $curVals = isset($_POST['currently']) && is_array($_POST['currently']) ? $_POST['currently'] : array();
                   if (!$curVals) { foreach (currently_list($me['currently_into']) as $c) { $curVals[$c[0]] = $c[1]; } } ?>
             <div class="ar" data-ar>
@@ -362,7 +390,7 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
 
         <section class="panel">
             <h2>Links</h2>
-            <p class="club-meta">Optional. Tap a network to add your link.</p>
+            <p class="club-meta"><span class="opt-word">Optional. </span>Tap a network to add your link.</p>
             <?php if (!$moreLinks || !$hasCurrently) { ?><p class="hint">More links and "Currently into" need a one-time upgrade. Run <strong>profile-more.sql</strong> in phpMyAdmin to turn them on.</p><?php } ?>
             <div class="ar" data-ar>
                 <div class="ar-rows now-grid">
@@ -399,6 +427,13 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
         </div>
 
     </form>
+
+    <?php
+    $dzKind = 'account'; $dzName = $me['username']; $dzField = 'delete_account'; $dzIdField = 'user_id'; $dzIdValue = $me['id'];
+    $dzPassword = !empty($me['password']);   // Google-only accounts have no password, so they type their username instead
+    $dzBlockers = account_blockers($conn, $me['id']);   // clubs, projects and events to delete first
+    include("danger-zone.php");
+    ?>
 
 </main>
 
@@ -666,9 +701,11 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
     var hidden = document.getElementById("interests");
     var tags = hidden.value ? hidden.value.split(",").filter(Boolean) : [];
 
+    var PH = "Type an interest, press Enter";
     function sync() { hidden.value = tags.join(","); }
 
     function render() {
+        input.placeholder = tags.length ? PH : "Optional. " + PH;
         box.querySelectorAll(".chip").forEach(function (c) { c.remove(); });
         tags.forEach(function (t, i) {
             var chip = document.createElement("span");
@@ -713,7 +750,9 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
 (function () {
     document.querySelectorAll("[data-ar]").forEach(function (box) {
         var rows = Array.prototype.slice.call(box.querySelectorAll(".ar-row")), add = box.querySelector(".ar-add");
+        var opt = box.closest("section").querySelector(".opt-word");
         function draw() {
+            if (opt) opt.hidden = rows.some(function (r) { return !r.hidden; });
             add.innerHTML = "";
             rows.forEach(function (r) {
                 if (!r.hidden) return;
