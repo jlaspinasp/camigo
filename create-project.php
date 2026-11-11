@@ -5,6 +5,7 @@ require("auth.php");
 require_once("projects-lib.php");
 
 $me = require_user_row($conn);
+require_verified($conn, $me, 'start a project');
 
 // clubs this person owns or is an officer of (they can tag a project with one)
 $clubChoices = array();

@@ -609,11 +609,15 @@ function notif_look($type) {
     switch ($type) {
         case 'club_approved':
         case 'join_accepted':
-        case 'officer_promoted': return array('good', $check);
+        case 'officer_promoted':
+        case 'verify_approved': return array('good', $check);
         case 'club_rejected':
         case 'join_declined':
-        case 'removed':       return array('bad', $cross);
-        case 'join_request':  return array('info', $userp);
+        case 'removed':
+        case 'verify_rejected':
+        case 'verify_revoked': return array('bad', $cross);
+        case 'join_request':
+        case 'verify_request': return array('info', $userp);
         case 'club_invite':   return array('invite', $mail);
         case 'club_update':
         case 'officer_removed': return array('info', $chat);
@@ -807,3 +811,6 @@ if (!function_exists('social_icon')) {
         return '<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' . $d . '</g></svg>';
     }
 }
+
+// Account verification: verified students can create clubs, events and projects
+require_once __DIR__ . '/verification-lib.php';

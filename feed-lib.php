@@ -130,7 +130,7 @@ function render_feed_item($it) {
                 <?php if ($faces) { ?>
                     <span class="faces"><?php foreach ($faces as $f) { ?><span class="face"><?php echo avatar_inner($f); ?></span><?php } ?></span>
                 <?php } ?>
-                <span><?php echo $going === 0 ? 'Be the first to RSVP' : $going . ($cap > 0 ? ' / ' . $cap : '') . ' going'; ?></span>
+                <span><?php echo $going === 0 ? 'Be the first to join' : $going . ($cap > 0 ? ' / ' . $cap : '') . ' going'; ?></span>
             </div>
             <form method="POST" action="event" class="ev-rsvp-form">
                 <?php echo csrf_field(); ?>

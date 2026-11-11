@@ -187,7 +187,7 @@ $selfBack = 'event?id=' . $eid;
             <div class="ev-lock-ic"><?php echo event_icon('lock'); ?></div>
             <span class="badge members"><?php echo event_icon('lock'); ?>Members only</span>
             <h2>This event is just for club members</h2>
-            <p class="empty">It's hosted by <strong><?php echo e($ev['club_name']); ?></strong> and only their members can see the details or RSVP. Join the club to get in.</p>
+            <p class="empty">It's hosted by <strong><?php echo e($ev['club_name']); ?></strong> and only their members can see the details or join. Join the club to get in.</p>
             <div class="ev-locked-actions">
                 <a href="club?id=<?php echo (int)$ev['club_id']; ?>" class="btn-sm btn-dark">View <?php echo e($ev['club_name']); ?></a>
                 <a href="events" class="btn-sm btn-ghost">Browse public events</a>
@@ -246,7 +246,7 @@ $selfBack = 'event?id=' . $eid;
                     <h2><?php echo $isOver ? "Who went" : "Who's going"; ?> (<?php echo $going; ?>)</h2>
 
                     <?php if ($going === 0) { ?>
-                        <p class="empty"><?php echo $isOver ? "Nobody RSVP'd to this event." : "No one yet. Be the first."; ?></p>
+                        <p class="empty"><?php echo $isOver ? "Nobody joined this event." : "No one yet. Be the first."; ?></p>
                     <?php } else { ?>
                         <?php if ($attendees) { ?>
                             <div class="member-list">
@@ -302,7 +302,7 @@ $selfBack = 'event?id=' . $eid;
                             <input type="hidden" name="back" value="<?php echo e($selfBack); ?>">
                             <?php if ($meGoing) { ?>
                                 <button type="submit" name="action" value="unrsvp" class="btn going-big"><?php echo event_icon('check'); ?>You're going</button>
-                                <p class="club-meta" style="margin-top:8px;text-align:center">Plans changed? Press it again to cancel your RSVP.</p>
+                                <p class="club-meta" style="margin-top:8px;text-align:center">Plans changed? Press it again to cancel.</p>
                                 <?php if ($state === 'upcoming') { $rp = $me['reminder_pref'] ?? 'going'; ?>
                                     <?php if ($rp === 'off') { ?>
                                         <p class="ev-remind off"><?php echo event_icon('bell'); ?><span>Reminders are off. <a href="notification-preferences#event-reminders">Turn them on</a> to get a nudge before this starts.</span></p>

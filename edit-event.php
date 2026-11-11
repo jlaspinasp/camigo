@@ -45,7 +45,7 @@ $f = array(
     'description' => $ev['description'],
     'visibility'  => ($ev['visibility'] === 'members') ? 'members' : 'public',
 );
-$visHint = ($ev['visibility'] === 'members') ? '' : 'Switching to members only removes RSVPs from people who are not in your club, and they will be told.';
+$visHint = ($ev['visibility'] === 'members') ? '' : 'Switching to members only takes anyone outside your club off the going list, and they will be told.';
 
 if (isset($_POST['save'])) {
     foreach ($f as $k => $v) $f[$k] = (string)($_POST[$k] ?? '');
@@ -75,7 +75,7 @@ if (isset($_POST['save'])) {
                 if ($clean['visibility'] === 'members' && $ev['visibility'] !== 'members') {
                     $removed = event_purge_outsider_rsvps($conn, $eid, $ev['club_id']);
                     foreach ($removed as $uid) {
-                        notify($conn, $uid, 'event_update', $clean['title'] . ' is now open to club members only, so your RSVP was removed.', 'events');
+                        notify($conn, $uid, 'event_update', $clean['title'] . ' is now open to club members only, so you were taken off the going list.', 'events');
                     }
                     $going = max(0, $going - count($removed));
                 }
@@ -87,7 +87,7 @@ if (isset($_POST['save'])) {
                 if ($timeChanged && $going > 0) {
                     event_notify_going($conn, $eid, $me['id'], 'event_update', 'The time or place for ' . $clean['title'] . ' changed. Check the new details.', 'event?id=' . $eid);
                 }
-                flash_set($removed ? "Your event was updated. It's now members only, and " . count($removed) . ($removed && count($removed) === 1 ? " RSVP from an outsider was removed." : " RSVPs from outsiders were removed.") : "Your event was updated.", "success");
+                flash_set($removed ? "Your event was updated. It's now members only, and " . count($removed) . ($removed && count($removed) === 1 ? " person outside your club was taken off the going list." : " people outside your club were taken off the going list.") : "Your event was updated.", "success");
                 header("Location: event?id=" . $eid);
                 exit();
             }

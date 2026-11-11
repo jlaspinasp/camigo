@@ -82,7 +82,7 @@ foreach ($r['rows'] as $row) { if (isset($state[$row['category']])) $state[$row[
                     <p class="remind-lead">A nudge before events so you don't miss them. <span class="remind-off-note">Turn Events on to use reminders.</span></p>
                     <label class="radio-card">
                         <input type="radio" name="reminder_pref" value="going" <?php echo ($curRemind === 'going') ? 'checked' : ''; ?><?php echo $state['events'] ? '' : ' disabled'; ?>>
-                        <span><strong>Events I'm going to</strong><small>A reminder the day before and about an hour before every event you've RSVP'd to.</small></span>
+                        <span><strong>Events I'm going to</strong><small>A reminder the day before and about an hour before every event you're going to.</small></span>
                     </label>
                     <label class="radio-card">
                         <input type="radio" name="reminder_pref" value="all" <?php echo ($curRemind === 'all') ? 'checked' : ''; ?><?php echo $state['events'] ? '' : ' disabled'; ?>>

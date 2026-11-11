@@ -183,6 +183,7 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="verify.css">
 <style>
 /* ---- image framing editor (drag to move, pinch / scroll / slider to zoom) ---- */
 .crop-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(12, 15, 58, 0.62); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
@@ -221,6 +222,29 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
 
     <?php if ($message != "") { ?>
         <div class="msg <?php echo e($message_class); ?>" style="margin-top:20px"><?php echo e($message); ?></div>
+    <?php } ?>
+
+    <?php if (verify_ready($conn)) {
+        $vLatest = verify_latest($conn, $me['id']);
+        $vWait   = verify_wait_left($vLatest);
+        $vBtn    = 'Verify account';
+        if (user_is_verified($me)) {
+            $vCls = 'good'; $vTitle = 'Verified student'; $vText = 'You can create clubs, events and projects.'; $vBtn = 'View status';
+        } elseif ($vLatest && $vLatest['status'] === 'pending') {
+            $vCls = 'wait'; $vTitle = 'Verification under review'; $vText = "An admin is checking your proof. You'll get a notification when it's decided."; $vBtn = 'View request';
+        } elseif ($vLatest && $vLatest['status'] === 'rejected') {
+            $vCls = 'bad'; $vTitle = 'Verification not approved';
+            $vText = ($vWait > 0) ? 'You can send a new request in ' . verify_wait_text($vWait) . '.' : 'You can send a new request now.';
+            $vBtn = ($vWait > 0) ? 'See details' : 'Try again';
+        } else {
+            $vCls = ''; $vTitle = 'Verify your account'; $vText = 'Verify to create clubs, events and projects. You can join without it.';
+        }
+    ?>
+    <div class="vc-card">
+        <div class="vc-ic <?php echo e($vCls); ?>"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 2.8v5.6c0 4.5-3 7.9-7.5 9.6-4.5-1.7-7.5-5.1-7.5-9.6V5.8L12 3z"/><path d="M8.6 12.2l2.5 2.5 4.4-4.9"/></svg></div>
+        <div class="vc-text"><strong><?php echo e($vTitle); ?></strong><span><?php echo e($vText); ?></span></div>
+        <a href="verify-account" class="btn-sm <?php echo ($vCls === 'good' || $vCls === 'wait') ? 'btn-ghost' : 'btn-dark'; ?>"><?php echo e($vBtn); ?></a>
+    </div>
     <?php } ?>
 
     <form method="POST" enctype="multipart/form-data">

@@ -333,57 +333,64 @@ function render_event_card($ev, $back) {
     $when    = event_when_label($ev);
     $faces   = $ev['faces'] ?? array();
     $excl    = (($ev['visibility'] ?? 'public') === 'members');
+    $blurb   = trim(preg_replace('/\s+/u', ' ', (string)($ev['description'] ?? '')));
+    $hasCover = (!empty($ev['club_cover']) && club_image_ok($ev['club_cover']));
+    $showWhen = ($state === 'upcoming' && $when !== '');
+    $showFull = ($full && $state !== 'over');
+    $hasFlags = ($excl || $state === 'live' || $state === 'over' || $showWhen || $showFull);
     ?>
-    <article class="ev-card<?php echo $state === 'over' ? ' is-over' : ''; ?><?php echo $excl ? ' is-exclusive' : ''; ?>">
-        <a class="ev-cover" href="event?id=<?php echo $id; ?>" tabindex="-1" aria-hidden="true" data-g="<?php echo (int)$ev['club_id'] % 6; ?>">
-            <?php if (!empty($ev['club_cover']) && club_image_ok($ev['club_cover'])) { ?><img src="uploads/clubs/<?php echo e($ev['club_cover']); ?>" alt="" loading="lazy" decoding="async"><?php } ?>
-        </a>
-        <div class="ev-inner">
-        <a class="ev-date t<?php echo $id % 3; ?>" href="event?id=<?php echo $id; ?>" aria-label="<?php echo e($s->format('F j')); ?>">
-            <small><?php echo e($s->format('M')); ?></small>
-            <b><?php echo e($s->format('j')); ?></b>
-            <span><?php echo e($s->format('D')); ?></span>
-        </a>
+    <article class="evc<?php echo $state === 'over' ? ' is-over' : ''; ?><?php echo $excl ? ' is-exclusive' : ''; ?>">
+        <div class="evc-cover" data-g="<?php echo (int)$ev['club_id'] % 6; ?>">
+            <?php if ($hasCover) { ?><img src="uploads/clubs/<?php echo e($ev['club_cover']); ?>" alt="" loading="lazy" decoding="async"><?php } ?>
 
-        <div class="ev-body">
-            <div class="ev-top">
-                <a class="ev-club" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo club_tile_html(array('id' => $ev['club_id'], 'name' => $ev['club_name'], 'logo' => $ev['club_logo'] ?? null), 'xs', 'span'); ?><span><?php echo e($ev['club_name']); ?></span></a>
-                <?php if ($excl) { ?><span class="badge members"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>
-                <?php if ($state === 'live') { ?><span class="badge live">Live now</span>
-                <?php } elseif ($when !== '' && $state === 'upcoming') { ?><span class="badge soon"><?php echo e($when); ?></span><?php } ?>
-                <?php if ($full && $state !== 'over') { ?><span class="badge pending">Full</span><?php } ?>
+            <div class="evc-date" aria-hidden="true">
+                <small><?php echo e($s->format('M')); ?></small>
+                <b><?php echo e($s->format('j')); ?></b>
             </div>
 
-            <h3><a href="event?id=<?php echo $id; ?>"><?php echo e($ev['title']); ?></a></h3>
+            <?php if ($hasFlags) { ?>
+                <div class="evc-flags">
+                    <?php if ($excl) { ?><span class="evc-flag members"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>
+                    <?php if ($state === 'live') { ?><span class="evc-flag live">Live now</span>
+                    <?php } elseif ($state === 'over') { ?><span class="evc-flag ended">Ended</span>
+                    <?php } elseif ($showWhen) { ?><span class="evc-flag soon"><?php echo e($when); ?></span><?php } ?>
+                    <?php if ($showFull) { ?><span class="evc-flag full">Full</span><?php } ?>
+                </div>
+            <?php } ?>
+        </div>
 
-            <?php $blurb = trim(preg_replace('/\s+/u', ' ', (string)($ev['description'] ?? ''))); ?>
-            <?php if ($blurb !== '') { ?><p class="ev-blurb"><?php echo e(str_cut($blurb, 220)); ?></p><?php } ?>
+        <div class="evc-body">
+            <a class="evc-club" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo club_tile_html(array('id' => $ev['club_id'], 'name' => $ev['club_name'], 'logo' => $ev['club_logo'] ?? null), 'xs', 'span'); ?><span><?php echo e($ev['club_name']); ?></span></a>
 
-            <div class="ev-meta">
-                <span><?php echo event_icon('clock'); ?><?php echo e(event_time_range($ev)); ?></span>
-                <span><?php echo event_icon('pin'); ?><?php echo e($ev['location']); ?></span>
+            <h3 class="evc-title"><a href="event?id=<?php echo $id; ?>"><?php echo e($ev['title']); ?></a></h3>
+
+            <?php if ($blurb !== '') { ?><p class="evc-blurb"><?php echo e(str_cut($blurb, 220)); ?></p><?php } ?>
+
+            <div class="evc-meta">
+                <span><?php echo event_icon('clock'); ?><i><?php echo e($s->format('D') . ' · ' . event_time_range($ev)); ?></i></span>
+                <span><?php echo event_icon('pin'); ?><i><?php echo e($ev['location']); ?></i></span>
             </div>
 
-            <div class="ev-foot">
-                <div class="ev-going">
+            <div class="evc-foot">
+                <div class="evc-going">
                     <?php if ($faces) { ?>
                         <span class="faces">
                             <?php foreach ($faces as $f) { ?><span class="face"><?php echo avatar_inner($f); ?></span><?php } ?>
                         </span>
                     <?php } ?>
                     <span>
-                        <?php if ($going === 0) { echo $state === 'over' ? 'No one RSVP’d' : 'Be the first to RSVP'; }
-                              else { echo $going . ($cap > 0 ? ' / ' . $cap : '') . ($state === 'over' ? ' went' : ' going'); } ?>
+                        <?php if ($going === 0) { echo $state === 'over' ? 'No one joined' : 'Be the first to join'; }
+                              else { echo '<b>' . $going . ($cap > 0 ? ' / ' . $cap : '') . '</b>' . ($state === 'over' ? ' went' : ' going'); } ?>
                     </span>
                 </div>
 
                 <?php if ($state !== 'over') { ?>
-                    <form method="POST" action="event" class="ev-rsvp-form">
+                    <form method="POST" action="event" class="ev-rsvp-form evc-rsvp">
                         <?php echo csrf_field(); ?>
                         <input type="hidden" name="event_id" value="<?php echo $id; ?>">
                         <input type="hidden" name="back" value="<?php echo e($back); ?>">
                         <?php if ($meGoing) { ?>
-                            <button type="submit" name="action" value="unrsvp" class="btn-sm going" title="Click to cancel your RSVP"><?php echo event_icon('check'); ?>Going</button>
+                            <button type="submit" name="action" value="unrsvp" class="btn-sm going" title="Click to cancel"><?php echo event_icon('check'); ?>Going</button>
                         <?php } elseif ($full) { ?>
                             <button type="button" class="btn-sm btn-ghost" disabled>Full</button>
                         <?php } else { ?>
@@ -392,7 +399,6 @@ function render_event_card($ev, $back) {
                     </form>
                 <?php } ?>
             </div>
-        </div>
         </div>
     </article>
     <?php

@@ -49,6 +49,7 @@ if (!$setupMissing && $total > 0) {
     foreach (array_keys(social_networks()) as $col) {
         if (array_key_exists($col, $me)) $extra .= ", u." . $col;
     }
+    if (array_key_exists('is_verified', $me)) $extra .= ", u.is_verified, u.role";
 
     $sql = "SELECT u.id, u.username, u.first_name, u.middle_initial, u.last_name, u.course, u.year_level, u.interests, u.photo" . $extra . "
             FROM users u" . $where . " ORDER BY u.first_name ASC, u.last_name ASC LIMIT ? OFFSET ?";
@@ -193,7 +194,7 @@ function dir_name($r) {
                             <?php } ?>
 
                             <div class="dir-id">
-                                <h3><a class="dir-link" href="profile?u=<?php echo e(urlencode($s['username'])); ?>"><?php echo e($name); ?></a></h3>
+                                <h3><a class="dir-link" href="profile?u=<?php echo e(urlencode($s['username'])); ?>"><?php echo e($name); ?></a><?php echo verified_badge($s); ?></h3>
                                 <span class="dir-user">@<?php echo e($s['username']); ?></span>
                             </div>
 

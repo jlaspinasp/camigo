@@ -4,6 +4,7 @@ require("db.php");
 require("auth.php");
 
 $me = require_login($conn);
+require_verified($conn, $me, 'create a club');
 
 $categories = array("Academic", "Arts & Culture", "Sports", "Technology", "Community Service", "Other");
 $max_pending = 3;

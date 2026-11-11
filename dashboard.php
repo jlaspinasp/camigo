@@ -98,7 +98,7 @@ $initial = strtoupper(substr($first, 0, 1));
     <?php include("logo.php"); ?>
 
     <div class="user">
-        <?php if ($isAdmin) { ?><a href="admin-clubs" class="out">Admin</a><?php } ?>
+        <?php if ($isAdmin) { ?><a href="admin-verifications" class="out">Admin</a><?php } ?>
         <a href="students" class="out">Students</a>
         <a href="clubs" class="out">Clubs</a>
         <a href="projects" class="out">Projects</a>

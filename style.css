@@ -546,14 +546,24 @@ textarea:focus, select:focus { outline: none; border-color: var(--indigo); box-s
 }
 .tile .go:hover { background: #dfe2fb; text-decoration: none; }
 
-.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 24px; }
+/* segmented tabs: shared by Events, Clubs and Projects */
+.tabs {
+    display: flex; flex-wrap: nowrap; width: fit-content; max-width: 100%;
+    gap: 2px; margin-top: 26px; padding: 4px;
+    border-radius: 14px; background: #eeeff8;
+}
 .tabs a svg { width: 14px; height: 14px; margin: -2px 6px 0 0; vertical-align: middle; }
 .tabs a {
-    padding: 8px 16px; border-radius: 999px;
-    font-size: 14px; font-weight: 600; color: var(--muted);
+    flex: none; padding: 8px 16px; border-radius: 10px;
+    font-size: 14px; font-weight: 600; white-space: nowrap; color: var(--muted);
 }
-.tabs a:hover { background: #f0f1fb; text-decoration: none; }
-.tabs a.active { color: var(--indigo-dark); background: #eceefd; }
+.tabs a:hover { color: var(--ink); background: transparent; text-decoration: none; }
+.tabs a.active { color: var(--ink); background: var(--white); box-shadow: 0 1px 2px rgba(20, 22, 58, 0.10), 0 4px 12px -4px rgba(20, 22, 58, 0.14); }
+@media (max-width: 720px) {
+    .tabs { overflow-x: auto; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+}
+@media (max-width: 600px) { .tabs a { padding: 8px 13px; } }
 
 .filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 16px 0 22px; }
 .filters input[type="text"] { flex: 1; min-width: 200px; }
@@ -1370,14 +1380,15 @@ a.hs:hover { text-decoration: none; background: rgba(255, 255, 255, 0.15); }
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; margin-top: 36px; align-items: start; }
 .home-feed-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 
-.hf-filter { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: #eeeff8; }
+/* same segmented box as .tabs (Events, Clubs, Projects) */
+.hf-filter { display: inline-flex; gap: 2px; padding: 4px; border-radius: 14px; background: #eeeff8; }
 .hf-filter button {
-    padding: 6px 14px; border: none; border-radius: 999px; background: none;
-    font-family: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer;
+    padding: 8px 16px; border: none; border-radius: 10px; background: none;
+    font-family: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; color: var(--muted); cursor: pointer;
     transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .hf-filter button:hover { color: var(--ink); }
-.hf-filter button.on { color: var(--indigo-dark); background: var(--white); box-shadow: 0 2px 8px rgba(20, 22, 58, 0.12); }
+.hf-filter button.on { color: var(--ink); background: var(--white); box-shadow: 0 1px 2px rgba(20, 22, 58, 0.10), 0 4px 12px -4px rgba(20, 22, 58, 0.14); }
 
 .hf-list { display: grid; gap: 14px; }
 .hf-none { margin-top: 14px; text-align: center; }
@@ -1449,7 +1460,7 @@ a.hs:hover { text-decoration: none; background: rgba(255, 255, 255, 0.15); }
     .hf-event { align-items: flex-start; }
     .hf-event .ev-date { width: 62px; }
     .hf-filter { width: 100%; }
-    .hf-filter button { flex: 1; padding: 6px 8px; }
+    .hf-filter button { flex: 1; padding: 8px 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .hf, .hf-filter button { transition: none; } }
 
@@ -2676,15 +2687,6 @@ button.pf-pill { cursor: pointer; }
    so the dashboard feed's date tiles are untouched)
    ========================================================== */
 
-/* segmented tabs */
-.main.wide-ev .tabs {
-    display: inline-flex; gap: 2px; margin-top: 26px; padding: 4px;
-    border-radius: 14px; background: #eeeff8;
-}
-.main.wide-ev .tabs a { padding: 8px 16px; border-radius: 10px; font-size: 14px; color: var(--muted); }
-.main.wide-ev .tabs a:hover { color: var(--ink); background: transparent; }
-.main.wide-ev .tabs a.active { color: var(--ink); background: var(--white); box-shadow: 0 1px 2px rgba(20, 22, 58, 0.10), 0 4px 12px -4px rgba(20, 22, 58, 0.14); }
-
 /* search with icon */
 .ev-search { position: relative; flex: 1; min-width: 200px; display: block; }
 .ev-search svg { position: absolute; left: 15px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); color: #8c90b3; pointer-events: none; }
@@ -2739,8 +2741,6 @@ button.pf-pill { cursor: pointer; }
 .ev-card .badge { padding: 3px 9px; font-size: 11.5px; }
 
 @media (max-width: 600px) {
-    .main.wide-ev .tabs { display: flex; overflow-x: auto; max-width: 100%; }
-    .main.wide-ev .tabs a { flex: none; padding: 8px 13px; }
     .ev-inner { gap: 14px; padding: 16px 16px 14px 14px; }
     .ev-cover { height: 64px; }
     .ev-card .ev-date, .ev-card .ev-date.t1, .ev-card .ev-date.t2 { width: 48px; padding: 7px 0 8px; border-radius: 12px; }
@@ -2835,14 +2835,16 @@ button.pf-pill { cursor: pointer; }
 .dir-pill.only-emoji .em { font-size: 16px; }
 
 /* ---- fixed slots: every card is the same size, whatever the student filled in ----
-   Font sizes match the profile page: name 30, username 14.5, course 13, headings 16, chips 12.5. */
+   Font sizes: name 24, username 14.5, course 13, headings 16, chips 12.5. */
 .dir-card .dir-id { margin-top: 14px; min-width: 0; }
 .dir-card .dir-id h3 {
-    height: 36px; margin: 0;
-    font-size: 30px; font-weight: 800; line-height: 36px; letter-spacing: -0.025em;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: flex; align-items: center;
+    height: 30px; margin: 0;
+    font-size: 24px; font-weight: 800; line-height: 30px; letter-spacing: -0.025em;
+    white-space: nowrap; overflow: hidden;
 }
-.dir-card .dir-id h3 a { display: block; overflow: hidden; text-overflow: ellipsis; }
+.dir-card .dir-id h3 a { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dir-card .dir-id h3 .vbadge { margin-left: 6px; }
 .dir-card .dir-user {
     height: 20px; margin-top: 6px; font-size: 14.5px; line-height: 20px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -2955,3 +2957,181 @@ button.pf-pill { cursor: pointer; }
 .dir-card .dir-badge { right: auto; left: 12px; max-width: calc(100% - 66px); }
 .dir-card .dir-invite-form, .dir-card .dir-invite { flex: 1; min-width: 0; }
 .dir-card .dir-actions .dir-btn { width: 100%; box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
+
+
+/* ==========================================================
+   EVENTS PAGE v3 - card grid (.evc)
+   Self-contained: the older .ev-card / .ev-inner / .ev-cover
+   rules above are no longer used by events.php. Keep .ev-date
+   and .ev-meta, the dashboard feed (.hf-event) still uses them.
+   ========================================================== */
+
+.main.ev-page { max-width: 1040px; }
+
+/* ---- header: same hero + search box as the Students page (.dir-hero / .dir-search) ---- */
+.ev-page .dir-hero .page-top { align-items: flex-start; }
+.ev-page .dir-hero .top-actions { padding-top: 2px; }
+
+/* ---- filter row under the search box (tabs left, "Clear search" right) ---- */
+.dir-bar.ev-bar { align-items: center; margin: 26px 0 0; }
+.main.ev-page .ev-bar .tabs { margin-top: 0; }
+
+/* ---- month headings span the whole grid ---- */
+.main.ev-page .ev-month { grid-column: 1 / -1; margin: 32px 0 -2px; }
+.main.ev-page .ev-month:first-child { margin-top: 10px; }
+.main.ev-page .ev-list {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px; margin-top: 16px; align-items: stretch;
+}
+
+/* ---- card ---- */
+.evc {
+    position: relative; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--white);
+    border: 1px solid #e6e8f5; border-radius: 22px;
+    box-shadow: 0 1px 2px rgba(20, 22, 58, 0.04), 0 14px 32px -24px rgba(20, 22, 58, 0.22);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.evc:hover {
+    transform: translateY(-3px); border-color: #d6d9f0;
+    box-shadow: 0 2px 4px rgba(20, 22, 58, 0.04), 0 30px 50px -28px rgba(20, 22, 58, 0.36);
+}
+.evc:has(.evc-title a:focus-visible) { outline: 3px solid rgba(51, 56, 201, 0.4); outline-offset: 2px; }
+.evc.is-exclusive { border-color: #efdfae; }
+.evc.is-exclusive:hover { border-color: #e4cc85; }
+.evc.is-over { opacity: 0.8; }
+.evc.is-over .evc-cover { filter: grayscale(0.7); }
+.evc.is-over:hover { opacity: 1; }
+
+/* ---- cover ---- */
+.evc-cover {
+    position: relative; aspect-ratio: 2.15 / 1; overflow: hidden;
+    background: linear-gradient(135deg, #0c0f3a, #3338c9);
+}
+.evc-cover img {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.evc-cover::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(12, 15, 58, 0.36) 0%, rgba(12, 15, 58, 0) 40%, rgba(12, 15, 58, 0) 65%, rgba(12, 15, 58, 0.16) 100%);
+}
+.evc:hover .evc-cover img { transform: scale(1.045); }
+/* quiet dot texture so photo-less covers don't read as flat slabs (sits under the image) */
+.evc-cover::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(rgba(255, 255, 255, 0.2) 1px, transparent 1.6px) 0 0 / 20px 20px;
+    -webkit-mask-image: linear-gradient(135deg, transparent 15%, #000 95%);
+    mask-image: linear-gradient(135deg, transparent 15%, #000 95%);
+}
+.evc-cover[data-g="0"] { background: radial-gradient(460px 180px at 90% 0%, rgba(255, 200, 87, 0.38), transparent 60%), linear-gradient(135deg, #0c0f3a, #3338c9); }
+.evc-cover[data-g="1"] { background: radial-gradient(460px 180px at 90% 0%, rgba(255, 255, 255, 0.24), transparent 60%), linear-gradient(135deg, #3338c9, #7a4dff); }
+.evc-cover[data-g="2"] { background: radial-gradient(460px 180px at 90% 0%, rgba(255, 255, 255, 0.28), transparent 60%), linear-gradient(135deg, #ff6b6b, #ffc857); }
+.evc-cover[data-g="3"] { background: radial-gradient(460px 180px at 90% 0%, rgba(255, 255, 255, 0.24), transparent 60%), linear-gradient(135deg, #12807a, #3ccf9d); }
+.evc-cover[data-g="4"] { background: radial-gradient(460px 180px at 90% 0%, rgba(255, 200, 87, 0.32), transparent 60%), linear-gradient(135deg, #1a0c3f, #5b2a9e); }
+.evc-cover[data-g="5"] { background: radial-gradient(460px 180px at 90% 0%, rgba(255, 255, 255, 0.2), transparent 60%), linear-gradient(135deg, #0c0f3a, #3338c9 62%, #ffc857); }
+
+/* date chip on the cover */
+.evc-date {
+    position: absolute; left: 16px; top: 16px; z-index: 1;
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 54px; padding: 8px 10px 7px; line-height: 1;
+    border-radius: 14px; background: rgba(255, 255, 255, 0.94);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    box-shadow: 0 8px 20px -8px rgba(12, 15, 58, 0.5);
+}
+.evc-date small { font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--indigo); }
+.evc-date b { margin-top: 5px; font-family: var(--display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
+
+/* status flags on the cover */
+.evc-flags {
+    position: absolute; right: 14px; top: 16px; z-index: 1;
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px;
+    max-width: calc(100% - 104px);
+}
+.evc-flag {
+    display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px;
+    border-radius: 999px; white-space: nowrap;
+    font-size: 12px; font-weight: 600; color: var(--indigo-dark);
+    background: rgba(255, 255, 255, 0.94);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    box-shadow: 0 6px 16px -8px rgba(12, 15, 58, 0.55);
+}
+.evc-flag svg { width: 12px; height: 12px; stroke-width: 2.2; }
+.evc-flag.members { color: #ffe2a0; background: rgba(12, 15, 58, 0.74); box-shadow: inset 0 0 0 1px rgba(255, 200, 87, 0.5); }
+.evc-flag.live { color: #fff; background: var(--coral); }
+.evc-flag.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: ev-pulse 1.6s infinite ease-in-out; }
+.evc-flag.full { color: #8a5a00; background: #fff3d6; }
+.evc-flag.ended { color: var(--muted); }
+
+/* ---- body ---- */
+.evc-body { flex: 1; display: flex; flex-direction: column; padding: 20px 22px 20px; }
+
+.evc-club {
+    position: relative; z-index: 2; align-self: flex-start;
+    display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+    font-size: 13px; font-weight: 600; color: var(--muted);
+}
+.evc-club span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evc-club:hover { color: var(--indigo); text-decoration: none; }
+
+.evc-title {
+    margin: 10px 0 0;
+    font-family: var(--display); font-size: 21px; font-weight: 700; line-height: 1.22; letter-spacing: -0.018em;
+    overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.evc-title a { color: var(--ink); transition: color 0.15s; }
+.evc-title a:hover { text-decoration: none; }
+.evc-title a::after { content: ""; position: absolute; inset: 0; z-index: 1; } /* whole card is the link */
+.evc:hover .evc-title a { color: var(--indigo); }
+
+.evc-blurb {
+    margin: 8px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.evc-meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 16px 0 20px; font-size: 13.5px; color: #4a4e78; }
+.evc-meta span { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.evc-meta svg { flex: none; width: 16px; height: 16px; color: var(--indigo); opacity: 0.75; }
+.evc-meta i { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- footer: who's going + RSVP ---- */
+.evc-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-top: auto; padding-top: 16px; border-top: 1px solid #eef0f9;
+}
+.evc-going { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 13px; color: var(--muted); }
+.evc-going b { font-weight: 600; color: var(--ink); }
+.evc .face { width: 26px; height: 26px; margin-left: -8px; font-size: 10.5px; border-color: var(--white); }
+.evc .face:first-child { margin-left: 0; }
+.evc-rsvp { position: relative; z-index: 2; margin: 0; flex: none; }
+.evc .btn-sm { height: 40px; padding: 0 20px; border-radius: 12px; font-size: 13.5px; }
+
+/* ---- responsive ---- */
+@media (max-width: 760px) {
+    .main.ev-page .ev-list { grid-template-columns: 1fr; gap: 18px; }
+    .evc-cover { aspect-ratio: 2 / 1; }
+}
+@media (max-width: 600px) {
+    .evc { border-radius: 20px; }
+    .evc-body { padding: 18px 18px 18px; }
+    .evc-title { font-size: 19px; }
+    .evc-date { left: 14px; top: 14px; }
+    .evc-flags { right: 12px; top: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .evc, .evc:hover { transition: none; transform: none; }
+    .evc-cover img, .evc:hover .evc-cover img { transition: none; transform: none; }
+    .evc-flag.live::before { animation: none; }
+}
+
+/* ---------- verified badge + admin tabs ---------- */
+.vbadge { display: inline-flex; flex: none; margin-left: 7px; vertical-align: middle; color: var(--indigo); }
+.vbadge svg { width: clamp(16px, 0.72em, 24px); height: clamp(16px, 0.72em, 24px); }
+
+.admin-tabs { display: flex; gap: 6px; width: fit-content; max-width: 100%; margin-bottom: 22px; padding: 5px; background: #eceefd; border-radius: 14px; overflow-x: auto; }
+.admin-tabs a { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: 14px; font-weight: 600; color: var(--muted); border-radius: 10px; text-decoration: none; }
+.admin-tabs a:hover { color: var(--ink); text-decoration: none; }
+.admin-tabs a.on { color: var(--ink); background: var(--white); box-shadow: 0 1px 3px rgba(12, 15, 58, 0.12); }
+.admin-tabs .n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; font-size: 12px; font-weight: 700; color: #fff; background: var(--coral); border-radius: 999px; }

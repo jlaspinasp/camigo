@@ -71,7 +71,7 @@ function tab_url($t, $q) {
 $emptyTitle = array(
     'upcoming' => "No upcoming events yet",
     'mine'     => "Nothing coming up in your clubs",
-    'going'    => "You haven't RSVP'd to anything yet",
+    'going'    => "You haven't joined any events yet",
     'past'     => "No past events",
 );
 $emptyText = array(
@@ -96,40 +96,45 @@ $emptyText = array(
 
 <?php include("topbar.php"); ?>
 
-<main class="main narrow wide-ev">
+<main class="main narrow wide-ev ev-page">
 
-    <div class="page-top">
-        <div>
-            <h1 class="page-title">Events</h1>
-            <p class="page-sub">See what's happening around campus and let the organizers know you're coming.</p>
-        </div>
-        <?php if ($owned) { ?>
-            <div class="top-actions">
-                <a href="create-event" class="btn-sm btn-dark">Post an event</a>
+    <header class="dir-hero">
+        <div class="page-top">
+            <div>
+                <h1 class="page-title">Events</h1>
+                <p class="page-sub">See what's happening around campus and let the organizers know you're coming.</p>
             </div>
-        <?php } ?>
-    </div>
+            <?php if ($owned) { ?>
+                <div class="top-actions">
+                    <a href="create-event" class="btn-sm btn-dark">Post an event</a>
+                </div>
+            <?php } ?>
+        </div>
+
+        <form method="GET" action="events" class="dir-search" role="search">
+            <?php if ($tab !== 'upcoming') { ?><input type="hidden" name="tab" value="<?php echo e($tab); ?>"><?php } ?>
+            <div class="dir-field">
+                <?php echo event_icon('search'); ?>
+                <input type="search" name="q" maxlength="60" placeholder="Search by event, club or place" value="<?php echo e($q); ?>" aria-label="Search events" autocomplete="off">
+            </div>
+
+            <button type="submit" class="btn-sm btn-dark">Search</button>
+        </form>
+    </header>
 
     <?php if ($message != "") { ?>
         <div class="msg <?php echo e($message_class); ?>" style="margin-top:20px"><?php echo e($message); ?></div>
     <?php } ?>
 
-    <div class="tabs">
-        <a href="<?php echo e(tab_url('upcoming', $q)); ?>" class="<?php echo $tab === 'upcoming' ? 'active' : ''; ?>">Upcoming</a>
-        <a href="<?php echo e(tab_url('mine', $q)); ?>" class="<?php echo $tab === 'mine' ? 'active' : ''; ?>">My clubs</a>
-        <a href="<?php echo e(tab_url('going', $q)); ?>" class="<?php echo $tab === 'going' ? 'active' : ''; ?>">I'm going</a>
-        <a href="<?php echo e(tab_url('past', $q)); ?>" class="<?php echo $tab === 'past' ? 'active' : ''; ?>">Past</a>
+    <div class="dir-bar ev-bar">
+        <div class="tabs">
+            <a href="<?php echo e(tab_url('upcoming', $q)); ?>" class="<?php echo $tab === 'upcoming' ? 'active' : ''; ?>">Upcoming</a>
+            <a href="<?php echo e(tab_url('mine', $q)); ?>" class="<?php echo $tab === 'mine' ? 'active' : ''; ?>">My clubs</a>
+            <a href="<?php echo e(tab_url('going', $q)); ?>" class="<?php echo $tab === 'going' ? 'active' : ''; ?>">I'm going</a>
+            <a href="<?php echo e(tab_url('past', $q)); ?>" class="<?php echo $tab === 'past' ? 'active' : ''; ?>">Past</a>
+        </div>
+        <?php if ($filtered) { ?><a href="<?php echo e(tab_url($tab, '')); ?>" class="cancel">Clear search</a><?php } ?>
     </div>
-
-    <form method="GET" class="filters">
-        <?php if ($tab !== 'upcoming') { ?><input type="hidden" name="tab" value="<?php echo e($tab); ?>"><?php } ?>
-        <label class="ev-search">
-            <?php echo event_icon('search'); ?>
-            <input type="text" name="q" maxlength="60" placeholder="Search by event, club or place" value="<?php echo e($q); ?>">
-        </label>
-        <button type="submit" class="btn-sm btn-dark">Search</button>
-        <?php if ($filtered) { ?><a href="<?php echo e(tab_url($tab, '')); ?>" class="cancel">Clear</a><?php } ?>
-    </form>
 
     <?php if ($setupMissing) { ?>
 

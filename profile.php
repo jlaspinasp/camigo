@@ -296,7 +296,7 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
                         </div>
                     <?php } ?>
 
-                    <h1 class="pf-name"><?php echo e($full); ?></h1>
+                    <h1 class="pf-name"><?php echo e($full); ?><?php echo verified_badge($row); ?></h1>
                     <div class="pf-user">
                         <span>@<?php echo e($row['username']); ?></span>
                         <?php if ($isOwn && !$vis) { ?><span class="badge pending">Private</span><?php } ?>

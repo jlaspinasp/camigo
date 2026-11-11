@@ -2,7 +2,7 @@
 <header class="topbar">
     <?php include("logo.php"); ?>
     <div class="user">
-        <?php if (($me['role'] ?? 'user') === 'admin') { ?><a href="admin-clubs" class="out">Admin</a><?php } ?>
+        <?php if (($me['role'] ?? 'user') === 'admin') { ?><a href="admin-verifications" class="out">Admin</a><?php } ?>
         <a href="students" class="out">Students</a>
         <a href="clubs" class="out">Clubs</a>
         <a href="projects" class="out">Projects</a>

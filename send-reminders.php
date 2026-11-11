@@ -136,7 +136,7 @@ foreach ($ev['rows'] as $e) {
         $full = ($e['capacity'] !== null && (int)$e['going'] >= (int)$e['capacity']);
         if ($prefReady && !$full) {
             $sent['nudge'] += rem_send($conn, $e['id'], 'nudge', $claimNudge, $ntype,
-                $e['club_name'] . ': ' . $e['title'] . ' is ' . $when . '. Haven\'t RSVP\'d yet? Tap to join.');
+                $e['club_name'] . ': ' . $e['title'] . ' is ' . $when . '. Haven\'t joined yet? Tap to say you\'re going.');
         }
     }
 }

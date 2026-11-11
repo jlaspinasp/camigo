@@ -3,6 +3,7 @@ session_start();
 require("db.php");
 require("auth.php");
 require("events-lib.php");
+require("admin-lib.php");
 
 $me = require_admin($conn);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') register_shutdown_function('chat_club_sync_quiet', $conn);
@@ -81,9 +82,9 @@ $pending = db_run($conn,
 
 $tableMissing = !$pending['ok'];
 
-$reviewed = db_run($conn,
-    "SELECT name, category, status, review_note, reviewed_at FROM clubs
-     WHERE status IN ('approved', 'rejected') ORDER BY reviewed_at DESC LIMIT 15");
+$q = str_cut(trim((string)($_GET['q'] ?? '')), 60);
+$clubTotal = $tableMissing ? 0 : admin_clubs_search($conn, '', 'all', 0, 0)['total'];
+$found = ($q !== '' && !$tableMissing) ? admin_clubs_search($conn, $q, 'all', ADMIN_PEEK, 0) : array('rows' => array(), 'total' => 0);
 
 // approved clubs with a similar name, to help the admin spot near-duplicates
 function similar_clubs($conn, $id, $key) {
@@ -107,12 +108,15 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="verify.css">
 </head>
 <body>
 
 <?php include("topbar.php"); ?>
 
 <main class="main narrow">
+
+    <?php $adminActive = 'clubs'; include("admin-nav.php"); ?>
 
     <h1 class="page-title">Club requests</h1>
     <p class="page-sub">Review new clubs before they appear on Camigo. Check for duplicates, then approve or reject.</p>
@@ -176,24 +180,31 @@ $initial = strtoupper(substr($me['first_name'], 0, 1));
     </section>
 
     <section class="panel">
-        <h2>Recently reviewed</h2>
-        <?php if (!$reviewed['rows']) { ?>
-            <p class="empty">Nothing reviewed yet.</p>
+        <div class="va-panel-head">
+            <h2>Reviewed clubs (<?php echo (int)$clubTotal; ?>)</h2>
+            <a href="admin-club-list" class="btn-sm btn-ghost">View all clubs</a>
+        </div>
+
+        <?php echo admin_search_form('admin-clubs', $q, 'Search by club, category or requester', 'Search clubs'); ?>
+
+        <?php if ($q === '') { ?>
+            <p class="empty">Search to find an approved or rejected club, or open the full list.</p>
         <?php } else { ?>
-            <div class="club-list">
-                <?php foreach ($reviewed['rows'] as $c) { ?>
-                    <div class="club-item">
-                        <div class="club-head">
-                            <strong><?php echo e($c['name']); ?></strong>
-                            <span class="badge <?php echo e($c['status']); ?>"><?php echo e(ucfirst($c['status'])); ?></span>
-                        </div>
-                        <div class="club-meta">
-                            <?php echo e($c['category']); ?><?php if ($c['reviewed_at']) { ?> &middot; <?php echo e(date('M j, Y', strtotime($c['reviewed_at']))); ?><?php } ?>
-                            <?php if ($c['review_note']) { ?> &middot; Note: <?php echo e($c['review_note']); ?><?php } ?>
-                        </div>
-                    </div>
-                <?php } ?>
+            <div class="va-bar">
+                <span class="dir-count"><?php echo (int)$found['total']; ?> <?php echo $found['total'] === 1 ? 'club' : 'clubs'; ?> match &ldquo;<?php echo e($q); ?>&rdquo;</span>
+                <a href="admin-clubs" class="va-clear">Clear search</a>
             </div>
+            <?php $backSearch = 'admin-clubs?' . http_build_query(array('q' => $q)); ?>
+            <?php if (!$found['rows']) { ?>
+                <p class="empty">No club matches that search.</p>
+            <?php } else { ?>
+                <div class="club-list">
+                    <?php foreach ($found['rows'] as $cl) { echo admin_club_row($cl, $backSearch); } ?>
+                </div>
+                <?php if ($found['total'] > ADMIN_PEEK) { ?>
+                    <p class="va-more">Showing the first <?php echo ADMIN_PEEK; ?>. <a href="admin-club-list?<?php echo e(http_build_query(array('q' => $q))); ?>">See all <?php echo (int)$found['total']; ?> matches</a></p>
+                <?php } ?>
+            <?php } ?>
         <?php } ?>
     </section>
 

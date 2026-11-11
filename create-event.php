@@ -5,6 +5,7 @@ require("auth.php");
 require("events-lib.php");
 
 $me = require_user_row($conn);
+require_verified($conn, $me, 'post an event');
 
 // owners and officers of approved clubs can post events
 $owned = event_postable_clubs($conn, $me['id']);

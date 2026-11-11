@@ -37,14 +37,14 @@
             <input type="radio" name="visibility" value="public"<?php echo ($f['visibility'] !== 'members') ? ' checked' : ''; ?>>
             <span class="vis-card">
                 <span class="vis-ic"><?php echo event_icon('globe'); ?></span>
-                <span class="vis-txt"><strong>Everyone on Camigo</strong><em>Listed for all students. Anyone can RSVP.</em></span>
+                <span class="vis-txt"><strong>Everyone on Camigo</strong><em>Listed for all students. Anyone can join.</em></span>
             </span>
         </label>
         <label class="vis-opt">
             <input type="radio" name="visibility" value="members"<?php echo ($f['visibility'] === 'members') ? ' checked' : ''; ?>>
             <span class="vis-card excl">
                 <span class="vis-ic"><?php echo event_icon('lock'); ?></span>
-                <span class="vis-txt"><strong>Club members only</strong><em>Hidden from outsiders. Only your club's members can see it and RSVP.</em></span>
+                <span class="vis-txt"><strong>Club members only</strong><em>Hidden from outsiders. Only your club's members can see it and join.</em></span>
             </span>
         </label>
     </div>
