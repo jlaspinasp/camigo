@@ -474,3 +474,47 @@ body.modal-open { overflow: hidden; }
 .att-broken span { min-width: 0; display: grid; text-align: left; }
 .att-broken strong { font-size: 13px; font-weight: 600; color: var(--ink); }
 .att-broken small { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* a deleted account's avatar: plain grey with a "?" */
+.dir-avatar.av.gone { background: #b9bdc9; color: #fff; text-shadow: none; }
+/* ==========================================================
+   FLOATING CHAT WINDOW (messages?embed=1)
+   The same chat, shown inside the popout at the bottom right: no top bar, no page padding,
+   no card borders (the window itself is the frame), and it always fills the whole frame.
+   The window is smaller than the page (about 750px wide), so the list and the open chat sit side by side in
+   tighter spacing instead of switching to one pane the way a narrow page does.
+   ========================================================== */
+body.is-embed { background: var(--white); }
+.is-embed .main.main-wide { max-width: none; margin: 0; padding: 0; }
+.is-embed .chat { grid-template-columns: 275px minmax(0, 1fr); gap: 0; height: 100vh; min-height: 0; max-height: none; }
+.is-embed .chat-list, .is-embed .chat-pane { border: 0; border-radius: 0; box-shadow: none; }
+.is-embed .chat-list { border-right: 1px solid var(--line); }
+
+/* the list column, compact */
+.is-embed .chat-list-head { padding: 14px 10px 4px 18px; }
+.is-embed .chat-list-head h1 { font-size: 21px; }
+.is-embed .chat-search { margin: 9px 14px 3px; }
+.is-embed .chat-search input { height: 39px; font-size: 14px; }
+.is-embed .chat-tabs { gap: 3px; padding: 9px 12px 11px; }
+.is-embed .chat-tabs button { height: 33px; padding: 0 13px; font-size: 13.25px; }
+.is-embed .chat-items { padding: 5px 7px 9px; }
+.is-embed .convo { gap: 11px; padding: 9px 10px; }
+.is-embed .convo .av { width: 44px; height: 44px; font-size: 17px; }
+.is-embed .convo-top strong { font-size: 14.5px; }
+.is-embed .convo-prev { font-size: 13.25px; }
+
+/* the open chat, compact */
+.is-embed .pane-head { padding: 10px 14px; }
+.is-embed .pane-id .av { width: 41px; height: 41px; font-size: 16px; }
+
+/* keep both panes whenever the window is wide enough for them (the page-wide rule collapses to one pane below 860px) */
+@media (min-width: 521px) and (max-width: 860px) {
+    .is-embed .chat { grid-template-columns: 275px minmax(0, 1fr); }
+    .is-embed .chat.has-thread .chat-list { display: flex; }
+    .is-embed .chat:not(.has-thread) .chat-pane { display: flex; }
+    .is-embed .pane-back { display: none; }
+}
+/* a really narrow window shows one thing at a time (the list, or the open chat with a back arrow) */
+@media (max-width: 520px) {
+    .is-embed .chat { grid-template-columns: 1fr; height: 100vh; min-height: 0; }
+}

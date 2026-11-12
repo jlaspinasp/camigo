@@ -6,6 +6,26 @@
     var RT = window.CamigoRT || null;
     var GONE = B.deletedName || "Deleted user";   // what shows for someone who deleted their account (set by messages.php)
 
+    /* Inside the floating chat window (messages?embed=1) chat links must stay in it, while anything else
+       (a profile, a club...) opens on the page behind it. On the full Messages page none of this applies. */
+    var EMBED = !!B.embed;
+    function nav(url) { return EMBED ? url + (url.indexOf("?") > -1 ? "&" : "?") + "embed=1" : url; }
+    function go(url) {
+        if (!EMBED || /^messages(\?|$)/.test(url)) { location.href = nav(url); return; }
+        try { window.top.location.href = url; } catch (x) { location.href = url; }
+    }
+    if (EMBED) {
+        document.addEventListener("click", function (e) {
+            if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            var a = e.target.closest ? e.target.closest("a[href]") : null;
+            if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+            var href = a.getAttribute("href") || "";
+            if (/^(https?:|mailto:|tel:|#|javascript:)/i.test(href)) return;
+            e.preventDefault();
+            go(href);
+        }, true);
+    }
+
     var listEl = document.getElementById("chat-items");
     var paneEl = document.getElementById("chat-pane");
     var chatEl = document.getElementById("chat");
@@ -132,8 +152,10 @@
 
     /* ---------------------------------------------------------------- avatars */
     function avatar(c, extra) {
-        var a = h("div", { class: "dir-avatar av" + (extra ? " " + extra : "") });
-        if (c.k === "g") {
+        var a = h("div", { class: "dir-avatar av" + (c.deleted ? " gone" : "") + (extra ? " " + extra : "") });
+        if (c.deleted) {
+            a.appendChild(document.createTextNode("?"));
+        } else if (c.k === "g") {
             if (c.logo) { a.classList.add("has-img"); a.appendChild(h("img", { src: c.logo, alt: "" })); }
             else {
                 var hue = c.hue === undefined ? (c.id * 47) % 360 : c.hue;
@@ -148,7 +170,7 @@
         }
         return a;
     }
-    function personAvatar(p, extra) { return avatar({ k: "u", photo: p.photo, initial: p.initial, name: p.name }, extra); }
+    function personAvatar(p, extra) { return avatar({ k: "u", photo: p.photo, initial: p.initial, name: p.name, deleted: p.deleted }, extra); }
 
     /* ---------------------------------------------------------------- menus + modals */
     var menuEl = null;
@@ -196,16 +218,15 @@
             iconBtn("close", "Close", closeModal)
         ]);
     }
+    // Every confirmation uses the shared dialog (confirm.js) so it matches the rest of the site.
+    // tone: "danger" = permanent, "warning" = hard to undo / removes access, "info" = routine.
     function confirmBox(o) {
-        var ok = h("button", { type: "button", class: "btn-sm " + (o.danger ? "btn-danger" : "btn-dark") + " primary", text: o.ok });
-        ok.addEventListener("click", function () {
-            ok.disabled = true;
-            Promise.resolve(o.fn()).then(function (keep) { if (keep !== false) closeModal(); else ok.disabled = false; });
+        closeMenu();
+        UIConfirm.ask({
+            title: o.title, text: o.text, ok: o.ok, icon: o.icon,
+            tone: o.tone || (o.danger ? "danger" : "info"),
+            run: o.fn
         });
-        openModal([
-            h("div", { class: "modal-body center" }, [h("h2", { text: o.title }), h("p", { class: "muted", text: o.text })]),
-            h("div", { class: "modal-foot" }, [h("button", { type: "button", class: "btn-sm btn-ghost", text: "Cancel", onclick: closeModal }), ok])
-        ]);
     }
 
     /* ---------------------------------------------------------------- chat list */
@@ -379,7 +400,7 @@
         if (isGroup && !mine) {
             var av = h("div", { class: "row-av" });
             if (lastOf) {
-                var link = h(m.deleted ? "span" : "a", { href: m.deleted ? null : profileUrl(m.username), title: m.name }, [personAvatar({ photo: m.photo, initial: m.initial, name: m.name }, "xs")]);
+                var link = h(m.deleted ? "span" : "a", { href: m.deleted ? null : profileUrl(m.username), title: m.name }, [personAvatar({ photo: m.photo, initial: m.initial, name: m.name, deleted: m.deleted }, "xs")]);
                 av.appendChild(link);
             }
             row.appendChild(av);
@@ -542,8 +563,8 @@
     function headMenu(o, isGroup) {
         var items = o.deleted ? [] : [{ icon: o.muted ? "bell" : "bellOff", label: o.muted ? "Unmute notifications" : "Mute notifications", fn: toggleMute }];
         if (isGroup) {
-            if (o.club) items.push({ icon: "club", label: "View club", fn: function () { location.href = "club?id=" + o.club; } });
-            if (o.project) items.push({ icon: "club", label: "View project", fn: function () { location.href = "project?id=" + o.project; } });
+            if (o.club) items.push({ icon: "club", label: "View club", fn: function () { go("club?id=" + o.club); } });
+            if (o.project) items.push({ icon: "club", label: "View project", fn: function () { go("project?id=" + o.project); } });
         } else if (!o.deleted) {
             items.push({ icon: "block", label: o.blockedByMe ? "Unblock " + first(o.name) : "Block " + first(o.name), fn: o.blockedByMe ? function () { setBlock(false); } : blockModal });
         }
@@ -771,7 +792,7 @@
     /* ---------------------------------------------------------------- actions */
     function unsendModal(m) {
         confirmBox({
-            title: "Unsend this message?", ok: "Unsend", danger: true,
+            title: "Unsend this message?", ok: "Unsend", tone: "danger", icon: "trash",
             text: "It will be removed for everyone in this chat. People may have already seen it.",
             fn: function () {
                 return api("unsend", { k: S.open.k, mid: m.id }).then(function (j) {
@@ -813,7 +834,7 @@
     function blockModal() {
         var o = S.open;
         confirmBox({
-            title: "Block " + o.name + "?", ok: "Block", danger: true,
+            title: "Block " + o.name + "?", ok: "Block", tone: "warning", icon: "block",
             text: "Neither of you will be able to send messages in this chat. They won't be told. You can unblock them any time.",
             fn: function () { return setBlock(true).then(function (ok) { return ok; }); }
         });
@@ -834,12 +855,12 @@
     function deleteModal() {
         var o = S.open;
         confirmBox({
-            title: "Delete this chat?", ok: "Delete chat", danger: true,
+            title: "Delete this chat?", ok: "Delete chat", tone: "warning", icon: "trash",
             text: "This clears the conversation from your account only. " + (o.k === "g" ? "Everyone else keeps the history." : first(o.name) + " will still have their copy.") + " It comes back if someone writes again.",
             fn: function () {
                 return api("clear", { k: o.k, id: o.id }).then(function (j) {
                     if (!j.ok) { toast(j.error || "We couldn't delete that chat."); return false; }
-                    location.href = "messages";
+                    go("messages");
                 });
             }
         });
@@ -847,12 +868,12 @@
     function leaveModal() {
         var o = S.open;
         confirmBox({
-            title: "Leave " + o.name + "?", ok: "Leave group", danger: true,
+            title: "Leave " + o.name + "?", ok: "Leave group", tone: "warning", icon: "exit",
             text: "You won't get new messages from this group. An admin can add you back.",
             fn: function () {
                 return api("group_leave", { id: o.id }).then(function (j) {
                     if (!j.ok) { toast(j.error || "We couldn't do that."); return false; }
-                    location.href = "messages";
+                    go("messages");
                 });
             }
         });
@@ -940,7 +961,7 @@
         create.addEventListener("click", function () {
             err.hidden = true; create.disabled = true;
             api("group_create", { name: name.value, members: p.ids() }, photo).then(function (j) {
-                if (j.ok) { location.href = "messages?g=" + j.id; return; }
+                if (j.ok) { go("messages?g=" + j.id); return; }
                 create.disabled = false; err.textContent = j.error || "Something went wrong."; err.hidden = false;
             });
         });
@@ -1011,7 +1032,7 @@
                 ]);
                 if (j.admin && p.id !== B.me) {
                     row.appendChild(h("button", { type: "button", class: "icon-btn danger", title: "Remove " + p.name, "aria-label": "Remove " + p.name, onclick: function () {
-                        confirmBox({ title: "Remove " + p.name + "?", ok: "Remove", danger: true, text: "They'll no longer see new messages in this group.", fn: function () {
+                        confirmBox({ title: "Remove " + p.name + "?", ok: "Remove", tone: "warning", icon: "userminus", text: "They'll no longer see new messages in this group.", fn: function () {
                             return api("group_remove", { id: o.id, uid: p.id }).then(function (r) {
                                 if (!r.ok) { toast(r.error || "Couldn't remove."); return false; }
                                 addSys(o.id, r.sys); o.members = Math.max(1, o.members - 1); replaceHead(); toast(p.name + " was removed");
@@ -1111,7 +1132,7 @@
         RT.userChannel.bind("group-removed", function (d) {
             S.convos = S.convos.filter(function (c) { return !same(c, "g", d.gid); });
             renderList();
-            if (openIs("g", d.gid)) { toast("You were removed from this group"); setTimeout(function () { location.href = "messages"; }, 900); }
+            if (openIs("g", d.gid)) { toast("You were removed from this group"); setTimeout(function () { go("messages"); }, 900); }
         });
         RT.userChannel.bind("group-updated", function (d) {
             var c = findConvo("g", d.gid); if (c) { c.name = d.name; if (d.logo !== undefined) c.logo = d.logo; }
@@ -1169,7 +1190,7 @@
     // text typed in a student's card on the Students page lands in the composer, ready to send
     if (B.draft && S.open && S.open.k === "u" && !S.open.missing && el.ta) {
         el.ta.value = B.draft; grow(); updateSend(); el.ta.focus();
-        try { history.replaceState(null, "", "messages?u=" + encodeURIComponent(S.open.username || "")); } catch (x) {}
+        try { history.replaceState(null, "", nav("messages?u=" + encodeURIComponent(S.open.username || ""))); } catch (x) {}
     }
 
     // the live connection is optional; without it the page refreshes itself now and then

@@ -6,6 +6,7 @@ require("auth.php");
 
 $me = require_user_row($conn);
 $meId = (int)$me['id'];
+$embed = !empty($_GET['embed']);   // shown inside the floating chat window: just the chat, no top bar
 
 // attachments are served from this same address, so they work wherever messages already works
 if (isset($_GET['file'])) {
@@ -426,7 +427,7 @@ $wantU = trim($_GET['u'] ?? '');
 $wantG = (int)($_GET['g'] ?? 0);
 $wantI = ($wantU === '') ? (int)($_GET['uid'] ?? 0) : 0;   // a chat with someone who deleted their account has no username to open it by
 
-$boot = array('me' => $meId, 'meName' => full_name($me), 'deletedName' => DELETED_USER, 'csrf' => csrf_token(), 'rt' => $rt, 'convos' => array(), 'open' => null,
+$boot = array('me' => $meId, 'meName' => full_name($me), 'deletedName' => DELETED_USER, 'csrf' => csrf_token(), 'rt' => $rt, 'embed' => $embed, 'convos' => array(), 'open' => null,
               'maxFile' => chat_max_file(), 'maxFiles' => CHAT_MAX_FILES, 'groupMax' => CHAT_GROUP_MAX,
               'accept' => '.' . implode(',.', array_keys(chat_allowed_types())));
 $boot['draft'] = str_cut(trim((string)($_GET['draft'] ?? '')), 1000);   // text typed in the Students card
@@ -575,9 +576,35 @@ $hasThread = ($wantU !== '' || $wantI > 0 || $wantG > 0);
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="messages.css?v=<?php echo (int)@filemtime(__DIR__ . '/messages.css'); ?>">
 </head>
-<body class="page-messages">
+<body class="page-messages<?php echo $embed ? ' is-embed' : ''; ?>">
 
-<?php include("topbar.php"); ?>
+<?php
+$noChatPopout = true;   // this page IS the chat, so the floating window stays out of its way
+if ($embed) {
+    // inside the floating window there is no top bar, but the chat still needs its live connection
+    $unreadMsg = unread_messages($conn, $me['id']);
+    $rtUserId  = $me['id'];
+    include("realtime.php");
+?>
+<script>
+// keep the page behind the window in step: its unread badge, and which chat is open right now
+(function () {
+    var RT = window.CamigoRT, P = null;
+    try { if (window.parent && window.parent !== window && window.parent.CamigoPop) P = window.parent; } catch (e) {}
+    if (!RT || !P) return;
+    var base = RT.setBadge, open = "";
+    RT.setBadge = function (n) {
+        base(n);
+        try { if (P.CamigoRT) { P.CamigoRT.muted = RT.muted; P.CamigoRT.setBadge(n); } } catch (e) {}
+    };
+    Object.defineProperty(RT, "open", {
+        configurable: true,
+        get: function () { return open; },
+        set: function (v) { open = v; try { P.CamigoPop.watch(v); } catch (e) {} }
+    });
+})();
+</script>
+<?php } else { include("topbar.php"); } ?>
 
 <main class="main main-wide">
 
@@ -630,6 +657,7 @@ $hasThread = ($wantU !== '' || $wantI > 0 || $wantG > 0);
 
 <?php if (!$setupMissing) { ?>
 <script>window.CHAT_BOOT = <?php echo json_encode($boot, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE); ?>;</script>
+<script src="confirm.js?v=<?php echo (int)@filemtime(__DIR__ . '/confirm.js'); ?>"></script>
 <script src="messages.js?v=<?php echo (int)@filemtime(__DIR__ . '/messages.js'); ?>"></script>
 <?php } ?>
 

@@ -37,3 +37,4 @@ if (function_exists('pusher_enabled') && pusher_enabled() && !empty($rtUserId)) 
 })();
 </script>
 <?php } ?>
+<?php include("chat-popout.php"); // the floating Messages window, on every page that has the top bar ?>

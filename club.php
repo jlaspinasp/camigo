@@ -3,6 +3,7 @@ session_start();
 require("db.php");
 require("auth.php");
 require("events-lib.php");
+require("feed-lib.php");
 
 $me  = require_user_row($conn);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') register_shutdown_function('chat_club_sync_quiet', $conn);
@@ -384,6 +385,7 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="confirm.js?v=<?php echo (int)@filemtime(__DIR__ . '/confirm.js'); ?>" defer></script>
 </head>
 <body>
 
@@ -430,6 +432,9 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                         <?php if ($clubChatId) { ?>
                             <a href="messages?g=<?php echo (int)$clubChatId; ?>" class="btn-sm btn-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-8L6.5 20.5V16.5H5A1.5 1.5 0 013.5 15V6A1.5 1.5 0 015 4.5z"/></svg>Group chat</a>
                         <?php } ?>
+                        <?php if ($isStaff) { ?>
+                            <a href="create-event?club=<?php echo (int)$club['id']; ?>" class="btn-sm btn-ghost">Post an event</a>
+                        <?php } ?>
                         <?php if ($isOwner) { ?>
                             <a href="edit-club?id=<?php echo (int)$club['id']; ?>" class="btn-sm btn-ghost">Edit club</a>
                         <?php } else { ?>
@@ -441,7 +446,7 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                                     <button type="submit" name="action" value="cancel" class="btn-sm btn-ghost">Cancel</button>
                                 <?php } elseif ($isMember || $isOfficer) { ?>
                                     <?php if (!$isOfficer) { ?><span class="badge approved">Member</span><?php } ?>
-                                    <button type="submit" name="action" value="leave" class="btn-sm btn-ghost" onclick="return confirm('Leave this club?<?php echo $isOfficer ? ' You will lose your officer role.' : ''; ?>');">Leave</button>
+                                    <button type="submit" name="action" value="leave" class="btn-sm btn-ghost" data-confirm="<?php echo $isOfficer ? 'You will lose your officer role and leave this club.' : 'You will no longer be a member of this club.'; ?>" data-confirm-title="Leave this club?" data-confirm-ok="Leave club" data-confirm-tone="warning" data-confirm-icon="exit">Leave</button>
                                 <?php } else { ?>
                                     <?php if ($inviteOnly && !$hasValidInvite) { ?>
                                         <span class="badge invite"><?php echo event_icon('lock'); ?>Invite only</span>
@@ -465,17 +470,17 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
         <div class="club-main">
 
         <?php if ($isOwner && $pending) { ?>
-            <section class="panel" id="join-requests">
+            <section class="panel rq-panel" id="join-requests">
                 <h2>Join requests (<?php echo count($pending); ?>)</h2>
                 <div class="club-list">
                     <?php foreach ($pending as $p) { $line = member_line($p); ?>
-                        <div class="club-item">
+                        <div class="club-item rq-item">
                             <div class="req">
                                 <div class="req-who">
                                     <div class="p-avatar tiny"><?php echo avatar_inner($p); ?></div>
-                                    <div>
-                                        <strong><?php echo e(trim($p['first_name'] . ' ' . ($p['last_name'] ?? ''))); ?></strong>
-                                        <div class="club-meta">@<?php echo e($p['username']); ?><?php if ($line !== '') { ?> &middot; <?php echo e($line); ?><?php } ?></div>
+                                    <div class="rq-text">
+                                        <a class="rq-name" href="profile?u=<?php echo e(urlencode($p['username'])); ?>"><?php echo e(trim($p['first_name'] . ' ' . ($p['last_name'] ?? ''))); ?></a>
+                                        <div class="rq-meta">@<?php echo e($p['username']); ?><?php if ($line !== '') { ?> &middot; <?php echo e($line); ?><?php } ?></div>
                                     </div>
                                 </div>
                                 <form method="POST" class="req-actions">
@@ -492,7 +497,7 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
             </section>
         <?php } ?>
 
-        <section class="panel" id="updates">
+        <section class="panel hf-flat" id="updates">
             <div class="club-head" style="margin-bottom:16px">
                 <h2 style="margin:0">Announcements</h2>
             </div>
@@ -537,40 +542,29 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                     <p><?php echo $isStaff ? "Your first announcement will appear here for your club." : "When the club's owner or officers post news, you'll see it here."; ?></p>
                 </div>
             <?php } else { ?>
-                <div class="ann-feed">
-                    <?php foreach ($posts as $p) {
+                <div class="hf-list hf-full-list">
+                    <?php $feedKinds = feed_kinds(); foreach ($posts as $p) {
                         $isPinned = ((int)$p['pinned'] === 1);
                         $kind     = $p['kind'] ?? 'announcement';
                         $vis      = $p['visibility'] ?? 'public';
                         $title    = $p['title'] ?? '';
-                        $kinds    = array('announcement' => array('Announcement', 'megaphone'), 'reminder' => array('Reminder', 'bell'), 'important' => array('Important', 'alert'));
-                        if (!isset($kinds[$kind])) $kind = 'announcement';
+                        if (!isset($feedKinds[$kind])) $kind = 'announcement';
                         $gone     = user_gone($p);   // the author deleted their account: shown as "Deleted user", no profile to open
                         $plink    = $gone ? '' : (($p['username'] === $me['username']) ? 'profile' : 'profile?u=' . urlencode($p['username']));
                         $fullDate = (new DateTime('@' . (int)$p['ts']))->setTimezone(event_tz())->format('M j, Y \a\t g:i A');
-                    ?>
-                        <article id="post-<?php echo (int)$p['id']; ?>" class="ann k-<?php echo e($kind); ?><?php echo $isPinned ? ' pinned' : ''; ?><?php echo $vis === 'members' ? ' is-members' : ''; ?>">
-                            <div class="ann-top">
-                                <span class="ann-kind k-<?php echo e($kind); ?>"><?php echo event_icon($kinds[$kind][1]); ?><?php echo e($kinds[$kind][0]); ?></span>
-                                <?php if ($vis === 'members') { ?><span class="badge members"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>
-                                <?php if ($isPinned) { ?><span class="ann-pinned"><?php echo event_icon('pushpin'); ?>Pinned</span><?php } ?>
-                                <time class="ann-time" title="<?php echo e($fullDate); ?>"><?php echo e(time_ago($p['ts'])); ?></time>
-                            </div>
 
-                            <?php if ($title !== '') { ?><h3 class="ann-title"><?php echo e($title); ?></h3><?php } ?>
+                        // the dashboard's quiet meta line: kind . when . members only (plus pinned and edited on this page)
+                        $meta = array(
+                            '<span class="hf-kind k-' . e($kind) . '">' . event_icon($feedKinds[$kind][1]) . e($feedKinds[$kind][0]) . '</span>',
+                            '<time title="' . e($fullDate) . '">' . e(time_ago($p['ts'])) . '</time>',
+                        );
+                        if ($vis === 'members')   $meta[] = '<span class="hf-note">' . event_icon('lock') . 'Members only</span>';
+                        if ($isPinned)            $meta[] = '<span class="hf-note hf-pinned">' . event_icon('pushpin') . 'Pinned</span>';
+                        if (!empty($p['edited'])) $meta[] = '<span class="hf-note">Edited</span>';
 
-                            <div class="ann-body" data-ann-body><?php echo post_html($p['body']); ?></div>
-                            <button type="button" class="ann-more" hidden>Read more</button>
-
-                            <div class="ann-foot">
-                                <<?php echo $gone ? 'span' : 'a href="' . e($plink) . '"'; ?> class="ann-by<?php echo $gone ? ' is-gone' : ''; ?>">
-                                    <span class="p-avatar tiny"><?php echo avatar_inner($p); ?></span>
-                                    <span><strong><?php echo e(full_name($p)); ?></strong><em><?php
-                                        $roleTxt = $gone ? '' : (($p['author_role'] ?? '') === 'owner' ? 'Club owner' : ((($p['author_role'] ?? '') === 'officer') ? 'Club officer' : 'Former officer'));
-                                        echo e(trim($roleTxt . (!empty($p['edited']) ? ($roleTxt !== '' ? ' · ' : '') . 'Edited' : ''))); ?></em></span>
-                                </<?php echo $gone ? 'span' : 'a'; ?>>
-
-                                <?php if ($isStaff) { ?>
+                        // pin / edit / delete for the club's staff, at the right of the card's footer
+                        ob_start();
+                        if ($isStaff) { ?>
                                     <div class="ann-actions">
                                         <form method="POST">
                                             <?php echo csrf_field(); ?>
@@ -593,7 +587,7 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                                             </details>
                                         <?php } ?>
                                         <?php if ($isOwner || $p['username'] === $me['username']) { ?>
-                                        <form method="POST" onsubmit="return confirm('Delete this announcement?');">
+                                        <form method="POST" data-confirm="This announcement will be removed from the club page." data-confirm-title="Delete this announcement?" data-confirm-ok="Delete" data-confirm-tone="danger" data-confirm-icon="trash">
                                             <?php echo csrf_field(); ?>
                                             <input type="hidden" name="club_id" value="<?php echo (int)$club['id']; ?>">
                                             <input type="hidden" name="post_id" value="<?php echo (int)$p['id']; ?>">
@@ -601,10 +595,22 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                                         </form>
                                         <?php } ?>
                                     </div>
-                                <?php } ?>
-                            </div>
-                        </article>
-                    <?php } ?>
+                        <?php }
+                        $actionsHtml = ob_get_clean();
+
+                        feed_post_full(array(
+                            'dom_id'      => 'post-' . (int)$p['id'],
+                            'class'       => $isPinned ? 'is-pinned' : '',
+                            'tile'        => club_tile_html($club, 'sm', 'span'),
+                            'name'        => $club['name'],
+                            'meta'        => $meta,
+                            'title'       => $title,
+                            'text_html'   => feed_text_html($p['body'], true),
+                            'author'      => $p,
+                            'author_href' => $plink,
+                            'actions'     => $actionsHtml,
+                        ));
+                    } ?>
 
                     <?php if ($hiddenPosts > 0) { ?>
                         <div class="ev-teaser">
@@ -618,26 +624,9 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                 </div>
                 <?php if ($postsMore) { ?>
                     <p style="margin-top:16px"><a href="club?id=<?php echo (int)$club['id']; ?>&amp;more=1#updates">Show older announcements</a></p>
+                <?php } else { ?>
+                    <div class="hf-end">You're all caught up</div>
                 <?php } ?>
-
-                <script>
-                (function () {
-                    document.querySelectorAll("[data-ann-body]").forEach(function (el) {
-                        el.classList.add("clamp");
-                        var btn = el.nextElementSibling;
-                        if (!btn || !btn.classList.contains("ann-more")) return;
-                        if (el.scrollHeight > el.clientHeight + 2) {
-                            btn.hidden = false;
-                            btn.addEventListener("click", function () {
-                                var open = el.classList.toggle("clamp");
-                                btn.textContent = open ? "Read more" : "Show less";
-                            });
-                        } else {
-                            el.classList.remove("clamp");
-                        }
-                    });
-                })();
-                </script>
             <?php } ?>
         </section>
 
@@ -705,15 +694,13 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                                 $cst  = event_state($ce);
                             ?>
                                 <a class="side-ev" href="event?id=<?php echo $cid2; ?>">
-                                    <span class="side-ev-date t<?php echo $cid2 % 3; ?>">
-                                        <small><?php echo e($cs->format('M')); ?></small>
-                                        <b><?php echo e($cs->format('j')); ?></b>
-                                    </span>
+                                    <span class="date-badge" aria-hidden="true"><small><?php echo e($cs->format('M')); ?></small><b><?php echo e($cs->format('j')); ?></b></span>
                                     <span class="side-ev-info">
-                                        <strong><?php echo e($ce['title']); ?><?php if ($cx) { ?><span class="side-ev-lock" title="Members only"><?php echo event_icon('lock'); ?></span><?php } ?></strong>
+                                        <strong><?php echo e($ce['title']); ?></strong>
                                         <em><?php echo $cst === 'live' ? 'Happening now' : e($cs->format('D') . ' · ' . event_time_range($ce)); ?></em>
-                                        <?php if (!empty($ce['location'])) { ?><em class="loc"><?php echo e($ce['location']); ?></em><?php } ?>
                                     </span>
+                                    <?php if ($cx) { ?><span class="wk-lock" title="Members only"><?php echo event_icon('lock'); ?></span><?php } ?>
+                                    <?php if ((int)($ce['me_going'] ?? 0) > 0) { ?><span class="wk-going" title="You're going"><?php echo event_icon('check'); ?></span><?php } ?>
                                 </a>
                             <?php } ?>
                         </div>
@@ -728,60 +715,8 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                         </div>
                     <?php } ?>
 
-                    <?php if ($clubEvents) { ?>
-                        <a class="side-link" href="events">See all events <span aria-hidden="true">&rarr;</span></a>
-                    <?php } ?>
-                    <?php if ($isStaff) { ?>
-                        <a href="create-event?club=<?php echo (int)$club['id']; ?>" class="btn-sm btn-dark side-btn">Post an event</a>
-                    <?php } ?>
-                </section>
-            <?php } ?>
-
-            <?php if ($isOwner) {
-                $scheme    = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                $dir       = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/');
-                $inviteUrl = ($inviteOnly && $inviteToken !== '') ? $scheme . '://' . $_SERVER['HTTP_HOST'] . $dir . '/club?id=' . (int)$club['id'] . '&invite=' . $inviteToken : '';
-            ?>
-                <section class="side-card">
-                    <h2 class="side-label">Owner tools</h2>
-                    <div class="tool-list">
-                        <a class="tool" href="edit-club?id=<?php echo (int)$club['id']; ?>">
-                            <span class="tool-ic"><?php echo event_icon('edit'); ?></span><span class="tool-name">Edit club</span><i aria-hidden="true">&rarr;</i>
-                        </a>
-                        <a class="tool" href="club-members?id=<?php echo (int)$club['id']; ?>">
-                            <span class="tool-ic"><?php echo event_icon('users'); ?></span><span class="tool-name">Members &amp; officers</span><i aria-hidden="true">&rarr;</i>
-                        </a>
-                        <?php if ($pending) { ?>
-                            <a class="tool" href="#join-requests">
-                                <span class="tool-ic"><?php echo event_icon('plus'); ?></span><span class="tool-name">Join requests</span><b class="tool-count"><?php echo count($pending); ?></b>
-                            </a>
-                        <?php } else { ?>
-                            <div class="tool is-idle">
-                                <span class="tool-ic"><?php echo event_icon('plus'); ?></span><span class="tool-name">No pending requests</span>
-                            </div>
-                        <?php } ?>
-                    </div>
-
-                    <?php if ($inviteUrl !== '') { ?>
-                        <div class="tool-invite">
-                            <small>Invite link</small>
-                            <div class="invite-row">
-                                <input type="text" id="inviteUrl" readonly value="<?php echo e($inviteUrl); ?>" onclick="this.select()">
-                                <button type="button" id="inviteCopy" class="btn-sm btn-ghost">Copy</button>
-                            </div>
-                        </div>
-                        <script>
-                        (function () {
-                            var b = document.getElementById("inviteCopy"), i = document.getElementById("inviteUrl");
-                            if (!b || !i) return;
-                            b.addEventListener("click", function () {
-                                function done() { b.textContent = "Copied"; setTimeout(function () { b.textContent = "Copy"; }, 1500); }
-                                if (navigator.clipboard && navigator.clipboard.writeText) {
-                                    navigator.clipboard.writeText(i.value).then(done, function () { i.select(); document.execCommand("copy"); done(); });
-                                } else { i.select(); document.execCommand("copy"); done(); }
-                            });
-                        })();
-                        </script>
+                    <?php if (count($clubEvents) > 3) { ?>
+                        <a class="side-link" href="events?q=<?php echo e(urlencode(str_cut($club['name'], 60))); ?>">See all events <span aria-hidden="true">&rarr;</span></a>
                     <?php } ?>
                 </section>
             <?php } ?>
@@ -792,6 +727,17 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
     <?php } ?>
 
 </main>
+
+<script>
+// the side column sticks just under the top bar, whatever its height
+(function () {
+    var t = document.querySelector(".topbar");
+    function set() { if (t) document.documentElement.style.setProperty("--topbar-h", t.offsetHeight + "px"); }
+    set();
+    window.addEventListener("resize", set);
+    window.addEventListener("load", set);
+})();
+</script>
 
 </body>
 </html>

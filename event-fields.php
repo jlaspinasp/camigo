@@ -17,6 +17,7 @@ $bannerG       = $bannerClub > 0 ? $bannerClub % 6 : 0;
 <?php if ($bannerReady) { ?>
 <div class="field ev-banner-field">
     <label>Banner <span class="opt">(optional)</span></label>
+    <p class="club-meta" style="margin:0 0 10px">Click the image to upload it, then drag and zoom to frame it. Use the &times; to remove it.</p>
     <div class="ev-banner-up">
         <div class="cover id-cover<?php echo ($bannerCur !== '' || $bannerInherit !== '') ? ' has-img' : ''; ?><?php echo $bannerInherit !== '' ? ' is-inherited' : ''; ?>" id="banner-preview" role="button" tabindex="0" aria-label="Change banner image"
              data-gd="<?php echo $bannerG; ?>"
@@ -29,7 +30,7 @@ $bannerG       = $bannerClub > 0 ? $bannerClub % 6 : 0;
     </div>
     <input type="file" name="banner" id="banner" accept="image/jpeg,image/png,image/webp" hidden>
     <input type="hidden" name="remove_banner" id="remove-banner" value="0">
-    <p class="hint" id="banner-msg">Shown on your event page and its card. JPG, PNG or WebP, up to 10 MB, cropped wide.<?php echo !empty($bannerClubs) ? ' With no banner, a club event uses its club&rsquo;s banner.' : ''; ?></p>
+    <p class="hint" id="banner-msg">Shown on your event page and its card. JPG, PNG or WebP, up to 10 MB. You'll get to frame it after you choose it.<?php echo !empty($bannerClubs) ? ' With no banner, a club event uses its club&rsquo;s banner.' : ''; ?></p>
 </div>
 <?php } else { ?>
 <div class="msg error" style="margin-bottom:18px">Event banners need a one-time upgrade. Run <strong>events-banner.sql</strong> in phpMyAdmin to unlock them.</div>
@@ -108,19 +109,13 @@ $bannerG       = $bannerClub > 0 ? $bannerClub % 6 : 0;
 
 <?php if ($bannerReady) { ?>
 <script>
-(function () {
+// the picker + framing editor come from image-framer.php (included at the end of the page), so wait for the page to load
+document.addEventListener("DOMContentLoaded", function () {
     var area = document.getElementById("banner-preview");
-    var input = document.getElementById("banner");
-    var removeField = document.getElementById("remove-banner");
-    var removeBtn = document.getElementById("banner-remove");
     var cta = document.getElementById("banner-cta");
     var ctaSub = document.getElementById("banner-cta-sub");
-    var msg = document.getElementById("banner-msg");
-    if (!area || !input) return;
+    if (!area || !window.CamigoPicker) return;
 
-    var MAX = 10 * 1024 * 1024;
-    var TYPES = /^image\/(jpeg|png|webp)$/;
-    var msgText = msg.textContent;
     var covers = <?php echo json_encode($bannerCovers, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_FORCE_OBJECT); ?>;
     var fixedClub = <?php echo (int)$bannerClub; ?>;
     var existing = <?php echo json_encode($bannerCur !== '' ? 'uploads/events/' . $bannerCur : ''); ?>;
@@ -128,8 +123,6 @@ $bannerG       = $bannerClub > 0 ? $bannerClub % 6 : 0;
     var chosenUrl = "";
     var removed = false;
 
-    function say(t) { msg.textContent = t; msg.classList.add("bad"); }
-    function calm() { msg.textContent = msgText; msg.classList.remove("bad"); }
     function club() { return sel ? (parseInt(sel.value, 10) || 0) : fixedClub; }
 
     // the same order the site uses: own upload, then the club's banner, then a color
@@ -153,57 +146,15 @@ $bannerG       = $bannerClub > 0 ? $bannerClub % 6 : 0;
         ctaSub.style.display = url ? "none" : "";
     }
 
-    function accept(file) {
-        if (!file) return false;
-        if (!TYPES.test(file.type)) { say("Please choose a JPG, PNG or WebP image."); return false; }
-        if (file.size > MAX) { say("That image is over 10 MB. Please choose a smaller one."); return false; }
-        calm();
-        if (chosenUrl) URL.revokeObjectURL(chosenUrl);
-        chosenUrl = URL.createObjectURL(file);
-        removed = false;
-        removeField.value = "0";
-        paint();
-        return true;
-    }
-
-    function open() { input.click(); }
-    input.addEventListener("change", function () {
-        var f = input.files && input.files[0];
-        if (f && !accept(f)) input.value = "";
-    });
-    area.addEventListener("click", open);
-    area.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
-    });
-    ["dragenter", "dragover"].forEach(function (t) {
-        area.addEventListener(t, function (e) { e.preventDefault(); area.classList.add("id-drag"); });
-    });
-    ["dragleave", "drop"].forEach(function (t) {
-        area.addEventListener(t, function () { area.classList.remove("id-drag"); });
-    });
-    area.addEventListener("drop", function (e) {
-        e.preventDefault();
-        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if (!f) return;
-        try {
-            var dt = new DataTransfer();
-            dt.items.add(f);
-            input.files = dt.files;
-        } catch (err) { say("Dragging isn't supported in this browser. Click to browse instead."); return; }
-        if (!accept(f)) input.value = "";
-    });
-    removeBtn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        input.value = "";
-        if (chosenUrl) { URL.revokeObjectURL(chosenUrl); chosenUrl = ""; }
-        removed = true;
-        removeField.value = "1";
-        calm();
-        paint();
+    CamigoPicker({
+        input: "banner", area: "banner-preview", removeField: "remove-banner", remove: "banner-remove", msg: "banner-msg",
+        shape: "wide", title: "Frame your banner", fileName: "banner.jpg",
+        show: function (url) { chosenUrl = url; removed = false; paint(); },
+        reset: function () { chosenUrl = ""; removed = true; paint(); }
     });
 
     if (sel) sel.addEventListener("change", paint);
     paint();
-})();
+});
 </script>
 <?php } ?>

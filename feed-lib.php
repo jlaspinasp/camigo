@@ -152,6 +152,82 @@ function render_feed_item($it) {
     <?php
 }
 
+// ================= full-length posts =================
+// The dashboard card (.hf), for the club page's Announcements and the project page's Progress updates.
+// Same look as the dashboard feed; the one difference is that the text is never cut short
+// (no line clamp, no "See more"), so the whole post is always visible.
+
+// Post text tidied up the way the dashboard does it (paragraph breaks kept, stray spaces and
+// blank runs removed), but never truncated. $links = true also makes http(s) links clickable.
+function feed_text_html($text, $links = false) {
+    $t = str_replace(array("\r\n", "\r"), "\n", (string)$text);
+    $x = preg_replace('/[ \t]+/u', ' ', $t);
+    if ($x !== null) $t = $x;
+    $x = preg_replace('/\n{3,}/', "\n\n", $t);
+    if ($x !== null) $t = $x;
+    $h = e(trim($t));
+    if ($links) {
+        $h = preg_replace_callback('~https?://[^\s<]+~i', function ($m) {
+            $url = $m[0];
+            $tail = '';
+            while ($url !== '' && strpos('.,;:!?)', substr($url, -1)) !== false) {
+                $tail = substr($url, -1) . $tail;
+                $url = substr($url, 0, -1);
+            }
+            return '<a href="' . $url . '" target="_blank" rel="noopener noreferrer nofollow">' . $url . '</a>' . $tail;
+        }, $h);
+    }
+    return $h;
+}
+
+// One full-length card. Options:
+//   dom_id       id attribute (optional)            class        extra class names (optional)
+//   tile         HTML of the square mark at the left of the header
+//   name         the line next to it (club or project name, plain text)
+//   meta         array of HTML bits for the quiet line under the name, joined with the dashboard's dots
+//   title        headline (plain text, optional)    text_html    the post text, already safe HTML
+//   author       a row with username / first_name / last_name / photo (LEFT JOINed users)
+//   author_href  profile link, or '' for no link    actions      HTML shown at the right of the footer (optional)
+function feed_post_full($o) {
+    $tile    = (string)($o['tile'] ?? '');
+    $name    = (string)($o['name'] ?? '');
+    $meta    = isset($o['meta']) && is_array($o['meta']) ? $o['meta'] : array();
+    $title   = (string)($o['title'] ?? '');
+    $text    = (string)($o['text_html'] ?? '');
+    $author  = isset($o['author']) && is_array($o['author']) ? $o['author'] : array();
+    $href    = (string)($o['author_href'] ?? '');
+    $actions = (string)($o['actions'] ?? '');
+    $domId   = (string)($o['dom_id'] ?? '');
+    $extra   = (string)($o['class'] ?? '');
+    $linked  = (!user_gone($author) && $href !== '');
+    ?>
+    <article<?php if ($domId !== '') { ?> id="<?php echo e($domId); ?>"<?php } ?> class="hf hf-full<?php echo $extra !== '' ? ' ' . e($extra) : ''; ?>" data-type="post">
+        <div class="hf-head">
+            <div class="hf-club is-static">
+                <?php echo $tile; ?>
+                <span><strong><?php echo e($name); ?></strong><em><?php echo implode('<span class="hf-dot">&middot;</span>', $meta); ?></em></span>
+            </div>
+        </div>
+        <?php if ($title !== '') { ?><h3 class="hf-title"><?php echo e($title); ?></h3><?php } ?>
+        <p class="hf-text"><?php echo $text; ?></p>
+        <div class="hf-foot">
+            <?php if (!$linked) { ?>
+            <span class="hf-by">
+                <span class="faces"><span class="face"><?php echo avatar_inner($author); ?></span></span>
+                <span>By <?php echo e(full_name($author)); ?></span>
+            </span>
+            <?php } else { ?>
+            <span class="hf-by">
+                <a class="hf-author" href="<?php echo e($href); ?>"><span class="faces"><span class="face"><?php echo avatar_inner($author); ?></span></span></a>
+                <span>By <a class="hf-author" href="<?php echo e($href); ?>"><?php echo e(full_name($author)); ?></a></span>
+            </span>
+            <?php } ?>
+            <?php echo $actions; ?>
+        </div>
+    </article>
+    <?php
+}
+
 // ================= dashboard side rail =================
 
 // Events in the next 7 days from my clubs (members-only included) or that I RSVP'd to, grouped by day.

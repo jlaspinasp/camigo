@@ -323,7 +323,7 @@ $selfBack = 'event?id=' . $eid;
                     <small>Hosted by</small>
                     <?php if ($noClub) { ?>
 <?php $ht = event_host_tags($ev, 'ev-host-row'); echo $ht[0]; ?>
-                            <span class="p-avatar tiny"><?php echo avatar_inner(array('photo' => $ev['host_photo'] ?? null, 'first_name' => $ev['host_first'] ?? '?')); ?></span>
+                            <span class="p-avatar tiny"><?php echo avatar_inner(array('username' => $ev['host_username'] ?? null, 'photo' => $ev['host_photo'] ?? null, 'first_name' => $ev['host_first'] ?? '?')); ?></span>
                             <span><strong><?php echo e(event_host_name($ev)); ?></strong><em>Student host</em></span>
                         <?php echo $ht[1]; ?>
                     <?php } else { ?>

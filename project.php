@@ -3,6 +3,7 @@ session_start();
 require("db.php");
 require("auth.php");
 require_once("projects-lib.php");
+require_once("feed-lib.php");
 
 $me  = require_user_row($conn);
 if ($_SERVER['REQUEST_METHOD'] === 'POST') register_shutdown_function('chat_club_sync_quiet', $conn);
@@ -274,12 +275,13 @@ $profileLink = function ($row) use ($me) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="confirm.js?v=<?php echo (int)@filemtime(__DIR__ . '/confirm.js'); ?>" defer></script>
 </head>
 <body>
 
 <?php include("topbar.php"); ?>
 
-<main class="main">
+<main class="main pj-page">
 
     <?php if ($message != "") { ?>
         <div class="msg <?php echo e($message_class); ?>"><?php echo e($message); ?></div>
@@ -382,7 +384,7 @@ $profileLink = function ($row) use ($me) {
                 </section>
                 <?php } ?>
 
-                <section class="panel" style="<?php echo ($isOwner && $applicants) ? '' : 'margin-top:0'; ?>">
+                <section class="panel pj-plain" style="<?php echo ($isOwner && $applicants) ? '' : 'margin-top:0'; ?>">
                     <h2>About this project</h2>
                     <p class="ev-about"><?php echo nl2br(e($p['description'])); ?></p>
 
@@ -434,7 +436,7 @@ $profileLink = function ($row) use ($me) {
                 </section>
                 <?php } ?>
 
-                <section class="panel">
+                <section class="panel pj-plain">
                     <h2>The team (<?php echo count($team); ?>)</h2>
                     <div class="pj-team">
                         <?php foreach ($team as $t) {
@@ -453,7 +455,7 @@ $profileLink = function ($row) use ($me) {
                                 <?php if ($tOwner) { ?>
                                     <span class="badge officer"><?php echo event_icon('crown'); ?>Founder</span>
                                 <?php } elseif ($isOwner) { ?>
-                                    <form method="POST" onsubmit="return confirm('Remove this person from the team?');" style="margin:0">
+                                    <form method="POST" data-confirm="This person will be removed from the project team." data-confirm-title="Remove from team?" data-confirm-ok="Remove" data-confirm-tone="warning" data-confirm-icon="userminus" style="margin:0">
                                         <?php echo csrf_field(); ?>
                                         <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
                                         <input type="hidden" name="member_id" value="<?php echo (int)$t['mid']; ?>">
@@ -467,7 +469,7 @@ $profileLink = function ($row) use ($me) {
                     </div>
                 </section>
 
-                <section class="panel">
+                <section class="panel hf-flat">
                     <h2>Progress updates</h2>
 
                     <?php if ($canPost) { ?>
@@ -485,27 +487,42 @@ $profileLink = function ($row) use ($me) {
                     <?php if (!$updates) { ?>
                         <p class="empty"><?php echo $canPost ? "No updates yet. Post the first one to show momentum." : "No updates yet."; ?></p>
                     <?php } else { ?>
-                        <div class="pj-log">
+                        <div class="hf-list hf-full-list">
                             <?php foreach ($updates as $u) {
                                 $canDel = ($isOwner || (int)$u['user_id'] === (int)$me['id']);
-                            ?>
-                                <div class="pj-log-item">
-                                    <div class="p-avatar tiny"><?php echo avatar_inner($u); ?></div>
-                                    <div class="grow">
-                                        <div class="pj-log-head"><strong><?php echo e(full_name($u)); ?></strong><span class="club-meta"><?php echo e(time_ago($u['ts'])); ?></span></div>
-                                        <p><?php echo nl2br(e($u['body'])); ?></p>
-                                    </div>
-                                    <?php if ($canDel) { ?>
-                                        <form method="POST" onsubmit="return confirm('Delete this update?');" style="margin:0">
-                                            <?php echo csrf_field(); ?>
-                                            <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
-                                            <input type="hidden" name="update_id" value="<?php echo (int)$u['id']; ?>">
-                                            <button type="submit" name="action" value="delete_update" class="pj-icon-btn" aria-label="Delete update" title="Delete"><?php echo event_icon('trash'); ?></button>
-                                        </form>
-                                    <?php } ?>
-                                </div>
-                            <?php } ?>
+                                $gone   = user_gone($u);   // the author deleted their account: shown as "Deleted user", no profile to open
+                                $ulink  = $gone ? '' : (($u['username'] === $me['username']) ? 'profile' : 'profile?u=' . urlencode($u['username']));
+
+                                // delete button, at the right of the card's footer
+                                ob_start();
+                                if ($canDel) { ?>
+                                    <form method="POST" data-confirm="This update will be deleted from the project." data-confirm-title="Delete this update?" data-confirm-ok="Delete" data-confirm-tone="danger" data-confirm-icon="trash" style="margin:0">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
+                                        <input type="hidden" name="update_id" value="<?php echo (int)$u['id']; ?>">
+                                        <button type="submit" name="action" value="delete_update" class="pj-icon-btn" aria-label="Delete update" title="Delete"><?php echo event_icon('trash'); ?></button>
+                                    </form>
+                                <?php }
+                                $deleteHtml = ob_get_clean();
+
+                                feed_post_full(array(
+                                    'dom_id'      => 'update-' . (int)$u['id'],
+                                    'tile'        => '<span class="pj-mini-ic t' . project_tone($p['id']) . '">' . project_category_icon($p['category']) . '</span>',
+                                    'name'        => $p['title'],
+                                    'meta'        => array(
+                                        '<span class="hf-kind">' . project_icon('rocket') . 'Progress update</span>',
+                                        '<time>' . e(time_ago($u['ts'])) . '</time>',
+                                    ),
+                                    'text_html'   => feed_text_html($u['body']),
+                                    'author'      => $u,
+                                    'author_href' => $ulink,
+                                    'actions'     => $deleteHtml,
+                                ));
+                            } ?>
                         </div>
+                        <?php if (count($updates) < 20) { ?>
+                            <div class="hf-end">You're all caught up</div>
+                        <?php } ?>
                     <?php } ?>
                 </section>
             </div>
@@ -536,7 +553,7 @@ $profileLink = function ($row) use ($me) {
                         <?php } } ?>
                         <a href="<?php echo e($teamChatHref); ?>" class="btn" style="margin-top:16px"><?php echo project_icon('chat'); ?>Open team chat</a>
                         <a href="messages?u=<?php echo e(urlencode($p['username'])); ?>" class="btn-sm btn-ghost" style="margin-top:10px;width:100%"><?php echo project_icon('chat'); ?>Message the founder</a>
-                        <form method="POST" onsubmit="return confirm('Leave this project?');" style="margin-top:10px">
+                        <form method="POST" data-confirm="You will be removed from this project's team." data-confirm-title="Leave this project?" data-confirm-ok="Leave project" data-confirm-tone="warning" data-confirm-icon="exit" style="margin-top:10px">
                             <?php echo csrf_field(); ?>
                             <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
                             <button type="submit" name="action" value="leave" class="btn-sm btn-ghost" style="width:100%"><?php echo project_icon('logout'); ?>Leave project</button>
@@ -615,6 +632,17 @@ $profileLink = function ($row) use ($me) {
     <?php } ?>
 
 </main>
+
+<script>
+// the side column sticks just under the top bar, whatever its height
+(function () {
+    var t = document.querySelector(".topbar");
+    function set() { if (t) document.documentElement.style.setProperty("--topbar-h", t.offsetHeight + "px"); }
+    set();
+    window.addEventListener("resize", set);
+    window.addEventListener("load", set);
+})();
+</script>
 
 </body>
 </html>

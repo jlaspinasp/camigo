@@ -263,6 +263,7 @@ function avatar_inner($row) {
     if (!empty($row['photo']) && preg_match('/^[a-f0-9]{24}\.jpg$/', $row['photo'])) {
         return '<img src="uploads/avatars/' . e($row['photo']) . '" alt="">';
     }
+    if (user_gone($row)) return '<span class="av-gone">?</span>';   // deleted account: styled grey in style.css
     return e(first_letter($row['first_name'] ?? '?'));
 }
 
@@ -333,7 +334,7 @@ function sharpen_after_resize($img, $srcW, $dstW) {
     }
 }
 
-// ---- profile photos: re-drawn as a square JPEG (up to 800x800) with a random name ----
+// ---- profile photos: re-drawn as a square JPEG (up to 1200x1200) with a random name ----
 function avatar_dir() {
     return __DIR__ . '/uploads/avatars';
 }
@@ -388,8 +389,8 @@ function save_avatar($tmpPath, &$error) {
     $sx = (int)(($w - $side) / 2);
     $sy = (int)(($h - $side) / 2);
 
-    // up to 800px (sharp on retina screens); a small photo is never scaled UP, that only adds blur
-    $out = max(1, min(800, $side));
+    // up to 1200px (sharp on retina screens); a small photo is never scaled UP, that only adds blur
+    $out = max(1, min(1200, $side));
     $dst = imagecreatetruecolor($out, $out);
     imagefill($dst, 0, 0, imagecolorallocate($dst, 255, 255, 255));
     imagecopyresampled($dst, $src, 0, 0, $sx, $sy, $out, $out, $side, $side);
@@ -409,7 +410,7 @@ function save_avatar($tmpPath, &$error) {
     }
 
     $name = bin2hex(random_bytes(12)) . '.jpg';
-    $ok = @imagejpeg($dst, $dir . '/' . $name, 90);
+    $ok = @imagejpeg($dst, $dir . '/' . $name, 95);
 
     imagedestroy($src);
     imagedestroy($dst);
@@ -440,8 +441,8 @@ function import_google_photo($url) {
         return null;
     }
 
-    // ask for a larger version (…=s96-c becomes …=s800-c)
-    $url = preg_replace('/=s\d+-c$/', '=s800-c', $url);
+    // ask for a larger version (…=s96-c becomes …=s1200-c)
+    $url = preg_replace('/=s\d+-c$/', '=s1200-c', $url);
 
     $ch = curl_init($url);
     curl_setopt_array($ch, array(
@@ -739,8 +740,8 @@ function save_club_image($tmpPath, $kind, &$error, $dir = null) {
         $tw = max(1, min(3840, $cw));
         $th = (int)round($tw * $rh / $rw);
     } else {
-        // logos: up to 800px, never scaled up
-        $tw = max(1, min(800, $cw));
+        // logos: up to 1200px, never scaled up
+        $tw = max(1, min(1200, $cw));
         $th = $tw;
     }
 
@@ -763,7 +764,7 @@ function save_club_image($tmpPath, $kind, &$error, $dir = null) {
 
     $name = bin2hex(random_bytes(12)) . '.jpg';
     if ($kind === 'cover') imageinterlace($dst, 1);   // progressive: loads blurry-to-sharp instead of top-down
-    $ok = @imagejpeg($dst, $dir . '/' . $name, ($kind === 'cover') ? 95 : 90);
+    $ok = @imagejpeg($dst, $dir . '/' . $name, 95);
 
     imagedestroy($src);
     imagedestroy($dst);

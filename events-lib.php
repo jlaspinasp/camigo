@@ -453,7 +453,7 @@ function render_event_card($ev, $back) {
             <?php if (!empty($ev['club_id'])) { ?>
                 <a class="evc-club" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo club_tile_html(array('id' => $ev['club_id'], 'name' => $ev['club_name'], 'logo' => $ev['club_logo'] ?? null), 'xs', 'span'); ?><span><?php echo e($ev['club_name']); ?></span></a>
             <?php } else { ?>
-                <?php $ht = event_host_tags($ev, 'evc-club'); echo $ht[0]; ?><span class="p-avatar tiny"><?php echo avatar_inner(array('photo' => $ev['host_photo'] ?? null, 'first_name' => $ev['host_first'] ?? '?')); ?></span><span>Hosted by <?php echo e(event_host_name($ev)); ?></span><?php echo $ht[1]; ?>
+                <?php $ht = event_host_tags($ev, 'evc-club'); echo $ht[0]; ?><span class="p-avatar tiny"><?php echo avatar_inner(array('username' => $ev['host_username'] ?? null, 'photo' => $ev['host_photo'] ?? null, 'first_name' => $ev['host_first'] ?? '?')); ?></span><span>Hosted by <?php echo e(event_host_name($ev)); ?></span><?php echo $ht[1]; ?>
             <?php } ?>
 
             <h3 class="evc-title"><a href="event?id=<?php echo $id; ?>"><?php echo e($ev['title']); ?></a></h3>

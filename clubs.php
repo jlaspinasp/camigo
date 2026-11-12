@@ -175,9 +175,9 @@ if (!$tableMissing && !$filtered && !$mine) {
         </div>
         <div class="top-actions">
             <?php if ($reqCount > 0) { ?>
-                <a href="club-requests" class="btn-sm btn-ghost">Join requests <span class="count"><?php echo $reqCount; ?></span></a>
+                <a href="club-requests" class="create-link join-link">Join requests <span class="count"><?php echo $reqCount; ?></span></a>
             <?php } ?>
-            <a href="create-club" class="btn-sm btn-dark">Create a club</a>
+            <a href="create-club" class="create-link">Create a club</a>
         </div>
     </div>
 
@@ -209,29 +209,27 @@ if (!$tableMissing && !$filtered && !$mine) {
                 </div>
                 <?php if (trim((string)$f['description']) !== '') { ?><p class="cf-desc"><?php echo e($f['description']); ?></p><?php } ?>
                 <div class="cf-actions">
-                    <?php if ($fJoin) { ?>
-                        <form method="POST">
+                    <?php if ($fOwner) { ?><span class="cf-state">You own this club</span>
+                    <?php } elseif ($fMember || $fPending) { ?>
+                        <form method="POST" class="text-form">
                             <?php echo csrf_field(); ?>
                             <input type="hidden" name="club_id" value="<?php echo (int)$f['id']; ?>">
-                            <button type="submit" name="action" value="join" class="btn-sm cf-btn cf-primary">Request to join</button>
+                            <span class="cf-state"><?php echo $fMember ? "You're a member" : "Request sent"; ?></span>
+                            <button type="submit" name="action" value="<?php echo $fMember ? 'leave' : 'cancel'; ?>" class="text-action on-dark"><?php echo $fMember ? 'Leave' : 'Cancel'; ?></button>
                         </form>
-                        <a href="club?id=<?php echo (int)$f['id']; ?>" class="btn-sm cf-btn cf-glass">View club</a>
-                    <?php } else { ?>
-                        <a href="club?id=<?php echo (int)$f['id']; ?>" class="btn-sm cf-btn cf-primary">View club</a>
-                        <?php if ($fOwner) { ?><span class="cf-state">You own this club</span>
-                        <?php } elseif ($fMember) { ?><span class="cf-state">You're a member</span>
-                        <?php } elseif ($fPending) { ?><span class="cf-state">Request sent</span>
-                        <?php } else { ?><span class="cf-state">Invite only</span><?php } ?>
-                    <?php } ?>
+                    <?php } elseif ($fJoin) { ?>
+                        <form method="POST" class="text-form">
+                            <?php echo csrf_field(); ?>
+                            <input type="hidden" name="club_id" value="<?php echo (int)$f['id']; ?>">
+                            <button type="submit" name="action" value="join" class="text-action on-dark">Request to join</button>
+                        </form>
+                    <?php } else { ?><span class="cf-state">Invite only</span><?php } ?>
                 </div>
             </div>
         </section>
     <?php } ?>
 
-    <div class="tabs">
-        <a href="clubs" class="<?php echo $mine ? '' : 'active'; ?>">All clubs</a>
-        <a href="clubs?mine=1" class="<?php echo $mine ? 'active' : ''; ?>">My clubs</a>
-    </div>
+
 
     <form method="GET" class="filters">
         <?php if ($mine) { ?><input type="hidden" name="mine" value="1"><?php } ?>
@@ -245,6 +243,11 @@ if (!$tableMissing && !$filtered && !$mine) {
         <button type="submit" class="btn-sm btn-dark">Search</button>
         <?php if ($filtered) { ?><a href="clubs<?php echo $mine ? '?mine=1' : ''; ?>" class="cancel">Clear</a><?php } ?>
     </form>
+
+    <div class="tabs">
+        <a href="clubs" class="<?php echo $mine ? '' : 'active'; ?>">All clubs</a>
+        <a href="clubs?mine=1" class="<?php echo $mine ? 'active' : ''; ?>">My clubs</a>
+    </div>
 
     <?php if ($tableMissing) { ?>
 
@@ -275,7 +278,6 @@ if (!$tableMissing && !$filtered && !$mine) {
                 <article class="cc-card">
                     <div class="cc-top">
                         <?php echo club_media_html($c, 'cc-media'); ?>
-                        <?php if (!empty($c['invite_only'])) { ?><span class="cc-pill"><?php echo event_icon('lock'); ?>Invite only</span><?php } ?>
                     </div>
 
                     <div class="cc-body">
@@ -293,9 +295,9 @@ if (!$tableMissing && !$filtered && !$mine) {
                             <?php if ($isOwner) { ?>
                                 <div class="foot-right">
                                     <?php if ((int)$c['pending_n'] > 0) { ?>
-                                        <a href="club-requests" class="badge pending"><?php echo (int)$c['pending_n']; ?> request<?php echo ((int)$c['pending_n'] === 1) ? '' : 's'; ?></a>
+                                        <a href="club-requests" class="text-action"><?php echo (int)$c['pending_n']; ?> request<?php echo ((int)$c['pending_n'] === 1) ? '' : 's'; ?></a>
                                     <?php } ?>
-                                    <span class="badge approved">Owner</span>
+                                    <span class="status-text status-role">Owner</span>
                                 </div>
                             <?php } else { ?>
                                 <form method="POST" class="foot-right">
@@ -306,16 +308,16 @@ if (!$tableMissing && !$filtered && !$mine) {
                                     <?php if ($mine) { ?><input type="hidden" name="mine" value="1"><?php } ?>
 
                                     <?php if ($isPending) { ?>
-                                        <span class="badge pending">Request sent</span>
-                                        <button type="submit" name="action" value="cancel" class="btn-sm btn-ghost">Cancel</button>
+                                        <span class="status-text status-sent">Request sent</span>
+                                        <button type="submit" name="action" value="cancel" class="text-action">Cancel</button>
                                     <?php } elseif ($isMember) { ?>
-                                        <?php if ($isOfficer) { ?><span class="badge officer"><?php echo event_icon('star'); ?>Officer</span><?php } ?>
-                                        <button type="submit" name="action" value="leave" class="btn-sm btn-ghost">Leave</button>
+                                        <?php if ($isOfficer) { ?><span class="status-text status-role">Officer</span><?php } ?>
+                                        <button type="submit" name="action" value="leave" class="text-action">Leave</button>
                                     <?php } else { ?>
                                         <?php if (!empty($c['invite_only'])) { ?>
                                             <span class="club-meta">Ask a member for an invite</span>
                                         <?php } else { ?>
-                                            <button type="submit" name="action" value="join" class="btn-sm btn-dark">Request to join</button>
+                                            <button type="submit" name="action" value="join" class="text-action">Request to join</button>
                                         <?php } ?>
                                     <?php } ?>
                                 </form>

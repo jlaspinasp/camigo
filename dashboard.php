@@ -78,7 +78,7 @@ $initial = strtoupper(substr($first, 0, 1));
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=<?php echo (int)@filemtime(__DIR__ . '/style.css'); ?>">
 </head>
 <body>
 
@@ -218,6 +218,34 @@ $initial = strtoupper(substr($first, 0, 1));
         <?php if ($hasRail) { ?>
         <aside class="rail">
 
+            <?php if ($requests) { ?>
+                <section class="panel rail-req">
+                    <div class="rail-head">
+                        <h2>Needs your attention</h2>
+                        <span class="rail-count"><?php echo count($requests); ?></span>
+                    </div>
+                    <?php foreach (array_slice($requests, 0, 3) as $rq) { ?>
+                        <div class="req-row">
+                            <a class="req-who" href="profile?u=<?php echo e(urlencode($rq['username'])); ?>">
+                                <span class="faces"><span class="face lg"><?php echo avatar_inner($rq); ?></span></span>
+                                <span><strong><?php echo e(full_name($rq)); ?></strong><em>wants to join <?php echo e($rq['club_name']); ?></em></span>
+                            </a>
+                            <form method="POST" action="club" class="req-btns">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="club_id" value="<?php echo (int)$rq['club_id']; ?>">
+                                <input type="hidden" name="member_id" value="<?php echo (int)$rq['mid']; ?>">
+                                <input type="hidden" name="back" value="dashboard">
+                                <button type="submit" name="action" value="accept" class="btn-sm btn-approve">Accept</button>
+                                <button type="submit" name="action" value="decline" class="btn-sm btn-reject">Decline</button>
+                            </form>
+                        </div>
+                    <?php } ?>
+                    <?php if (count($requests) > 3) { ?>
+                        <p class="club-meta" style="margin-top:10px">+ <?php echo count($requests) - 3; ?> more waiting. Open the club to review them.</p>
+                    <?php } ?>
+                </section>
+            <?php } ?>
+
             <?php if ($featured) { $fm = (int)$featured['members']; ?>
                 <section class="panel rail-feat">
                     <span class="feat-badge">&#9733; Featured club</span>
@@ -315,34 +343,6 @@ $initial = strtoupper(substr($first, 0, 1));
                         <?php if ($wkTotal > $wkShown) { ?>
                             <a class="wk-more" href="events">+ <?php echo $wkTotal - $wkShown; ?> more this week</a>
                         <?php } ?>
-                    <?php } ?>
-                </section>
-            <?php } ?>
-
-            <?php if ($requests) { ?>
-                <section class="panel rail-req">
-                    <div class="rail-head">
-                        <h2>Needs your attention</h2>
-                        <span class="rail-count"><?php echo count($requests); ?></span>
-                    </div>
-                    <?php foreach (array_slice($requests, 0, 3) as $rq) { ?>
-                        <div class="req-row">
-                            <a class="req-who" href="profile?u=<?php echo e(urlencode($rq['username'])); ?>">
-                                <span class="faces"><span class="face lg"><?php echo avatar_inner($rq); ?></span></span>
-                                <span><strong><?php echo e(full_name($rq)); ?></strong><em>wants to join <?php echo e($rq['club_name']); ?></em></span>
-                            </a>
-                            <form method="POST" action="club" class="req-btns">
-                                <?php echo csrf_field(); ?>
-                                <input type="hidden" name="club_id" value="<?php echo (int)$rq['club_id']; ?>">
-                                <input type="hidden" name="member_id" value="<?php echo (int)$rq['mid']; ?>">
-                                <input type="hidden" name="back" value="dashboard">
-                                <button type="submit" name="action" value="accept" class="btn-sm btn-dark">Accept</button>
-                                <button type="submit" name="action" value="decline" class="btn-sm btn-ghost">Decline</button>
-                            </form>
-                        </div>
-                    <?php } ?>
-                    <?php if (count($requests) > 3) { ?>
-                        <p class="club-meta" style="margin-top:10px">+ <?php echo count($requests) - 3; ?> more waiting. Open the club to review them.</p>
                     <?php } ?>
                 </section>
             <?php } ?>

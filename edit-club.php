@@ -194,7 +194,7 @@ if ($identity && !empty($club['invite_only']) && !empty($club['invite_token'])) 
         <?php if ($identity) { ?>
         <section class="panel">
             <h2>Club identity</h2>
-            <p class="club-meta">A logo and a cover make your page easy to recognise. Click an image to upload it, and use the &times; to remove it.</p>
+            <p class="club-meta">A logo and a cover make your page easy to recognise. Click an image to upload it, then drag and zoom to frame it. Use the &times; to remove it.</p>
 
             <div class="id-preview">
                 <div class="cover id-cover<?php echo $coverImg ? ' has-img' : ''; ?>" id="cover-preview" role="button" tabindex="0" aria-label="Change cover image"
@@ -219,7 +219,7 @@ if ($identity && !empty($club['invite_only']) && !empty($club['invite_token'])) 
             <input type="file" name="logo" id="logo" accept="image/jpeg,image/png,image/webp" hidden>
             <input type="hidden" name="remove_cover" id="remove-cover" value="0">
             <input type="hidden" name="remove_logo" id="remove-logo" value="0">
-            <p class="hint" id="id-msg">JPG, PNG or WebP, up to 10 MB. Covers are cropped wide, logos square.</p>
+            <p class="hint" id="id-msg">JPG, PNG or WebP, up to 10 MB. You'll get to frame each image after you choose it.</p>
         </section>
         <?php } else { ?>
             <div class="msg error" style="margin-top:20px">Logos, covers and invite-only clubs need a one-time upgrade. Run <strong>club-identity.sql</strong> in phpMyAdmin to unlock them.</div>
@@ -284,79 +284,13 @@ if ($identity && !empty($club['invite_only']) && !empty($club['invite_token'])) 
 </main>
 
 <?php if ($identity) { ?>
+<?php include("image-framer.php"); ?>
 <script>
 (function () {
-    var MAX = 10 * 1024 * 1024;
-    var TYPES = /^image\/(jpeg|png|webp)$/;
-    var msg = document.getElementById("id-msg");
-    var msgText = msg.textContent;
-
-    function say(text) { msg.textContent = text; msg.classList.add("bad"); }
-    function calm() { msg.textContent = msgText; msg.classList.remove("bad"); }
-
-    // one picker per image: click, keyboard, drag and drop, change and remove
-    function picker(o) {
-        var input = document.getElementById(o.input);
-        var area = document.getElementById(o.area);
-        var removeField = document.getElementById(o.removeField);
-
-        function open() { input.click(); }
-
-        function accept(file) {
-            if (!file) return false;
-            if (!TYPES.test(file.type)) { say("Please choose a JPG, PNG or WebP image."); return false; }
-            if (file.size > MAX) { say("That image is over 10 MB. Please choose a smaller one."); return false; }
-            calm();
-            removeField.value = "0";
-            o.show(URL.createObjectURL(file));
-            return true;
-        }
-
-        input.addEventListener("change", function () {
-            var f = input.files && input.files[0];
-            if (!f) return;
-            if (!accept(f)) input.value = "";
-        });
-
-        o.openers.forEach(function (id) {
-            var el = document.getElementById(id);
-            el.addEventListener("click", function (e) { e.stopPropagation(); open(); });
-        });
-        area.addEventListener("click", open);
-        area.addEventListener("keydown", function (e) {
-            if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
-        });
-
-        ["dragenter", "dragover"].forEach(function (t) {
-            area.addEventListener(t, function (e) { e.preventDefault(); area.classList.add("id-drag"); });
-        });
-        ["dragleave", "drop"].forEach(function (t) {
-            area.addEventListener(t, function () { area.classList.remove("id-drag"); });
-        });
-        area.addEventListener("drop", function (e) {
-            e.preventDefault();
-            var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-            if (!f) return;
-            try {
-                var dt = new DataTransfer();
-                dt.items.add(f);
-                input.files = dt.files;
-            } catch (err) { say("Dragging isn't supported in this browser. Click to browse instead."); return; }
-            if (!accept(f)) input.value = "";
-        });
-
-        document.getElementById(o.remove).addEventListener("click", function (e) {
-            e.stopPropagation();
-            input.value = "";
-            removeField.value = "1";
-            calm();
-            o.reset();
-        });
-    }
-
     var cover = document.getElementById("cover-preview");
-    picker({
-        input: "cover", area: "cover-preview", removeField: "remove-cover", remove: "cover-remove", openers: [],
+    CamigoPicker({
+        input: "cover", area: "cover-preview", removeField: "remove-cover", remove: "cover-remove", msg: "id-msg",
+        shape: "wide", title: "Frame your cover photo", fileName: "cover.jpg",
         show: function (url) {
             cover.classList.add("has-img");
             cover.removeAttribute("data-g");
@@ -371,8 +305,9 @@ if ($identity && !empty($club['invite_only']) && !empty($club['invite_token'])) 
 
     var logo = document.getElementById("logo-preview");
     var logoX = document.getElementById("logo-remove");
-    picker({
-        input: "logo", area: "logo-preview", removeField: "remove-logo", remove: "logo-remove", openers: [],
+    CamigoPicker({
+        input: "logo", area: "logo-preview", removeField: "remove-logo", remove: "logo-remove", msg: "id-msg",
+        shape: "square", title: "Frame your logo", fileName: "logo.jpg",
         show: function (url) {
             logo.classList.add("has-logo");
             logo.innerHTML = "";

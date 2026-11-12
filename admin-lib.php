@@ -144,7 +144,7 @@ function admin_verified_row($s, $back) {
     $h .= '<a href="profile?u=' . e(urlencode($s['username'])) . '">' . e($name) . '</a></strong>';
     $h .= '<span class="badge approved">Verified</span></div>';
     $h .= '<div class="club-meta">@' . e($s['username']) . ($line ? ' &middot; ' . implode(' &middot; ', $line) : '') . '</div>';
-    $h .= '<form method="POST" action="admin-verifications" class="actions" onsubmit="return confirm(\'Remove this verification? They will not be able to create new clubs, events or projects until they are verified again.\');">';
+    $h .= '<form method="POST" action="admin-verifications" class="actions" data-confirm="They will not be able to create new clubs, events or projects until they are verified again." data-confirm-title="Remove this verification?" data-confirm-ok="Remove" data-confirm-tone="warning" data-confirm-icon="userminus">';
     $h .= csrf_field();
     $h .= '<input type="hidden" name="vid" value="' . (int)$s['id'] . '">';
     $h .= '<input type="hidden" name="back" value="' . e($back) . '">';
@@ -172,7 +172,7 @@ function admin_club_row($c, $back = '') {
     if (!empty($c['review_note'])) $h .= ' &middot; Note: ' . e($c['review_note']);
     $h .= '</div>';
     if ($back !== '') {
-        $h .= '<form method="POST" action="admin-club-list" class="actions" onsubmit="return confirm(\'Delete this club permanently? Its members, announcements, events and chat will be removed. This cannot be undone.\');">';
+        $h .= '<form method="POST" action="admin-club-list" class="actions" data-confirm="Its members, announcements, events and chat will be removed. This cannot be undone." data-confirm-title="Delete this club permanently?" data-confirm-ok="Delete club" data-confirm-tone="danger" data-confirm-icon="trash">';
         $h .= csrf_field();
         $h .= '<input type="hidden" name="club_id" value="' . (int)$c['id'] . '">';
         $h .= '<input type="hidden" name="back" value="' . e($back) . '">';
@@ -260,7 +260,7 @@ function admin_project_row($p, $back = '') {
     if (!empty($p['created_at'])) $h .= ' &middot; ' . e(date('M j, Y', strtotime($p['created_at'])));
     $h .= '</div>';
     if ($back !== '') {
-        $h .= '<form method="POST" action="admin-project-list" class="actions" onsubmit="return confirm(\'Delete this project permanently? Its team, roles and updates will be removed. This cannot be undone.\');">';
+        $h .= '<form method="POST" action="admin-project-list" class="actions" data-confirm="Its team, roles and updates will be removed. This cannot be undone." data-confirm-title="Delete this project permanently?" data-confirm-ok="Delete project" data-confirm-tone="danger" data-confirm-icon="trash">';
         $h .= csrf_field();
         $h .= '<input type="hidden" name="project_id" value="' . (int)$p['id'] . '">';
         $h .= '<input type="hidden" name="back" value="' . e($back) . '">';
@@ -292,7 +292,7 @@ function admin_event_row($ev, $back = '') {
     }
     $h .= '</div>';
     if ($back !== '') {
-        $h .= '<form method="POST" action="admin-event-list" class="actions" onsubmit="return confirm(\'Delete this event permanently? Everyone who is going will be told. This cannot be undone.\');">';
+        $h .= '<form method="POST" action="admin-event-list" class="actions" data-confirm="Everyone who is going will be told. This cannot be undone." data-confirm-title="Delete this event permanently?" data-confirm-ok="Delete event" data-confirm-tone="danger" data-confirm-icon="trash">';
         $h .= csrf_field();
         $h .= '<input type="hidden" name="event_id" value="' . (int)$ev['id'] . '">';
         $h .= '<input type="hidden" name="back" value="' . e($back) . '">';

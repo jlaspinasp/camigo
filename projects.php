@@ -156,14 +156,6 @@ $emptyText = array(
         <div class="msg <?php echo e($message_class); ?>" style="margin-top:20px"><?php echo e($message); ?></div>
     <?php } ?>
 
-    <div class="tabs">
-        <a href="<?php echo e(pj_tab_url('discover', $q, $cat)); ?>" class="<?php echo $tab === 'discover' ? 'active' : ''; ?>">Discover</a>
-        <a href="<?php echo e(pj_tab_url('foryou', $q, $cat)); ?>" class="<?php echo $tab === 'foryou' ? 'active' : ''; ?>"><?php echo project_icon('sparkle'); ?>For you</a>
-        <a href="<?php echo e(pj_tab_url('mine', $q, $cat)); ?>" class="<?php echo $tab === 'mine' ? 'active' : ''; ?>">My projects</a>
-        <a href="<?php echo e(pj_tab_url('applied', $q, $cat)); ?>" class="<?php echo $tab === 'applied' ? 'active' : ''; ?>">Applied</a>
-        <a href="<?php echo e(pj_tab_url('showcase', $q, $cat)); ?>" class="<?php echo $tab === 'showcase' ? 'active' : ''; ?>">Showcase</a>
-    </div>
-
     <form method="GET" class="filters">
         <?php if ($tab !== 'discover') { ?><input type="hidden" name="tab" value="<?php echo e($tab); ?>"><?php } ?>
         <input type="text" name="q" maxlength="60" placeholder="Search by project, skill or role" value="<?php echo e($q); ?>">
@@ -176,6 +168,14 @@ $emptyText = array(
         <button type="submit" class="btn-sm btn-dark">Search</button>
         <?php if ($filtered) { ?><a href="<?php echo e(pj_tab_url($tab, '', '')); ?>" class="cancel">Clear</a><?php } ?>
     </form>
+
+    <div class="tabs">
+        <a href="<?php echo e(pj_tab_url('discover', $q, $cat)); ?>" class="<?php echo $tab === 'discover' ? 'active' : ''; ?>">Discover</a>
+        <a href="<?php echo e(pj_tab_url('foryou', $q, $cat)); ?>" class="<?php echo $tab === 'foryou' ? 'active' : ''; ?>"><?php echo project_icon('sparkle'); ?>For you</a>
+        <a href="<?php echo e(pj_tab_url('mine', $q, $cat)); ?>" class="<?php echo $tab === 'mine' ? 'active' : ''; ?>">My projects</a>
+        <a href="<?php echo e(pj_tab_url('applied', $q, $cat)); ?>" class="<?php echo $tab === 'applied' ? 'active' : ''; ?>">Applied</a>
+        <a href="<?php echo e(pj_tab_url('showcase', $q, $cat)); ?>" class="<?php echo $tab === 'showcase' ? 'active' : ''; ?>">Showcase</a>
+    </div>
 
     <?php if ($setupMissing) { ?>
 

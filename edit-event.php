@@ -169,6 +169,7 @@ $minDate = min(event_now()->format('Y-m-d'), $s->format('Y-m-d'));
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="confirm.js?v=<?php echo (int)@filemtime(__DIR__ . '/confirm.js'); ?>" defer></script>
 </head>
 <body>
 
@@ -185,7 +186,7 @@ $minDate = min(event_now()->format('Y-m-d'), $s->format('Y-m-d'));
     <?php } ?>
 
     <?php
-    $cancelAsk = 'Cancel this event? ' . ((!$locked && $going > 0) ? 'Everyone who is going will be told. ' : '') . 'It will be removed completely and this cannot be undone.';
+    $cancelAsk = ((!$locked && $going > 0) ? 'Everyone who is going will be told. ' : '') . 'It will be removed completely and this cannot be undone.';
     $cancelBtn = $canCancel ? '<button type="submit" form="cancel-form" name="cancel_event" value="1" class="btn inline btn-danger">Cancel event</button>' : '';
     ?>
 
@@ -213,13 +214,15 @@ $minDate = min(event_now()->format('Y-m-d'), $s->format('Y-m-d'));
     <?php } ?>
 
     <?php if ($canCancel) { ?>
-    <form id="cancel-form" method="POST" onsubmit="return confirm(<?php echo e(json_encode($cancelAsk)); ?>);">
+    <form id="cancel-form" method="POST" data-confirm="<?php echo e($cancelAsk); ?>" data-confirm-title="Cancel this event?" data-confirm-ok="Cancel event" data-confirm-cancel="Keep event" data-confirm-tone="danger" data-confirm-icon="alert">
         <?php echo csrf_field(); ?>
         <input type="hidden" name="event_id" value="<?php echo $eid; ?>">
     </form>
     <?php } ?>
 
 </main>
+
+<?php include("image-framer.php"); ?>
 
 </body>
 </html>

@@ -165,17 +165,17 @@ $renderMember = function ($m) use ($club, $me, $isOwner, $officersReady) {
                 <summary aria-label="Manage <?php echo e($full); ?>"><?php echo event_icon('dots'); ?></summary>
                 <div class="m-pop">
                     <?php if ($role === 'member') { ?>
-                        <form method="POST" onsubmit="return confirm('Make <?php echo e(addslashes($m['first_name'])); ?> an officer? They will be able to post announcements and events for this club.');">
+                        <form method="POST" data-confirm="They will be able to post announcements and events for this club." data-confirm-title="Make <?php echo e($m['first_name']); ?> an officer?" data-confirm-ok="Make officer" data-confirm-tone="info" data-confirm-icon="star">
                             <?php echo csrf_field(); echo $fid; ?>
                             <button type="submit" name="action" value="promote"<?php echo $officersReady ? '' : ' disabled title="Run club-officers.sql first"'; ?>><?php echo event_icon('star'); ?>Make officer</button>
                         </form>
                     <?php } else { ?>
-                        <form method="POST" onsubmit="return confirm('Remove officer role? They stay in the club as a regular member.');">
+                        <form method="POST" data-confirm="They stay in the club as a regular member." data-confirm-title="Remove officer role?" data-confirm-ok="Remove role" data-confirm-tone="warning" data-confirm-icon="userminus">
                             <?php echo csrf_field(); echo $fid; ?>
                             <button type="submit" name="action" value="demote"><?php echo event_icon('userplus'); ?>Remove officer role</button>
                         </form>
                     <?php } ?>
-                    <form method="POST" onsubmit="return confirm('Remove this person from the club?');">
+                    <form method="POST" data-confirm="This person will be removed from the club." data-confirm-title="Remove from club?" data-confirm-ok="Remove" data-confirm-tone="warning" data-confirm-icon="userminus">
                         <?php echo csrf_field(); echo $fid; ?>
                         <button type="submit" name="action" value="remove" class="danger"><?php echo event_icon('trash'); ?>Remove from club</button>
                     </form>
@@ -196,6 +196,7 @@ $renderMember = function ($m) use ($club, $me, $isOwner, $officersReady) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="confirm.js?v=<?php echo (int)@filemtime(__DIR__ . '/confirm.js'); ?>" defer></script>
 </head>
 <body>
 

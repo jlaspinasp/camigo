@@ -162,5 +162,7 @@ if (isset($_POST['post'])) {
 
 </main>
 
+<?php include("image-framer.php"); ?>
+
 </body>
 </html>

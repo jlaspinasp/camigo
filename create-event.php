@@ -182,5 +182,7 @@ $minDate = event_now()->format('Y-m-d');
 })();
 </script>
 
+<?php include("image-framer.php"); ?>
+
 </body>
 </html>

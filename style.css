@@ -652,6 +652,10 @@ textarea:focus, select:focus { outline: none; border-color: var(--indigo); box-s
 .filters input[type="text"] { flex: 1; min-width: 200px; }
 .filters select { width: auto; min-width: 170px; }
 .filters .cancel { font-size: 14px; color: var(--muted); }
+/* extra room under the featured card so its shadow does not darken the search row */
+.cf + .filters { margin-top: 48px; }
+/* tabs sitting directly under the search row */
+.filters + .tabs { margin-top: -12px; margin-bottom: 20px; }
 
 .club-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .club-card {
@@ -693,6 +697,41 @@ textarea:focus, select:focus { outline: none; border-color: var(--indigo); box-s
 
 /* ---------- JOIN REQUESTS ---------- */
 .top-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.create-link {
+    display: inline-flex; align-items: center;
+    height: 32px; padding: 0 10px;
+    border: 0; border-radius: 8px;
+    font-size: 14px; font-weight: 400; line-height: 1; white-space: nowrap;
+    color: var(--indigo); background: transparent;
+    transition: background 0.15s;
+}
+.create-link:hover { background: #e5e5e5; text-decoration: none; }
+/* Join requests: same plain-text link as Create a club, in the regular text colour, keeping its count badge */
+.create-link.join-link { color: var(--ink); }
+.create-link .count {
+    min-width: 20px; margin-left: 8px; padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 12px; font-weight: 600; text-align: center;
+    color: #fff; background: var(--coral);
+}
+.create-link:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; }
+
+/* Join / leave / cancel as plain text: blue = clickable, grey = status. Underline on hover */
+.text-action {
+    appearance: none; -webkit-appearance: none;
+    border: 0; background: transparent; padding: 4px 2px; margin: 0;
+    font: inherit; font-size: 13px; font-weight: 400; line-height: 1.5;
+    color: var(--indigo); cursor: pointer;
+}
+.text-action:hover { text-decoration: underline; text-underline-offset: 3px; }
+.text-action:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 4px; }
+.text-action.on-dark { color: #fff; font-weight: 600; }
+.status-text { font-size: 13px; color: var(--muted); line-height: 1.5; }
+/* club card footer: join / leave / cancel match the muted "Ask a member for an invite" text; "Request sent" uses the success green */
+.club-foot form .text-action { color: var(--muted); }
+.status-text.status-sent { color: #1c7c4b; }
+.status-text.status-role { color: #b25e09; font-weight: 500; }
+.text-form { display: flex; align-items: center; gap: 12px; margin: 0; }
 .btn-sm .count {
     min-width: 20px; margin-left: 8px; padding: 1px 7px;
     border-radius: 999px;
@@ -2399,10 +2438,10 @@ a.tool:hover { text-decoration: none; background: #f4f5fc; }
 /* ---------- featured hero ---------- */
 .cf {
     position: relative; overflow: hidden;
-    margin-top: 28px;
-    min-height: 340px;
+    margin-top: 24px;
+    min-height: 270px;
     color: #fff;
-    border-radius: 26px;
+    border-radius: 23px;
     background: var(--midnight);
     box-shadow: 0 28px 60px -24px rgba(12, 15, 58, 0.55);
 }
@@ -2416,37 +2455,34 @@ a.tool:hover { text-decoration: none; background: #f4f5fc; }
 .cf-body {
     position: relative; z-index: 1;
     display: flex; flex-direction: column; align-items: flex-start;
-    min-height: 340px; padding: 28px 36px 32px;
+    min-height: 270px; padding: 23px 30px 26px;
 }
 .cf-flag {
     display: inline-flex; align-items: center; gap: 6px;
-    margin-bottom: auto; padding: 6px 12px 6px 10px;
-    border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.28);
+    margin-bottom: auto;
     font-size: 12.5px; font-weight: 600;
-    background: rgba(255, 255, 255, 0.14);
-    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
 }
 .cf-flag svg { width: 14px; height: 14px; color: var(--amber); fill: var(--amber); }
-.cf-id { display: flex; align-items: center; gap: 16px; margin-top: 28px; }
+.cf-id { display: flex; align-items: center; gap: 14px; margin-top: 20px; }
 .cf-logo.club-tile {
-    width: 68px; height: 68px; border-radius: 20px; font-size: 28px;
+    width: 60px; height: 60px; border-radius: 18px; font-size: 25px;
     border: 3px solid rgba(255, 255, 255, 0.9);
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
 }
 .cf-titles { min-width: 0; }
-.cf-name { font-family: var(--display); font-size: clamp(28px, 4.4vw, 42px); font-weight: 800; line-height: 1.05; letter-spacing: -0.025em; overflow-wrap: anywhere; }
+.cf-name { font-family: var(--display); font-size: clamp(25px, 3.7vw, 35px); font-weight: 800; line-height: 1.08; letter-spacing: -0.025em; overflow-wrap: anywhere; }
 .cf-name a { color: #fff; }
 .cf-name a:hover { text-decoration: none; }
-.cf-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 8px; font-size: 14px; color: rgba(255, 255, 255, 0.82); }
-.cf-cat { padding: 3px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--midnight); background: rgba(255, 255, 255, 0.92); }
+.cf-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 14px; margin-top: 6px; font-size: 13.5px; color: rgba(255, 255, 255, 0.82); }
+.cf-cat { font-size: 13.5px; font-weight: 600; color: rgba(255, 255, 255, 0.92); }
 .cf-count, .cc-count { display: inline-flex; align-items: center; gap: 6px; }
 .cf-count svg, .cc-count svg { width: 15px; height: 15px; }
 .cf-desc {
-    max-width: 58ch; margin-top: 16px;
-    font-size: 15.5px; line-height: 1.6; color: rgba(255, 255, 255, 0.88);
+    max-width: 58ch; margin-top: 13px;
+    font-size: 15px; line-height: 1.55; color: rgba(255, 255, 255, 0.88);
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
 }
-.cf-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.cf-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 17px; }
 .cf-btn { height: 44px; padding: 0 22px; font-size: 14px; }
 .cf-primary { color: var(--midnight); background: var(--amber); box-shadow: 0 10px 24px -8px rgba(255, 200, 87, 0.65); }
 .cf-primary:hover { background: #ffd57a; }
@@ -2455,18 +2491,18 @@ a.tool:hover { text-decoration: none; background: #f4f5fc; }
 .cf-state { font-size: 13.5px; font-weight: 600; color: rgba(255, 255, 255, 0.82); }
 
 /* ---------- club cards ---------- */
-.cc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.cc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .cc-card {
     position: relative; display: flex; flex-direction: column; overflow: hidden;
+    height: 320px;   /* every card is the same size */
     background: var(--white);
     border: 1px solid var(--line); border-radius: 22px;
     transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
-.cc-card:hover { border-color: #c2c5e0; box-shadow: 0 20px 44px -18px rgba(20, 22, 58, 0.22); transform: translateY(-3px); }
 .cc-top { position: relative; overflow: hidden; }
-.cc-media { aspect-ratio: 10 / 3; overflow: hidden; }
+.cc-media { aspect-ratio: 7 / 2; overflow: hidden; }
+.cc-grid .cc-media { aspect-ratio: auto; height: 120px; }
 .cc-media img { transition: transform 0.6s ease; }
-.cc-card:hover .cc-media img { transform: scale(1.04); }
 .cc-pill {
     position: absolute; top: 12px; right: 12px;
     display: inline-flex; align-items: center; gap: 5px;
@@ -2476,33 +2512,38 @@ a.tool:hover { text-decoration: none; background: #f4f5fc; }
     -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
 .cc-pill svg { width: 12px; height: 12px; stroke-width: 2.2; }
-.cc-body { display: flex; flex-direction: column; flex: 1; padding: 0 22px 20px; }
+/* logo overlaps the banner with the name + chip beside it, so the area under the banner isn't empty */
+.cc-body { min-height: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto 1fr auto; column-gap: 14px; flex: 1; padding: 0 20px 14px; }
 .cc-logo.club-tile {
-    position: relative; width: 60px; height: 60px; margin-top: -30px;
-    border: 3px solid var(--white); border-radius: 18px; font-size: 24px;
+    position: relative; grid-column: 1; width: 56px; height: 56px; margin-top: -28px;
+    border: 3px solid var(--white); border-radius: 16px; font-size: 22px;
     box-shadow: 0 8px 20px -6px rgba(20, 22, 58, 0.35);
 }
 .cc-logo.club-tile.has-logo { border: 3px solid var(--white); }
-.cc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 12px; }
-.cc-head h3 { font-family: var(--display); font-size: 19px; font-weight: 700; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.cc-head { display: flex; flex-wrap: wrap; align-items: center; grid-column: 2; gap: 4px 10px; margin-top: 8px; min-width: 0; }
+.cc-head { flex-wrap: nowrap; }
+.cc-head .chip { flex: none; margin-left: auto; padding: 0; border-radius: 0; background: none; font-size: 12px; font-weight: 400; color: var(--muted); }   /* category as small plain text */
+.cc-head h3 { min-width: 0; font-family: var(--display); font-size: 19px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cc-head h3 a { color: var(--ink); }
 .cc-head h3 a:hover { text-decoration: none; }
-.cc-head h3 a::after { content: ""; position: absolute; inset: 0; z-index: 1; }   /* whole card is the link */
-.cc-card .club-text { margin-top: 10px; color: #3a3d63; }
+/* hovering the name gives the card its lift + banner zoom */
+.cc-card:has(.cc-head h3 a:hover) { border-color: #c2c5e0; box-shadow: 0 20px 44px -18px rgba(20, 22, 58, 0.22); transform: translateY(-3px); }
+.cc-card:has(.cc-head h3 a:hover) .cc-media img { transform: scale(1.04); }
+.cc-card .club-text { grid-column: 1 / -1; margin-top: 10px; color: #3a3d63; }
 .cc-card .foot-right, .cc-card .badge, .cc-card .btn-sm { position: relative; z-index: 2; }
-.cc-card .club-foot { margin-top: 16px; min-height: 56px; }
+.cc-card .club-foot { grid-column: 1 / -1; margin-top: 12px; padding-top: 12px; min-height: 0; }
 
 @media (max-width: 700px) {
     .cc-grid { grid-template-columns: 1fr; }
-    .cf, .cf-body { min-height: 380px; }
-    .cf-body { padding: 22px 22px 24px; }
-    .cf-id { gap: 12px; }
-    .cf-logo.club-tile { width: 56px; height: 56px; border-radius: 16px; font-size: 22px; }
+    .cf, .cf-body { min-height: 285px; }
+    .cf-body { padding: 19px 19px 21px; }
+    .cf-id { gap: 11px; }
+    .cf-logo.club-tile { width: 50px; height: 50px; border-radius: 15px; font-size: 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
     .cc-card, .cc-media img { transition: none; }
-    .cc-card:hover { transform: none; }
-    .cc-card:hover .cc-media img { transform: none; }
+    .cc-card:has(.cc-head h3 a:hover) { transform: none; }
+    .cc-card:has(.cc-head h3 a:hover) .cc-media img { transform: none; }
 }
 
 
@@ -3248,20 +3289,80 @@ span.evc-club:hover { color: var(--muted); }
 .dz-todo li a:hover { text-decoration: underline; }
 .dz-todo li span { flex: none; font-size: 12px; color: var(--muted); }
 
-.dz-modal { width: min(420px, calc(100vw - 32px)); margin: auto; inset: 0; padding: 26px; color: var(--ink); background: var(--white); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 70px rgba(12, 15, 58, 0.35); }
-.dz-modal::backdrop { background: rgba(12, 15, 58, 0.55); backdrop-filter: blur(3px); }
+/* ---------- confirmation dialogs: one shared look ----------
+   Used by confirm.js (data-confirm), the chat, and the type-to-confirm delete dialogs.
+   Layout: soft glass frame > white panel > centred icon, title, text > two equal buttons.
+   Tone sets the accent: .cfm-danger (permanent), .cfm-warning (hard to undo), .cfm-info (routine). */
+.cfm-overlay { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; padding: 16px; background: rgba(18, 20, 58, 0.42); -webkit-backdrop-filter: blur(8px) saturate(120%); backdrop-filter: blur(8px) saturate(120%); animation: cfm-fade 0.18s ease-out; }
+body.cfm-lock { overflow: hidden; }
+
+.cfm-card {
+    --cfm-accent: var(--indigo); --cfm-accent-hover: var(--indigo-dark); --cfm-halo: rgba(51, 56, 201, 0.10); --cfm-halo-2: rgba(51, 56, 201, 0.16);
+    --cfm-ring: rgba(51, 56, 201, 0.30); --cfm-btn-ink: #fff;
+    position: relative; width: 100%; max-width: 360px; padding: 0; color: var(--ink);
+    background: transparent; border: 0; border-radius: 24px; overflow: visible;
+    animation: cfm-pop 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.04);
+}
+.cfm-danger  { --cfm-accent: #c4423e; --cfm-accent-hover: #ab3330; --cfm-halo: rgba(196, 66, 62, 0.09); --cfm-halo-2: rgba(196, 66, 62, 0.15); --cfm-ring: rgba(196, 66, 62, 0.30); }
+.cfm-warning { --cfm-accent: #e8a020; --cfm-accent-hover: #d6900f; --cfm-halo: rgba(232, 160, 32, 0.11); --cfm-halo-2: rgba(232, 160, 32, 0.19); --cfm-ring: rgba(232, 160, 32, 0.38); --cfm-btn-ink: #2a1c00; }
+.cfm-info    { --cfm-accent: var(--indigo); --cfm-accent-hover: var(--indigo-dark); --cfm-halo: rgba(51, 56, 201, 0.10); --cfm-halo-2: rgba(51, 56, 201, 0.16); --cfm-ring: rgba(51, 56, 201, 0.30); }
+
+.cfm-body { position: relative; margin: 0; padding: 28px 24px 22px; text-align: center; background: var(--white); border-radius: 20px; box-shadow: 0 40px 80px -24px rgba(18, 20, 58, 0.5), 0 12px 28px -12px rgba(18, 20, 58, 0.2); }
+
+.cfm-x { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; color: #2b2f36; background: transparent; border: 0; border-radius: 10px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.cfm-x svg { width: 17px; height: 17px; }
+.cfm-x:hover { background: #f1f2f7; color: #000; }
+.cfm-x:focus, .cfm-x:focus-visible { outline: none; box-shadow: none; }
+.cfm-x:focus-visible { background: #f1f2f7; }
+
+.cfm-head { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.cfm-icon { flex: none; display: grid; place-items: center; width: 54px; height: 54px; margin-bottom: 14px; background: var(--cfm-halo); border-radius: 50%; box-shadow: 0 0 0 7px var(--cfm-halo-2) inset; }
+.cfm-icon > span { display: grid; place-items: center; width: 32px; height: 32px; color: #fff; background: var(--cfm-accent); border-radius: 10px; transform: rotate(45deg); box-shadow: 0 6px 14px -4px var(--cfm-accent); }
+.cfm-info .cfm-icon > span { border-radius: 50%; transform: none; }
+.cfm-icon svg { width: 16px; height: 16px; transform: rotate(-45deg); }
+.cfm-info .cfm-icon svg { transform: none; }
+.cfm-copy { min-width: 0; }
+.cfm-title { margin: 0; font-family: var(--display); font-size: 18px; font-weight: 700; line-height: 1.25; letter-spacing: -0.015em; color: #15171c; overflow-wrap: anywhere; }
+.cfm-text { margin: 7px auto 0; max-width: 300px; font-size: 13px; line-height: 1.5; color: #565f68; overflow-wrap: anywhere; }
+.cfm-text strong { font-weight: 600; color: var(--ink); }
+
+.cfm-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+.cfm-btn { height: 40px; padding: 0 14px; font-family: inherit; font-size: 13.5px; font-weight: 600; line-height: 1; border: 1px solid transparent; border-radius: 11px; cursor: pointer; transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s; }
+.cfm-btn:active:not(:disabled) { transform: translateY(1px) scale(0.99); }
+.cfm-btn:focus-visible { outline: 3px solid var(--cfm-ring); outline-offset: 2px; }
+.cfm-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+.cfm-btn.is-busy { opacity: 0.7; cursor: progress; }
+.cfm-btn-ghost { color: #15171c; background: var(--white); border-color: #dcdde3; }
+.cfm-btn-ghost:hover:not(:disabled) { background: #f7f7fa; border-color: #c9cbd4; }
+.cfm-btn-danger, .cfm-btn-warning, .cfm-btn-info { color: var(--cfm-btn-ink); background: var(--cfm-accent); box-shadow: 0 6px 14px -8px var(--cfm-accent); }
+.cfm-btn-danger:hover:not(:disabled), .cfm-btn-warning:hover:not(:disabled), .cfm-btn-info:hover:not(:disabled) { background: var(--cfm-accent-hover); }
+
+/* type-the-name / enter-password variant (native <dialog>) */
+.dz-modal.cfm-card { position: fixed; inset: 0; margin: auto; width: min(360px, calc(100vw - 32px)); height: fit-content; overflow: visible; }
+.dz-modal::backdrop { background: rgba(18, 20, 58, 0.42); -webkit-backdrop-filter: blur(8px) saturate(120%); backdrop-filter: blur(8px) saturate(120%); }
 .dz-modal:not([open]) { display: none; }
-.dz-modal h3 { margin: 0; font-family: var(--display); font-size: 20px; font-weight: 700; }
-.dz-modal p { margin: 8px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
-.dz-modal p strong { color: var(--ink); overflow-wrap: anywhere; }
-.dz-input { width: 100%; height: 44px; margin-top: 18px; padding: 0 14px; font-family: inherit; font-size: 14.5px; color: var(--ink); background: var(--white); border: 1px solid var(--line); border-radius: 10px; box-sizing: border-box; }
-.dz-input:focus { outline: none; border-color: #c23232; box-shadow: 0 0 0 3px rgba(194, 50, 50, 0.15); }
-.dz-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-.dz-cancel { height: 42px; padding: 0 18px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--ink); background: var(--white); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
-.dz-cancel:hover { background: var(--paper); }
-.dz-confirm { height: 42px; padding: 0 20px; font-family: inherit; font-size: 14px; font-weight: 600; color: #fff; background: #c23232; border: none; border-radius: 10px; cursor: pointer; }
-.dz-confirm:hover:not(:disabled) { background: #a82929; }
-.dz-confirm:disabled { opacity: 0.35; cursor: not-allowed; }
+.dz-input { width: 100%; height: 42px; margin-top: 16px; padding: 0 14px; font-family: inherit; font-size: 14px; text-align: center; color: var(--ink); background: #fafafd; border: 1px solid #dcdde3; border-radius: 11px; box-sizing: border-box; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+.dz-input:focus { outline: none; background: var(--white); border-color: #c4423e; box-shadow: 0 0 0 4px rgba(196, 66, 62, 0.14); }
+
+/* blocked account deletion: what the person still owns, shown inside the dialog */
+.cfm-todo { margin: 16px 0 0; padding: 2px 14px; max-height: 208px; overflow-y: auto; list-style: none; text-align: left; background: #fbf4f4; border-radius: 12px; }
+.cfm-todo li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 0; font-size: 13px; border-top: 1px solid #f1dddd; }
+.cfm-todo li:first-child { border-top: 0; }
+.cfm-todo a { min-width: 0; font-weight: 600; color: var(--ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfm-todo a:hover { text-decoration: underline; }
+.cfm-todo span { flex: none; font-size: 12px; color: var(--muted); }
+.cfm-foot-one { grid-template-columns: 1fr; }
+
+@keyframes cfm-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cfm-pop { from { opacity: 0; transform: translateY(12px) scale(0.965); } to { opacity: 1; transform: none; } }
+@media (max-width: 480px) {
+    .cfm-body { padding: 26px 18px 18px; border-radius: 18px; }
+    .cfm-title { font-size: 17px; }
+    .cfm-foot { gap: 8px; }
+    .cfm-btn { height: 40px; }
+}
+@media (max-width: 340px) { .cfm-foot { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .cfm-overlay, .cfm-card { animation: none; } .cfm-btn, .cfm-x, .dz-input { transition: none; } }
 @media (max-width: 560px) {
     .danger-zone { flex-direction: column; align-items: stretch; gap: 16px; }
     .dz-open { width: 100%; }
@@ -3648,3 +3749,195 @@ span.evc-club:hover { color: var(--muted); }
 .pj-banner-prev.t2 { background: linear-gradient(135deg, #ff9db5, #ff6b6b); }
 .pj-banner-prev.has-img { background-color: var(--midnight); background-size: cover; background-position: center; }
 .pj-banner-prev:not(.has-img) .id-cta { color: var(--midnight); }
+
+/* a deleted account's avatar: plain grey with a "?" */
+.p-avatar:has(> .av-gone), .face:has(> .av-gone), .avatar:has(> .av-gone) { background: #b9bdc9; color: #fff; }
+.av-gone { color: inherit; }
+
+/* ==========================================================
+   FULL-LENGTH POSTS - the dashboard feed card (.hf) used for club Announcements and project Progress updates.
+   Same look as the dashboard; the one difference is that the text is never cut short:
+   no line clamp, no "See more", no max height, so the whole post is always visible.
+   ========================================================== */
+.hf-full .hf-text { display: block; max-height: none; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.hf-full .hf-text a { word-break: break-all; }
+
+/* flat, like the dashboard feed: no box around the section, just the cards split by hairlines */
+.panel.hf-flat { padding: 0; background: transparent; border: 0; border-radius: 0; }
+.hf-full-list .ev-teaser { margin-top: 14px; }
+
+/* club page: the side column is sticky exactly like the project page's (.ev-side) */
+.club-side { position: sticky; top: calc(var(--topbar-h, 72px) + 16px); }
+@media (max-width: 900px) { .club-side { position: static; } }
+
+/* the header names the page you are already on, so it is not a link and does not react to hover */
+.hf-club.is-static { cursor: default; }
+.hf-club.is-static:hover strong { color: inherit; }
+.hf-club .pj-mini-ic { width: 38px; height: 38px; border-radius: 12px; }
+.hf-club .pj-mini-ic svg { width: 19px; height: 19px; }
+
+/* club page: pinned posts say so in the meta line; staff tools sit at the right of the footer */
+.hf-note.hf-pinned { color: #8a5a00; font-weight: 600; }
+.hf-full .hf-foot:has(.ann-edit[open]) .ann-actions { flex: 1 1 100%; }
+
+/* landing on a post from a notification */
+.hf-full { scroll-margin-top: 90px; }
+.hf-full:target { animation: ann-flash 2.4s ease-out; }
+@media (prefers-reduced-motion: reduce) { .hf-full:target { animation: none; } }
+
+/* ---- image framing editor (shared; same as Edit profile): drag to move, pinch / scroll / slider to zoom ---- */
+.crop-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(12, 15, 58, 0.62); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.crop-modal[hidden] { display: none; }
+.crop-card { width: 100%; max-width: 760px; max-height: 100%; overflow: auto; padding: 20px; background: var(--white); border-radius: 18px; box-shadow: 0 24px 60px rgba(12, 15, 58, 0.35); }
+.crop-card h3 { margin: 0; font-family: var(--display); font-size: 18px; }
+.crop-card .crop-help { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.crop-stage { position: relative; width: 100%; margin: 14px auto 0; overflow: hidden; background: #14163a; border-radius: 12px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; aspect-ratio: 10 / 3; outline-offset: 3px; }
+.crop-stage.round, .crop-stage.square { width: min(320px, 100%); aspect-ratio: 1 / 1; }
+.crop-stage.dragging { cursor: grabbing; }
+.crop-stage:focus { outline: none; }
+.crop-stage:focus-visible { outline: 2px solid var(--indigo); }
+.crop-stage img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; will-change: transform; pointer-events: none; -webkit-user-drag: none; }
+/* round / square mode: dim everything outside the shape the image will be shown in */
+.crop-stage.round::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px rgba(12, 15, 58, 0.55); border: 2px solid rgba(255, 255, 255, 0.85); pointer-events: none; }
+.crop-stage.square::after { content: ""; position: absolute; inset: 0; border-radius: 22%; box-shadow: 0 0 0 999px rgba(12, 15, 58, 0.55); border: 2px solid rgba(255, 255, 255, 0.85); pointer-events: none; opacity: 1; background: none; transition: none; }
+/* wide mode: faint thirds grid while moving */
+.crop-stage:not(.round):not(.square)::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.15s;
+    background: linear-gradient(90deg, transparent calc(33.33% - 0.5px), rgba(255,255,255,.55) 0 calc(33.33% + 0.5px), transparent 0 calc(66.66% - 0.5px), rgba(255,255,255,.55) 0 calc(66.66% + 0.5px), transparent 0),
+                linear-gradient(180deg, transparent calc(33.33% - 0.5px), rgba(255,255,255,.55) 0 calc(33.33% + 0.5px), transparent 0 calc(66.66% - 0.5px), rgba(255,255,255,.55) 0 calc(66.66% + 0.5px), transparent 0); }
+.crop-stage.dragging:not(.round):not(.square)::after { opacity: 1; }
+.crop-zoom { display: flex; align-items: center; gap: 12px; margin: 16px auto 0; width: min(420px, 100%); color: var(--muted); }
+.crop-zoom svg { flex: none; width: 18px; height: 18px; }
+.crop-zoom input[type=range] { flex: 1; min-width: 0; accent-color: var(--indigo); height: 28px; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+.crop-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.crop-actions .btn { margin: 0; }
+/* join requests: borderless, aligned rows, solid decline */
+.rq-panel { border: 0; padding: 0; background: transparent; }
+.rq-panel h2 { margin-bottom: 14px; }
+.rq-item { border: 0; background: #f3f5f7; padding: 16px 20px; }
+.rq-item .req { flex-wrap: nowrap; align-items: center; }
+.rq-item .req-who { flex: 1; min-width: 0; align-items: center; gap: 14px; }
+.rq-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rq-name { font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.3; }
+.rq-name:hover { color: var(--indigo); text-decoration: none; }
+.rq-meta { font-size: 13px; line-height: 1.4; color: var(--muted); }
+.rq-club { display: inline; color: inherit; font-weight: 600; }
+.rq-item .req-actions { flex: none; align-items: center; gap: 8px; }
+.rq-item .req-actions .btn-sm { margin: 0; border: 0; }
+.rq-item .btn-reject { color: #fff; background: #d64545; }
+.rq-item .btn-reject:hover { background: #bf3838; }
+@media (max-width: 600px) { .rq-item .req { flex-wrap: wrap; } .rq-item .req-actions { width: 100%; } .rq-item .req-actions .btn-sm { flex: 1; } }
+
+/* club page: borderless tinted cards */
+.club-side .side-card, .ann-compose { border: 0; background: #f3f5f7; }
+.ann-compose input[type="text"], .ann-compose textarea { border: 0; background: var(--white); }
+.ann-compose input[type="text"]:focus, .ann-compose textarea:focus { outline: 2px solid rgba(51, 56, 201, 0.35); outline-offset: 0; }
+
+/* club page "Upcoming events": same round date tile + lock / going icons as the dashboard's "This week" */
+.side-ev .date-badge { width: 36px; min-width: 36px; height: 36px; padding: 0; justify-content: center; border-radius: 50%; box-shadow: 0 4px 10px -4px rgba(12, 15, 58, 0.45); }
+.side-ev .date-badge small { font-size: 8px; letter-spacing: 0.1em; }
+.side-ev .date-badge b { margin-top: 2px; font-size: 15px; }
+.side-ev .wk-going, .side-ev .wk-lock { flex: none; }
+.side-ev .wk-lock { width: 20px; height: 20px; display: grid; place-items: center; color: var(--muted); }
+.side-ev .wk-lock svg { width: 13px; height: 13px; stroke-width: 2.2; }
+
+/* club header card: hide the border on every side but keep its 1px so nothing shifts */
+.profile-card { border-color: transparent; background-clip: padding-box; }
+
+/* club banner: round all four corners (the card only clips the top two) */
+.profile-card .cover { border-radius: 22px; }
+
+/* club banner: the dark bottom overlay must follow the rounded corners instead of poking out square */
+.profile-card .cover::after { border-radius: inherit; }
+
+/* club header: nudge logo, name, pills and bio 16px right (right padding untouched, so the buttons stay put) */
+.profile-card .profile-body { padding-left: 44px; }
+@media (max-width: 600px) { .profile-card .profile-body { padding-left: 28px; } }
+
+/* club page: Group chat, Post an event, Edit club and Leave look like the top bar's plain text links (same grey pill on hover) */
+.profile-card .top-actions > a.btn-ghost,
+.profile-card .top-actions button.btn-ghost[value="leave"] {
+    height: 32px; padding: 0 10px;
+    border: 0; border-radius: 8px;
+    font-size: 14px; font-weight: 400; line-height: 1; white-space: nowrap;
+    color: #191c1f; background: transparent; box-shadow: none;
+    transition: background 0.15s;
+}
+.profile-card .top-actions > a.btn-ghost:hover,
+.profile-card .top-actions button.btn-ghost[value="leave"]:hover { background: #e5e5e5; box-shadow: none; text-decoration: none; }
+.profile-card .top-actions > a.btn-ghost:focus-visible,
+.profile-card .top-actions button.btn-ghost[value="leave"]:focus-visible { outline: 2px solid #191c1f; outline-offset: 2px; }
+
+/* club header: category, Invite only, owner and officer labels are plain text; the icons keep their colors */
+.profile-card .p-user { gap: 16px; }
+.profile-card .p-user .chip,
+.profile-card .p-user .badge {
+    padding: 0; border-radius: 0; background: none; box-shadow: none;
+    font-size: 14px; font-weight: 500; letter-spacing: 0;
+    color: var(--ink);
+}
+.profile-card .p-user .badge svg { width: 14px; height: 14px; }
+.profile-card .p-user .badge.invite svg  { color: var(--indigo); }
+.profile-card .p-user .badge.owner svg   { color: #b07d00; }
+.profile-card .p-user .badge.officer svg { color: var(--indigo); }
+
+/* club sidebar: Led by and Upcoming events rows get the top bar's grey hover pill (the "See all" links are left alone) */
+.club-side .lead, .club-side .side-ev { transition: background 0.15s; }
+.club-side .lead:hover, .club-side .side-ev:hover { background: #e5e5e5; text-decoration: none; }
+.club-side .lead:focus-visible, .club-side .side-ev:focus-visible { outline: 2px solid #191c1f; outline-offset: 2px; }
+
+
+/* project page: same borderless tinted cards as the club page */
+.pj-page .ev-main > .panel:not(.hf-flat):not(.pj-plain),
+.pj-page .ev-side > .panel { border: 0; background: #f3f5f7; }
+.pj-page .pj-compose { margin-bottom: 22px; padding: 20px; border: 0; border-radius: 18px; background: #f3f5f7; }
+.pj-page .pj-compose textarea { border: 0; background: var(--white); }
+.pj-page .pj-compose textarea:focus { outline: 2px solid rgba(51, 56, 201, 0.35); outline-offset: 0; }
+/* items sitting inside a tinted card turn white and lose their borders */
+.pj-page .panel:not(.pj-plain) .member,
+.pj-page .panel .pj-role-item,
+.pj-page .panel .pj-app { border: 0; background: var(--white); }
+.pj-page .panel .pj-note { background: var(--white); box-shadow: none; }
+
+/* project page: font sizes and hover effects follow the club page sidebar */
+.pj-page .ev-main > .panel:not(.hf-flat):not(.pj-plain) { padding: 22px 20px; }
+.pj-page .ev-side > .panel { padding: 20px 18px; }
+.pj-page .ev-main > .panel:not(.hf-flat):not(.pj-plain) h2,
+.pj-page .pj-cta h2 { font-size: 16px; }
+.pj-page .ev-host small { margin-bottom: 14px; font-size: 11.5px; letter-spacing: 0.08em; }
+
+/* "Started by" row = same pill hover */
+.pj-page .ev-host-row { margin: 0 -8px; padding: 8px; border-radius: 14px; transition: background 0.15s; }
+.pj-page .ev-host-row:hover { background: #e5e5e5; }
+.pj-page .ev-host-row strong { font-size: 15px; font-weight: 700; line-height: 1.25; }
+.pj-page .ev-host-row em { font-size: 12px; line-height: 1.4; }
+
+/* role and application rows: grey pill on hover too */
+.pj-page .pj-role-item, .pj-page .pj-app { transition: background 0.15s; }
+.pj-page .pj-role-item:hover, .pj-page .pj-app:hover { background: #e5e5e5; }
+.pj-page .ev-host-row:focus-visible { outline: 2px solid #191c1f; outline-offset: 2px; }
+
+/* About this project + The team: no borders, white background; team rows keep the grey pill hover */
+.pj-page .panel.pj-plain { border: 0; }
+.pj-page .pj-plain .pj-team { gap: 4px; margin: 0 -8px; }
+.pj-page .pj-plain .pj-team .member { padding: 8px; gap: 11px; border: 0; border-radius: 14px; background: transparent; transition: background 0.15s; }
+.pj-page .pj-plain .pj-team .member:hover { background: #e5e5e5; }
+.pj-page .pj-plain .pj-team .member strong { font-family: var(--display); font-size: 15px; font-weight: 700; line-height: 1.25; }
+.pj-page .pj-plain .pj-team .member .club-meta { margin-top: 2px; font-size: 12px; line-height: 1.4; }
+.pj-page .pj-plain .pj-team .member:focus-within { outline: 2px solid #191c1f; outline-offset: 2px; }
+
+/* dashboard join requests: same solid green / red buttons as the club page */
+.rail .req-btns .btn-approve { color: #fff; background: #1f8a52; border: 0; }
+.rail .req-btns .btn-approve:hover { background: #197647; }
+.rail .req-btns .btn-reject { color: #fff; background: #d64545; border: 0; }
+.rail .req-btns .btn-reject:hover { background: #bf3838; }
+
+/* clubs page: the whole card opens the club (name link stretched over the card);
+   Join / Leave / Cancel / request links stay clickable above it via z-index 2 */
+.cc-head h3 a::after { content: ""; position: absolute; inset: 0; z-index: 1; }
+.cc-card { cursor: pointer; }
+.cc-card .foot-right, .cc-card .foot-right * { cursor: auto; }
+.cc-card .foot-right a, .cc-card .foot-right button { cursor: pointer; }
+.cc-card:has(.cc-head h3 a:focus-visible) { outline: 2px solid var(--indigo); outline-offset: 2px; }
+
+/* projects page: same gap from the top banner to the search row as Clubs has from its featured card (48px) */
+.pj-banner + .filters, .pj-banner + .msg + .filters { margin-top: 48px; }

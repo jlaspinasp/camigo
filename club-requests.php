@@ -93,7 +93,7 @@ $message_class = $flash ? $flash[1] : "";
         <div class="msg error" style="margin-top:20px">Join requests aren't set up yet. Run <strong>members-update.sql</strong> in phpMyAdmin.</div>
     <?php } else { ?>
 
-    <section class="panel">
+    <section class="panel rq-panel">
         <h2>Waiting for you (<?php echo count($requests); ?>)</h2>
 
         <?php if (!$requests) { ?>
@@ -106,20 +106,19 @@ $message_class = $flash ? $flash[1] : "";
                     if (!empty($rq['course'])) $sub[] = $rq['course'];
                     if (!empty($rq['year_level'])) $sub[] = $rq['year_level'];
                 ?>
-                    <div class="club-item">
+                    <div class="club-item rq-item">
                         <div class="req">
                             <div class="req-who">
                                 <div class="p-avatar tiny"><?php echo avatar_inner($rq); ?></div>
-                                <div>
-                                    <strong><?php echo e($name); ?></strong>
-                                    <div class="club-meta">
+                                <div class="rq-text">
+                                    <a class="rq-name" href="profile?u=<?php echo e(urlencode($rq['username'])); ?>"><?php echo e($name); ?></a>
+                                    <div class="rq-meta">
                                         @<?php echo e($rq['username']); ?>
                                         <?php if ($sub) { ?> &middot; <?php echo e(implode(' · ', $sub)); ?><?php } ?>
                                     </div>
-                                    <div class="club-meta">
-                                        Wants to join <strong><?php echo e($rq['club_name']); ?></strong>
+                                    <div class="rq-meta">
+                                        Wants to join <span class="rq-club"><?php echo e($rq['club_name']); ?></span>
                                         &middot; <?php echo e(date('M j, Y', strtotime($rq['joined_at']))); ?>
-                                        &middot; <a href="profile?u=<?php echo e(urlencode($rq['username'])); ?>">View profile</a>
                                     </div>
                                 </div>
                             </div>

@@ -236,5 +236,7 @@ if ($allowed) {
 
 </main>
 
+<?php include("image-framer.php"); ?>
+
 </body>
 </html>

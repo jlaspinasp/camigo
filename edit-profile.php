@@ -546,19 +546,23 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
         var w = s.sw / s.s, h = s.sh / s.s;
         var sx = Math.min(Math.max(0, -s.x / s.s), s.nw - w), sy = Math.min(Math.max(0, -s.y / s.s), s.nh - h);
         var ow, oh;
-        if (o.round) { ow = oh = Math.max(1, Math.min(800, Math.round(w))); }                 // never scaled up, only down
-        else         { ow = Math.max(10, Math.min(2400, Math.floor(w / 10) * 10)); oh = ow * 3 / 10; }   // exactly 10:3
+        if (o.round) { ow = oh = Math.max(1, Math.min(1200, Math.round(w))); }                // up to 1200px, never scaled up, only down
+        else         { ow = Math.max(10, Math.min(3840, Math.floor(w / 10) * 10)); oh = ow * 3 / 10; }   // up to 4K wide, exactly 10:3
         var c = document.createElement("canvas"); c.width = ow; c.height = oh;
         var ctx = c.getContext("2d");
         ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, ow, oh);     // PNG transparency -> white, same as the server does
         ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
         ctx.drawImage(s.img, sx, sy, w, h, 0, 0, ow, oh);
         var d = s.done;
-        c.toBlob(function (blob) {
-            closeEditor();
-            if (!blob) { say("We couldn't prepare that image. Please try again."); d(null); return; }
-            d(new File([blob], o.name, { type: "image/jpeg" }));
-        }, "image/jpeg", 0.92);
+        // ultra HD: quality 0.97 first. If a very detailed photo ever tops the 10 MB limit, step the quality down until it fits.
+        (function enc(q) {
+            c.toBlob(function (blob) {
+                if (blob && blob.size > 9.5 * 1024 * 1024 && q > 0.6) return enc(q - 0.1);
+                closeEditor();
+                if (!blob) { say("We couldn't prepare that image. Please try again."); d(null); return; }
+                d(new File([blob], o.name, { type: "image/jpeg" }));
+            }, "image/jpeg", q);
+        })(0.97);
     }
 
     document.getElementById("crop-ok").addEventListener("click", apply);
