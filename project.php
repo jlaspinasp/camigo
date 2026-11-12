@@ -142,11 +142,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 flash_set("That person isn't on the team.", "error");
             }
 
-        // ---------- founder: open / close recruiting ----------
-        } elseif ($action === 'toggle_open' && $isOwner) {
-            $r = db_run($conn, "UPDATE projects SET is_open = 1 - is_open WHERE id = ? AND owner_id = ?", "ii", array($pid, $me['id']));
-            flash_set($r['ok'] ? (!empty($p['is_open']) ? "Applications are closed. Your project stays visible." : "Applications are open again.") : "Something went wrong. Please try again.", $r['ok'] ? "success" : "error");
-
         // ---------- team: post a progress update ----------
         } elseif ($action === 'post_update' && ($isOwner || $isActive)) {
             $body = trim(str_replace("\r\n", "\n", (string)($_POST['body'] ?? '')));
@@ -306,10 +301,7 @@ $profileLink = function ($row) use ($me) {
         <section class="ev-hero pj-hero t<?php echo $tone; ?><?php echo $heroImg !== '' ? ' has-banner' : ''; ?>"<?php if ($heroImg !== '') { ?> style="--ev-banner:url('<?php echo e($heroImg); ?>')"<?php } ?>>
             <div class="ev-badges">
                 <span class="chip"><?php echo project_category_icon($p['category']); ?><?php echo e($p['category']); ?></span>
-                <?php echo project_stage_badge($p['stage']); ?>
-                <span class="badge pj-status <?php echo e($status[1]); ?>"><?php echo e($status[0]); ?></span>
                 <?php if (!empty($p['club_name'])) { ?><a class="chip" href="club?id=<?php echo (int)$p['club_id']; ?>"><?php echo event_icon('users'); ?><?php echo e($p['club_name']); ?></a><?php } ?>
-                <?php if ($isOwner) { ?><span class="badge approved">You're the founder</span><?php } elseif ($isMember) { ?><span class="badge approved">You're on the team</span><?php } ?>
             </div>
 
             <h1><?php echo e($p['title']); ?></h1>
@@ -318,69 +310,116 @@ $profileLink = function ($row) use ($me) {
             <div class="ev-facts">
                 <div class="fact"><span class="fi"><?php echo event_icon('crown'); ?></span><div><small>Founder</small><strong><?php echo e(full_name($p)); ?></strong></div></div>
                 <div class="fact"><span class="fi"><?php echo event_icon('users'); ?></span><div><small>Team</small><strong><?php echo count($team); ?> <?php echo count($team) === 1 ? 'person' : 'people'; ?></strong></div></div>
-                <div class="fact"><span class="fi"><?php echo project_icon('rocket'); ?></span><div><small>Stage</small><strong><?php echo e(project_stage_label($p['stage'])); ?></strong></div></div>
             </div>
-
-            <?php if ($isOwner) { ?>
-                <div class="ev-owner">
-                    <a href="edit-project?id=<?php echo $pid; ?>" class="btn-sm btn-light">Edit project</a>
-                    <form method="POST">
-                        <?php echo csrf_field(); ?>
-                        <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
-                        <button type="submit" name="action" value="toggle_open" class="btn-sm btn-light"><?php echo !empty($p['is_open']) ? 'Close applications' : 'Reopen applications'; ?></button>
-                    </form>
-                </div>
-            <?php } ?>
         </section>
 
-        <div class="ev-layout">
+        <div class="ev-layout<?php echo ($isOwner || $isMember) ? ' pj-has-actions' : ''; ?>">
+
+            <?php if ($isOwner || $isMember) { ?>
+            <div class="top-actions pj-actions">
+                <a href="<?php echo e($teamChatHref); ?>" class="btn-sm btn-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-8L6.5 20.5V16.5H5A1.5 1.5 0 013.5 15V6A1.5 1.5 0 015 4.5z"/></svg>Team chat</a>
+                <?php if ($isOwner) { ?><a href="edit-project?id=<?php echo $pid; ?>" class="btn-sm btn-ghost">Edit project</a><?php } ?>
+                <?php if (!$isOwner) { ?>
+                <form method="POST" data-confirm="You will be removed from this project's team." data-confirm-title="Leave this project?" data-confirm-ok="Leave project" data-confirm-tone="warning" data-confirm-icon="exit">
+                    <?php echo csrf_field(); ?>
+                    <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
+                    <button type="submit" name="action" value="leave" class="btn-sm btn-ghost">Leave project</button>
+                </form>
+                <?php } ?>
+            </div>
+            <?php } ?>
 
             <div class="ev-main">
 
                 <?php if ($isOwner && $applicants) { ?>
-                <section class="panel pj-apps" style="margin-top:0" id="applications">
-                    <div class="club-head">
-                        <h2 style="margin:0">Applications</h2>
-                        <span class="badge pending"><?php echo count($applicants); ?> waiting</span>
-                    </div>
-                    <div class="pj-app-list">
+                <section class="panel rq-panel pj-plain pj-apps" style="margin-top:0" id="applications">
+                    <h2>Applications (<?php echo count($applicants); ?>)</h2>
+                    <div class="club-list">
                         <?php foreach ($applicants as $a) {
                             $line = array();
                             if (!empty($a['course'])) $line[] = $a['course'];
                             if (!empty($a['year_level'])) $line[] = $a['year_level'];
+                            $hasMsg = trim((string)$a['message']) !== '';
+                            $hasApp = $hasMsg || !empty($a['role_label']);
+                            $apId = 'ap-' . (int)$a['mid'];
                         ?>
-                            <article class="pj-app">
-                                <div class="pj-app-head">
-                                    <div class="p-avatar tiny"><?php echo avatar_inner($a); ?></div>
-                                    <div class="grow">
-                                        <strong><a href="<?php echo e($profileLink($a)); ?>" class="plain"><?php echo e(full_name($a)); ?></a></strong>
-                                        <div class="club-meta">@<?php echo e($a['username']); ?><?php if ($line) { ?> &middot; <?php echo e(implode(' · ', $line)); ?><?php } ?> &middot; <?php echo e(time_ago($a['ts'])); ?></div>
+                            <div class="club-item rq-item pj-rq">
+                                <div class="req">
+                                    <div class="req-who">
+                                        <div class="p-avatar tiny"><?php echo avatar_inner($a); ?></div>
+                                        <div class="rq-text">
+                                            <a class="rq-name" href="<?php echo e($profileLink($a)); ?>"><?php echo e(full_name($a)); ?></a>
+                                            <div class="rq-meta">@<?php echo e($a['username']); ?><?php if ($line) { ?> &middot; <?php echo e(implode(' · ', $line)); ?><?php } ?></div>
+                                        </div>
                                     </div>
-                                    <?php if (!empty($a['role_label'])) { ?><span class="chip"><?php echo e($a['role_label']); ?></span><?php } ?>
-                                </div>
-                                <blockquote class="pj-quote"><?php echo nl2br(e($a['message'])); ?></blockquote>
-                                <form method="POST" class="pj-app-actions">
-                                    <?php echo csrf_field(); ?>
-                                    <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
-                                    <input type="hidden" name="member_id" value="<?php echo (int)$a['mid']; ?>">
-                                    <?php if ($roles) { ?>
-                                        <label class="pj-assign">
-                                            <span>Role</span>
-                                            <select name="role_id" aria-label="Role to give">
+
+                                    <form method="POST" class="req-actions">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
+                                        <input type="hidden" name="member_id" value="<?php echo (int)$a['mid']; ?>">
+                                        <?php if ($roles) { ?>
+                                            <select name="role_id" class="rq-select" aria-label="Role to give">
                                                 <option value="0">Teammate (no set role)</option>
                                                 <?php foreach ($freeRoles as $r) { ?>
                                                     <option value="<?php echo (int)$r['id']; ?>" <?php echo ((int)$a['role_id'] === (int)$r['id']) ? 'selected' : ''; ?>><?php echo e($r['title']); ?></option>
                                                 <?php } ?>
                                             </select>
-                                        </label>
-                                    <?php } ?>
-                                    <button type="submit" name="action" value="accept" class="btn-sm btn-approve">Accept</button>
-                                    <button type="submit" name="action" value="decline" class="btn-sm btn-reject">Decline</button>
-                                    <a href="messages?u=<?php echo e(urlencode($a['username'])); ?>" class="btn-sm btn-ghost">Message</a>
-                                </form>
-                            </article>
+                                        <?php } ?>
+                                        <?php if ($hasApp) { ?>
+                                            <button type="button" class="btn-sm rq-view" data-ap-open="<?php echo e($apId); ?>">View application</button>
+                                        <?php } ?>
+                                        <button type="submit" name="action" value="accept" class="btn-sm btn-approve">Accept</button>
+                                        <button type="submit" name="action" value="decline" class="btn-sm btn-reject">Decline</button>
+                                    </form>
+                                </div>
+                                <?php if ($hasApp) { ?>
+                                    <dialog class="dz-modal cfm-card cfm-info ap-modal" id="<?php echo e($apId); ?>" aria-labelledby="<?php echo e($apId); ?>-t">
+                                        <div class="cfm-body">
+                                            <button type="button" class="cfm-x" data-ap-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+                                            <div class="cfm-head">
+                                                <div class="p-avatar ap-avatar"><?php echo avatar_inner($a); ?></div>
+                                                <div class="cfm-copy">
+                                                    <h3 class="cfm-title" id="<?php echo e($apId); ?>-t"><?php echo e(full_name($a)); ?></h3>
+                                                    <p class="cfm-text">@<?php echo e($a['username']); ?><?php if ($line) { ?> &middot; <?php echo e(implode(' · ', $line)); ?><?php } ?> &middot; <?php echo e(time_ago($a['ts'])); ?></p>
+                                                </div>
+                                            </div>
+                                            <div class="ap-letter">
+                                                <?php if (!empty($a['role_label'])) { ?>
+                                                    <div class="ap-role"><span>Applying as</span><b><?php echo e($a['role_label']); ?></b></div>
+                                                <?php } ?>
+                                                <?php if ($hasMsg) { ?>
+                                                    <p><?php echo nl2br(e($a['message'])); ?></p>
+                                                <?php } else { ?>
+                                                    <p class="ap-none">They didn&rsquo;t add a message.</p>
+                                                <?php } ?>
+                                            </div>
+                                            <div class="cfm-foot">
+                                                <a href="messages?u=<?php echo e(urlencode($a['username'])); ?>" class="cfm-btn cfm-btn-info ap-msg">Message</a>
+                                                <button type="button" class="cfm-btn cfm-btn-ghost" data-ap-close>Close</button>
+                                            </div>
+                                        </div>
+                                    </dialog>
+                                <?php } ?>
+                            </div>
                         <?php } ?>
                     </div>
+                    <script>
+                    (function () {
+                        var root = document.getElementById('applications');
+                        function closeDlg(d) { if (d.close) d.close(); else d.removeAttribute('open'); }
+                        root.addEventListener('click', function (e) {
+                            var open = e.target.closest('[data-ap-open]');
+                            if (open) {
+                                var d = document.getElementById(open.getAttribute('data-ap-open'));
+                                if (d) { if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+                                return;
+                            }
+                            var shut = e.target.closest('[data-ap-close]');
+                            if (shut) { closeDlg(shut.closest('dialog')); return; }
+                            if (e.target.tagName === 'DIALOG') closeDlg(e.target);
+                        });
+                    })();
+                    </script>
                 </section>
                 <?php } ?>
 
@@ -420,16 +459,9 @@ $profileLink = function ($row) use ($me) {
                             $left = $sp - $fl;
                             $pc = $sp > 0 ? (int)round($fl / $sp * 100) : 0;
                         ?>
-                            <div class="pj-role-item<?php echo $left === 0 ? ' is-full' : ''; ?>">
-                                <span class="pj-role-ic"><?php echo project_icon('seat'); ?></span>
-                                <div class="grow">
-                                    <strong><?php echo e($r['title']); ?></strong>
-                                    <div class="progress"><i style="width: <?php echo $pc; ?>%"></i></div>
-                                    <span class="club-meta"><?php echo $left === 0 ? 'Filled' : ($left === 1 ? '1 spot open' : $left . ' spots open'); ?> &middot; <?php echo $fl; ?> of <?php echo $sp; ?></span>
-                                </div>
-                                <?php if ($canApply && $left > 0) { ?>
-                                    <a class="btn-sm btn-ghost" href="project?id=<?php echo $pid; ?>&amp;role=<?php echo (int)$r['id']; ?>#apply">Apply</a>
-                                <?php } ?>
+                            <div class="pj-role-row<?php echo $left === 0 ? ' is-full' : ''; ?>">
+                                <strong><?php echo e($r['title']); ?></strong>
+                                <span class="club-meta"><?php echo $left === 0 ? 'Filled' : ($left === 1 ? '1 spot open' : $left . ' spots open'); ?></span>
                             </div>
                         <?php } ?>
                     </div>
@@ -453,16 +485,14 @@ $profileLink = function ($row) use ($me) {
                                     <div class="club-meta"><?php echo e(!empty($t['role_label']) ? $t['role_label'] : ($tOwner ? 'Founder' : 'Teammate')); ?><?php if ($line) { ?> &middot; <?php echo e(implode(' · ', $line)); ?><?php } ?></div>
                                 </div>
                                 <?php if ($tOwner) { ?>
-                                    <span class="badge officer"><?php echo event_icon('crown'); ?>Founder</span>
+                                    <span class="lead-badge owner" title="Founder"><?php echo event_icon('crown'); ?></span>
                                 <?php } elseif ($isOwner) { ?>
                                     <form method="POST" data-confirm="This person will be removed from the project team." data-confirm-title="Remove from team?" data-confirm-ok="Remove" data-confirm-tone="warning" data-confirm-icon="userminus" style="margin:0">
                                         <?php echo csrf_field(); ?>
                                         <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
                                         <input type="hidden" name="member_id" value="<?php echo (int)$t['mid']; ?>">
-                                        <button type="submit" name="action" value="remove" class="btn-sm btn-ghost">Remove</button>
+                                        <button type="submit" name="action" value="remove" class="tb-link pj-remove">Remove</button>
                                     </form>
-                                <?php } elseif (!$tMe) { ?>
-                                    <a class="btn-sm btn-ghost" href="messages?u=<?php echo e(urlencode($t['username'])); ?>">Message</a>
                                 <?php } ?>
                             </div>
                         <?php } ?>
@@ -542,22 +572,14 @@ $profileLink = function ($row) use ($me) {
                             <p class="club-meta" style="margin-top:8px"><?php echo $filledSpots; ?> of <?php echo $totalSpots; ?> role spots filled.</p>
                         <?php } ?>
                         <p class="club-meta" style="margin-top:12px"><?php echo count($applicants); ?> application<?php echo count($applicants) === 1 ? '' : 's'; ?> waiting.</p>
-                        <p class="pj-note"><?php echo project_icon('send'); ?><span><?php echo !empty($p['is_open']) ? 'Your project is open. New applications show up on this page and in your notifications.' : 'Applications are closed. Reopen them any time from the top of this page.'; ?></span></p>
-                        <a href="<?php echo e($teamChatHref); ?>" class="btn" style="margin-top:16px"><?php echo project_icon('chat'); ?>Open team chat</a>
+                        <p class="pj-note"><?php echo project_icon('send'); ?><span><?php echo !empty($p['is_open']) ? 'Your project is open. New applications show up on this page and in your notifications.' : 'Applications are closed. Reopen them any time from Edit project.'; ?></span></p>
 
                     <?php } elseif ($isMember) { ?>
 
                         <h2>You're on the team</h2>
                         <?php foreach ($team as $t) { if ((int)$t['user_id'] === (int)$me['id']) { ?>
-                            <p class="club-meta">Your role: <strong><?php echo e(!empty($t['role_label']) ? $t['role_label'] : 'Teammate'); ?></strong></p>
+                            <p class="club-meta">Role: <strong><?php echo e(!empty($t['role_label']) ? $t['role_label'] : 'Teammate'); ?></strong></p>
                         <?php } } ?>
-                        <a href="<?php echo e($teamChatHref); ?>" class="btn" style="margin-top:16px"><?php echo project_icon('chat'); ?>Open team chat</a>
-                        <a href="messages?u=<?php echo e(urlencode($p['username'])); ?>" class="btn-sm btn-ghost" style="margin-top:10px;width:100%"><?php echo project_icon('chat'); ?>Message the founder</a>
-                        <form method="POST" data-confirm="You will be removed from this project's team." data-confirm-title="Leave this project?" data-confirm-ok="Leave project" data-confirm-tone="warning" data-confirm-icon="exit" style="margin-top:10px">
-                            <?php echo csrf_field(); ?>
-                            <input type="hidden" name="project_id" value="<?php echo $pid; ?>">
-                            <button type="submit" name="action" value="leave" class="btn-sm btn-ghost" style="width:100%"><?php echo project_icon('logout'); ?>Leave project</button>
-                        </form>
 
                     <?php } elseif ($isPending) { ?>
 
@@ -622,9 +644,6 @@ $profileLink = function ($row) use ($me) {
                         </div>
                     </a>
                     <p class="club-meta" style="margin-top:12px">Posted <?php echo e(time_ago($p['created_ts'])); ?></p>
-                    <?php if (!$isOwner && !$isMember) { ?>
-                        <a href="messages?u=<?php echo e(urlencode($p['username'])); ?>" class="btn-sm btn-ghost" style="margin-top:12px">Message</a>
-                    <?php } ?>
                 </section>
             </aside>
         </div>

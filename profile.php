@@ -93,7 +93,7 @@ if ($row && !$hidden) {
 
     // projects this person founded or joined
     $pjr = db_run($conn,
-        "SELECT p.id, p.title, p.tagline, p.stage, p.category, m.role, m.role_label
+        "SELECT p.id, p.title, p.tagline, p.category, m.role, m.role_label
          FROM project_members m JOIN projects p ON p.id = m.project_id
          WHERE m.user_id = ? AND m.status = 'active' ORDER BY p.updated_at DESC LIMIT 12",
         "i", array($row['id']));
@@ -463,7 +463,6 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
                                         <a class="pf-club pf-pj" href="project?id=<?php echo (int)$mp['id']; ?>">
                                             <div class="pf-pj-media t<?php echo project_tone($mp['id']); ?>">
                                                 <span class="pf-pj-watermark"><?php echo project_category_icon($mp['category']); ?></span>
-                                                <span class="pf-pj-stage"><?php echo project_stage_badge($mp['stage']); ?></span>
                                             </div>
                                             <div class="pf-club-body">
                                                 <span class="pj-mini-ic pf-pj-ic t<?php echo project_tone($mp['id']); ?>"><?php echo project_category_icon($mp['category']); ?></span>

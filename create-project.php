@@ -23,13 +23,13 @@ $message = "";
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
     $message = "That upload was too large for the server. Try a smaller image (up to 10 MB).";
 }
-$f = array('title' => '', 'tagline' => '', 'category' => '', 'stage' => 'idea', 'description' => '', 'skills' => '', 'link' => '', 'is_open' => 1, 'club_id' => 0);
+$f = array('title' => '', 'tagline' => '', 'category' => '', 'description' => '', 'skills' => '', 'link' => '', 'is_open' => 1, 'club_id' => 0);
 $fRoles = array();
 
 if (isset($_POST['post'])) {
 
     // keep what they typed if something goes wrong
-    foreach (array('title', 'tagline', 'category', 'stage', 'description', 'skills', 'link') as $k) {
+    foreach (array('title', 'tagline', 'category', 'description', 'skills', 'link') as $k) {
         $f[$k] = (string)($_POST[$k] ?? '');
     }
     $f['is_open'] = empty($_POST['is_open']) ? 0 : 1;
@@ -52,12 +52,9 @@ if (isset($_POST['post'])) {
             $clubId = isset($clubChoices[(int)($_POST['club_id'] ?? 0)]) ? (int)$_POST['club_id'] : 0;
 
             $rl = db_run($conn, "SELECT COUNT(*) AS n FROM projects WHERE owner_id = ? AND created_at > (NOW() - INTERVAL 1 HOUR)", "i", array($me['id']));
-            $running = db_run($conn, "SELECT COUNT(*) AS n FROM projects WHERE owner_id = ? AND stage <> 'launched'", "i", array($me['id']));
 
             if ($rl['ok'] && $rl['rows'] && (int)$rl['rows'][0]['n'] >= 5) {
                 $error = "You've posted a lot of projects in the last hour. Please wait a bit.";
-            } elseif ($running['ok'] && $running['rows'] && (int)$running['rows'][0]['n'] >= PROJECT_MAX_RUNNING) {
-                $error = "You're already running " . PROJECT_MAX_RUNNING . " projects. Mark one as launched, or delete one, before posting another.";
             } else {
                 // the banner: saved only once everything else checks out, so a rejected form leaves no stray file
                 $bannerName = null;
@@ -71,18 +68,18 @@ if (isset($_POST['post'])) {
                 if ($error === "") {
                     if ($bannerReady) {
                         $r = db_run($conn,
-                            "INSERT INTO projects (owner_id, club_id, title, tagline, description, category, stage, skills, link, is_open, banner)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            "iisssssssis",
+                            "INSERT INTO projects (owner_id, club_id, title, tagline, description, category, skills, link, is_open, banner)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "iissssssis",
                             array($me['id'], $clubId > 0 ? $clubId : null, $clean['title'], $clean['tagline'], $clean['description'],
-                                  $clean['category'], $clean['stage'], $clean['skills'], $clean['link'], $clean['is_open'], $bannerName));
+                                  $clean['category'], $clean['skills'], $clean['link'], $clean['is_open'], $bannerName));
                     } else {
                         $r = db_run($conn,
-                            "INSERT INTO projects (owner_id, club_id, title, tagline, description, category, stage, skills, link, is_open)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            "iisssssssi",
+                            "INSERT INTO projects (owner_id, club_id, title, tagline, description, category, skills, link, is_open)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "iissssssi",
                             array($me['id'], $clubId > 0 ? $clubId : null, $clean['title'], $clean['tagline'], $clean['description'],
-                                  $clean['category'], $clean['stage'], $clean['skills'], $clean['link'], $clean['is_open']));
+                                  $clean['category'], $clean['skills'], $clean['link'], $clean['is_open']));
                     }
                     if (!$r['ok']) project_banner_delete($bannerName);   // nothing was posted, so don't keep the image
                 }

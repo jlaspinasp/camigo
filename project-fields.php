@@ -1,9 +1,8 @@
 <?php
 // Form fields shared by create-project.php and edit-project.php.
-// Expects: $f (current values: title, tagline, category, stage, description, skills, link, is_open, club_id),
+// Expects: $f (current values: title, tagline, category, description, skills, link, is_open, club_id),
 //          $fRoles (array of role rows: id, title, spots), $clubChoices (array of id => name the person may attach).
 $cats   = project_categories();
-$stages = project_stages();
 
 // show the roles already filled in, plus one empty row (at least two rows in total)
 $rows = $fRoles;
@@ -50,24 +49,14 @@ $bannerTone  = (int)($bannerTone ?? 0) % 3;
         <div class="counter"><span id="tagCount">0</span> / 120</div>
     </div>
 
-    <div class="pj-row two">
-        <div class="field">
-            <label for="category">Category</label>
-            <select name="category" id="category" required>
-                <option value="">Choose one</option>
-                <?php foreach ($cats as $c => $ic) { ?>
-                    <option value="<?php echo e($c); ?>" <?php echo ($f['category'] === $c) ? 'selected' : ''; ?>><?php echo e($c); ?></option>
-                <?php } ?>
-            </select>
-        </div>
-        <div class="field">
-            <label for="stage">Where is it at?</label>
-            <select name="stage" id="stage" required>
-                <?php foreach ($stages as $k => $s) { ?>
-                    <option value="<?php echo e($k); ?>" <?php echo ($f['stage'] === $k) ? 'selected' : ''; ?>><?php echo e($s[0]); ?>: <?php echo e($s[1]); ?></option>
-                <?php } ?>
-            </select>
-        </div>
+    <div class="field">
+        <label for="category">Category</label>
+        <select name="category" id="category" required>
+            <option value="">Choose one</option>
+            <?php foreach ($cats as $c => $ic) { ?>
+                <option value="<?php echo e($c); ?>" <?php echo ($f['category'] === $c) ? 'selected' : ''; ?>><?php echo e($c); ?></option>
+            <?php } ?>
+        </select>
     </div>
 
     <div class="field">

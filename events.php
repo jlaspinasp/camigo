@@ -8,7 +8,7 @@ $me = require_user_row($conn);
 
 // ---- which list ----
 $tab = $_GET['tab'] ?? 'upcoming';
-if (!in_array($tab, array('upcoming', 'mine', 'going', 'past'), true)) $tab = 'upcoming';
+if (!in_array($tab, array('upcoming', 'going'), true)) $tab = 'upcoming';
 $q = trim($_GET['q'] ?? '');
 if (str_len($q) > 60) $q = str_cut($q, 60);
 
@@ -20,20 +20,11 @@ $types = "";
 $params = array();
 $order = "e.start_at ASC";
 
-if ($tab === 'past') {
-    $where = "$endSql < ?";
-    $order = "e.start_at DESC";
-} else {
-    $where = "$endSql >= ?";
-}
+$where = "$endSql >= ?";
 $types .= "s";
 $params[] = $now;
 
-if ($tab === 'mine') {
-    $where .= " AND e.club_id IN (SELECT club_id FROM club_members WHERE user_id = ? AND status = 'active')";
-    $types .= "i";
-    $params[] = (int)$me['id'];
-} elseif ($tab === 'going') {
+if ($tab === 'going') {
     $where .= " AND e.id IN (SELECT event_id FROM event_rsvps WHERE user_id = ?)";
     $types .= "i";
     $params[] = (int)$me['id'];
@@ -67,15 +58,11 @@ function tab_url($t, $q) {
 
 $emptyTitle = array(
     'upcoming' => "No upcoming events yet",
-    'mine'     => "Nothing coming up in your clubs",
     'going'    => "You haven't joined any events yet",
-    'past'     => "No past events",
 );
 $emptyText = array(
     'upcoming' => "When someone posts an event, it shows up here.",
-    'mine'     => "Join a club, or check back when your clubs plan something.",
     'going'    => "Find something you like and press “I'm going”.",
-    'past'     => "Events that already happened will be listed here.",
 );
 ?>
 <!DOCTYPE html>
@@ -95,6 +82,10 @@ $emptyText = array(
 
 <main class="main narrow wide-ev ev-page">
 
+    <?php if ($tab === 'going') { ?>
+        <p class="crumb"><a href="events">&larr; All events</a></p>
+    <?php } ?>
+
     <header class="dir-hero">
         <div class="page-top">
             <div>
@@ -103,34 +94,27 @@ $emptyText = array(
             </div>
             <?php // always shown: unverified students are sent to the verification page by create-event ?>
             <div class="top-actions">
-                <a href="create-event" class="btn-sm btn-dark">Post an event</a>
+                <a href="<?php echo e(tab_url('going', '')); ?>" class="create-link join-link">I'm going</a>
+                <a href="create-event" class="create-link">Post an event</a>
             </div>
         </div>
 
-        <form method="GET" action="events" class="dir-search" role="search">
+        <form method="GET" action="events" class="dir-row cl-row" role="search">
             <?php if ($tab !== 'upcoming') { ?><input type="hidden" name="tab" value="<?php echo e($tab); ?>"><?php } ?>
-            <div class="dir-field">
-                <?php echo event_icon('search'); ?>
-                <input type="search" name="q" maxlength="60" placeholder="Search by event, club or place" value="<?php echo e($q); ?>" aria-label="Search events" autocomplete="off">
+            <div class="dir-search">
+                <div class="dir-field">
+                    <?php echo event_icon('search'); ?>
+                    <input type="search" name="q" maxlength="60" placeholder="Search by event, club or place" value="<?php echo e($q); ?>" aria-label="Search events" autocomplete="off">
+                </div>
             </div>
-
             <button type="submit" class="btn-sm btn-dark">Search</button>
+            <?php if ($filtered) { ?><a href="<?php echo e(tab_url($tab, '')); ?>" class="cancel">Clear search</a><?php } ?>
         </form>
     </header>
 
     <?php if ($message != "") { ?>
         <div class="msg <?php echo e($message_class); ?>" style="margin-top:20px"><?php echo e($message); ?></div>
     <?php } ?>
-
-    <div class="dir-bar ev-bar">
-        <div class="tabs">
-            <a href="<?php echo e(tab_url('upcoming', $q)); ?>" class="<?php echo $tab === 'upcoming' ? 'active' : ''; ?>">Upcoming</a>
-            <a href="<?php echo e(tab_url('mine', $q)); ?>" class="<?php echo $tab === 'mine' ? 'active' : ''; ?>">My clubs</a>
-            <a href="<?php echo e(tab_url('going', $q)); ?>" class="<?php echo $tab === 'going' ? 'active' : ''; ?>">I'm going</a>
-            <a href="<?php echo e(tab_url('past', $q)); ?>" class="<?php echo $tab === 'past' ? 'active' : ''; ?>">Past</a>
-        </div>
-        <?php if ($filtered) { ?><a href="<?php echo e(tab_url($tab, '')); ?>" class="cancel">Clear search</a><?php } ?>
-    </div>
 
     <?php if ($setupMissing) { ?>
 

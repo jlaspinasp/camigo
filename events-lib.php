@@ -484,11 +484,12 @@ function render_event_card($ev, $back) {
                         <input type="hidden" name="event_id" value="<?php echo $id; ?>">
                         <input type="hidden" name="back" value="<?php echo e($back); ?>">
                         <?php if ($meGoing) { ?>
-                            <button type="submit" name="action" value="unrsvp" class="btn-sm going" title="Click to cancel"><?php echo event_icon('check'); ?>Going</button>
+                            <span class="status-text status-sent">You’re going</span>
+                            <button type="submit" name="action" value="unrsvp" class="text-action" title="Click to cancel">Cancel</button>
                         <?php } elseif ($full) { ?>
-                            <button type="button" class="btn-sm btn-ghost" disabled>Full</button>
+                            <span class="status-text">Full</span>
                         <?php } else { ?>
-                            <button type="submit" name="action" value="rsvp" class="btn-sm btn-dark">I’m going</button>
+                            <button type="submit" name="action" value="rsvp" class="text-action">I’m going</button>
                         <?php } ?>
                     </form>
                 <?php } ?>

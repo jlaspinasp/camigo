@@ -37,7 +37,7 @@ if ($allowed) {
     }
 
     $f = array(
-        'title' => $p['title'], 'tagline' => $p['tagline'], 'category' => $p['category'], 'stage' => $p['stage'],
+        'title' => $p['title'], 'tagline' => $p['tagline'], 'category' => $p['category'],
         'description' => $p['description'], 'skills' => (string)$p['skills'], 'link' => (string)$p['link'],
         'is_open' => (int)$p['is_open'], 'club_id' => (int)$p['club_id'],
     );
@@ -65,7 +65,7 @@ if ($allowed) {
 
     } elseif (isset($_POST['save'])) {
 
-        foreach (array('title', 'tagline', 'category', 'stage', 'description', 'skills', 'link') as $k) {
+        foreach (array('title', 'tagline', 'category', 'description', 'skills', 'link') as $k) {
             $f[$k] = (string)($_POST[$k] ?? '');
         }
         $f['is_open'] = empty($_POST['is_open']) ? 0 : 1;
@@ -97,17 +97,10 @@ if ($allowed) {
                 }
             }
 
+            $newClub = 0;
             if ($clean && $error === "") {
                 $newClub = (int)($_POST['club_id'] ?? 0);
                 if (!isset($clubChoices[$newClub])) $newClub = 0;
-
-                // moving a launched project back to a working stage counts as running again
-                if ($p['stage'] === 'launched' && $clean['stage'] !== 'launched') {
-                    $run = db_run($conn, "SELECT COUNT(*) AS n FROM projects WHERE owner_id = ? AND stage <> 'launched'", "i", array($me['id']));
-                    if ($run['ok'] && $run['rows'] && (int)$run['rows'][0]['n'] >= PROJECT_MAX_RUNNING) {
-                        $error = "You're already running " . PROJECT_MAX_RUNNING . " projects. Mark one as launched first.";
-                    }
-                }
             }
 
             // the banner: a new upload replaces the old one, the x removes it, otherwise it stays as it is
@@ -126,10 +119,10 @@ if ($allowed) {
             }
 
             if ($clean && $error === "") {
-                $sql    = "UPDATE projects SET title = ?, tagline = ?, description = ?, category = ?, stage = ?, skills = ?, link = ?, is_open = ?, club_id = ?"
+                $sql    = "UPDATE projects SET title = ?, tagline = ?, description = ?, category = ?, skills = ?, link = ?, is_open = ?, club_id = ?"
                         . ($bannerReady ? ", banner = ?" : "") . " WHERE id = ? AND owner_id = ?";
-                $types  = "sssssssii" . ($bannerReady ? "s" : "") . "ii";
-                $params = array($clean['title'], $clean['tagline'], $clean['description'], $clean['category'], $clean['stage'],
+                $types  = "ssssssii" . ($bannerReady ? "s" : "") . "ii";
+                $params = array($clean['title'], $clean['tagline'], $clean['description'], $clean['category'],
                                 $clean['skills'], $clean['link'], $clean['is_open'], $newClub > 0 ? $newClub : null);
                 if ($bannerReady) $params[] = $bannerFinal;
                 $params[] = $pid;
@@ -159,11 +152,6 @@ if ($allowed) {
                         if (isset($keep[$rid])) continue;
                         db_run($conn, "UPDATE project_members SET role_id = NULL WHERE role_id = ? AND project_id = ?", "ii", array($rid, $pid));
                         db_run($conn, "DELETE FROM project_roles WHERE id = ? AND project_id = ?", "ii", array($rid, $pid));
-                    }
-
-                    if ($p['stage'] !== $clean['stage']) {
-                        project_notify_team($conn, $pid, $me['id'], 'project_update',
-                            $clean['title'] . ' moved to ' . project_stage_label($clean['stage']) . '.', 'project?id=' . $pid);
                     }
 
                     flash_set("Your project was updated.", "success");

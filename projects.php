@@ -11,7 +11,7 @@ $interests  = project_tags($me['interests'] ?? '');
 
 // ---- which list ----
 $tab = $_GET['tab'] ?? 'discover';
-if (!in_array($tab, array('discover', 'foryou', 'mine', 'applied', 'showcase'), true)) $tab = 'discover';
+if (!in_array($tab, array('discover', 'mine', 'applied'), true)) $tab = 'discover';
 $q   = trim($_GET['q'] ?? '');
 if (str_len($q) > 60) $q = str_cut($q, 60);
 $cat = $_GET['cat'] ?? '';
@@ -24,19 +24,13 @@ $order  = "p.created_at DESC, p.id DESC";
 $limit  = PROJECT_PER_PAGE;
 
 if ($tab === 'discover') {
-    $where = "p.is_open = 1 AND p.stage <> 'launched'";
-} elseif ($tab === 'foryou') {
-    // everything open that you aren't already part of; we rank it by your interests below
-    $where = "p.is_open = 1 AND p.stage <> 'launched' AND mine.status IS NULL";
-    $limit = 100;
+    $where = "p.is_open = 1";
 } elseif ($tab === 'mine') {
     $where = "mine.status = 'active'";
     $order = "p.updated_at DESC, p.id DESC";
 } elseif ($tab === 'applied') {
     $where = "mine.status = 'pending'";
     $order = "mine.created_at DESC";
-} else {
-    $where = "p.stage = 'launched'";
 }
 
 if ($cat !== '') {
@@ -56,33 +50,17 @@ $res = project_query($conn, $me['id'], $where, $types, $params, $order, $limit);
 $setupMissing = !$res['ok'];
 $projects = $res['rows'];
 
-// "For you": keep what matches the person's interests, best matches first
-if ($tab === 'foryou' && $projects) {
-    $scored = array();
-    foreach ($projects as $pr) {
-        $n = count(project_matches($pr['skills'], $pr['category'], $pr['roles'], $interests));
-        if ($n > 0) $scored[] = array($n, $pr);
-    }
-    usort($scored, function ($a, $b) {
-        if ($a[0] !== $b[0]) return $b[0] - $a[0];
-        return (int)$b[1]['created_ts'] - (int)$a[1]['created_ts'];
-    });
-    $projects = array();
-    foreach (array_slice($scored, 0, PROJECT_PER_PAGE) as $s) $projects[] = $s[1];
-}
-
 // ---- numbers for the header ----
-$openN = 0; $launchedN = 0; $spotsN = 0; $waiting = 0;
+$openN = 0; $spotsN = 0; $waiting = 0;
 if (!$setupMissing) {
-    $st = db_run($conn, "SELECT COALESCE(SUM(is_open = 1 AND stage <> 'launched'), 0) AS open_n, COALESCE(SUM(stage = 'launched'), 0) AS launched_n FROM projects");
+    $st = db_run($conn, "SELECT COALESCE(SUM(is_open = 1), 0) AS open_n FROM projects");
     if ($st['ok'] && $st['rows']) {
         $openN = (int)$st['rows'][0]['open_n'];
-        $launchedN = (int)$st['rows'][0]['launched_n'];
     }
     $sp = db_run($conn,
         "SELECT COALESCE(SUM(GREATEST(CAST(r.spots AS SIGNED) - (SELECT COUNT(*) FROM project_members m WHERE m.role_id = r.id AND m.status = 'active'), 0)), 0) AS n
          FROM project_roles r JOIN projects p ON p.id = r.project_id
-         WHERE p.is_open = 1 AND p.stage <> 'launched'");
+         WHERE p.is_open = 1");
     if ($sp['ok'] && $sp['rows']) $spotsN = (int)$sp['rows'][0]['n'];
 
     // applications waiting on projects this person founded
@@ -109,17 +87,13 @@ function pj_tab_url($t, $q, $cat) {
 
 $emptyTitle = array(
     'discover' => "No projects are recruiting yet",
-    'foryou'   => $interests ? "No matches yet" : "Add interests to get matches",
     'mine'     => "You're not on any project yet",
     'applied'  => "No applications waiting",
-    'showcase' => "Nothing has launched yet",
 );
 $emptyText = array(
     'discover' => "Be the first to post an idea and find your team.",
-    'foryou'   => $interests ? "When a project asks for skills like yours, it shows up here. Check Discover in the meantime." : "Add a few interests to your profile and we'll show projects that fit them.",
     'mine'     => "Post your own idea, or apply to one that excites you.",
     'applied'  => "When you apply to a project, you can follow its answer here.",
-    'showcase' => "Projects that reach the Launched stage are celebrated here.",
 );
 ?>
 <!DOCTYPE html>
@@ -139,26 +113,36 @@ $emptyText = array(
 
 <main class="main">
 
-    <section class="pj-banner">
-        <div class="pj-banner-copy">
-            <h1>Turn an idea into a team.</h1>
-            <p>Post what you want to build, say who you need, and build it together with students from your campus.</p>
-            <div class="pj-banner-actions">
-                <a href="create-project" class="btn-sm btn-amber">Post a project</a>
-                <?php if ($waiting > 0) { ?>
-                    <a href="projects?tab=mine" class="btn-sm btn-light-ghost">Applications <span class="count"><?php echo $waiting; ?></span></a>
-                <?php } ?>
-            </div>
+    <?php if ($tab === 'mine' || $tab === 'applied') { ?>
+        <p class="crumb"><a href="projects">&larr; All projects</a></p>
+    <?php } ?>
+
+    <div class="page-top">
+        <div>
+            <h1 class="page-title">Projects</h1>
+            <p class="page-sub">Turn an idea into a team. Post what you want to build and find students to build it with.</p>
         </div>
-    </section>
+        <div class="top-actions">
+            <?php if ($waiting > 0) { ?>
+                <a href="projects?tab=applied" class="create-link join-link">Applications <span class="count"><?php echo $waiting; ?></span></a>
+            <?php } ?>
+            <a href="projects?tab=mine" class="create-link join-link">My projects</a>
+            <a href="create-project" class="create-link">Post a project</a>
+        </div>
+    </div>
 
     <?php if ($message != "") { ?>
         <div class="msg <?php echo e($message_class); ?>" style="margin-top:20px"><?php echo e($message); ?></div>
     <?php } ?>
 
-    <form method="GET" class="filters">
+    <form method="GET" class="dir-row cl-row" role="search">
         <?php if ($tab !== 'discover') { ?><input type="hidden" name="tab" value="<?php echo e($tab); ?>"><?php } ?>
-        <input type="text" name="q" maxlength="60" placeholder="Search by project, skill or role" value="<?php echo e($q); ?>">
+        <div class="dir-search">
+            <div class="dir-field">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+                <input type="search" name="q" maxlength="60" placeholder="Search by project, skill or role" value="<?php echo e($q); ?>" aria-label="Search projects" autocomplete="off">
+            </div>
+        </div>
         <select name="cat" aria-label="Category">
             <option value="">All categories</option>
             <?php foreach ($categories as $c => $ic) { ?>
@@ -166,16 +150,8 @@ $emptyText = array(
             <?php } ?>
         </select>
         <button type="submit" class="btn-sm btn-dark">Search</button>
-        <?php if ($filtered) { ?><a href="<?php echo e(pj_tab_url($tab, '', '')); ?>" class="cancel">Clear</a><?php } ?>
+        <?php if ($filtered) { ?><a href="<?php echo e(pj_tab_url($tab, '', '')); ?>" class="cancel">Clear search</a><?php } ?>
     </form>
-
-    <div class="tabs">
-        <a href="<?php echo e(pj_tab_url('discover', $q, $cat)); ?>" class="<?php echo $tab === 'discover' ? 'active' : ''; ?>">Discover</a>
-        <a href="<?php echo e(pj_tab_url('foryou', $q, $cat)); ?>" class="<?php echo $tab === 'foryou' ? 'active' : ''; ?>"><?php echo project_icon('sparkle'); ?>For you</a>
-        <a href="<?php echo e(pj_tab_url('mine', $q, $cat)); ?>" class="<?php echo $tab === 'mine' ? 'active' : ''; ?>">My projects</a>
-        <a href="<?php echo e(pj_tab_url('applied', $q, $cat)); ?>" class="<?php echo $tab === 'applied' ? 'active' : ''; ?>">Applied</a>
-        <a href="<?php echo e(pj_tab_url('showcase', $q, $cat)); ?>" class="<?php echo $tab === 'showcase' ? 'active' : ''; ?>">Showcase</a>
-    </div>
 
     <?php if ($setupMissing) { ?>
 
@@ -184,12 +160,11 @@ $emptyText = array(
     <?php } elseif (!$projects) { ?>
 
         <section class="panel center">
-            <div class="ev-empty-ic"><?php echo project_icon($tab === 'foryou' ? 'sparkle' : 'rocket'); ?></div>
+            <div class="ev-empty-ic"><?php echo project_icon('rocket'); ?></div>
             <h2><?php echo $filtered ? "No projects match your search" : e($emptyTitle[$tab]); ?></h2>
             <p class="empty">
                 <?php if ($filtered) { ?>Try a different word or category.
                 <?php } else { echo e($emptyText[$tab]); ?>
-                    <?php if ($tab === 'foryou' && !$interests) { ?> <a href="edit-profile">Edit your profile</a><?php } ?>
                 <?php } ?>
             </p>
             <?php if (!$filtered) { ?>

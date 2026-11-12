@@ -6,7 +6,6 @@ require_once __DIR__ . '/events-lib.php';
 
 define('PROJECT_MAX_ROLES', 6);          // roles a project can list
 define('PROJECT_MAX_SPOTS', 10);         // spots per role
-define('PROJECT_MAX_RUNNING', 5);        // projects one person can run at the same time (not yet launched)
 define('PROJECT_MAX_PENDING', 10);       // open applications one person can have
 define('PROJECT_PER_PAGE', 40);
 
@@ -23,26 +22,6 @@ function project_categories() {
         'Hackathon & Competition'  => 'trophy',
         'Other'                    => 'layers',
     );
-}
-
-// key => array(label, hint)
-function project_stages() {
-    return array(
-        'idea'     => array('Idea',     'Just a spark. Nothing built yet.'),
-        'planning' => array('Planning', 'Shaping the scope and the plan.'),
-        'building' => array('Building', 'Work is underway.'),
-        'launched' => array('Launched', 'Finished, shipped or live.'),
-    );
-}
-
-function project_stage_label($stage) {
-    $s = project_stages();
-    return isset($s[$stage]) ? $s[$stage][0] : 'Idea';
-}
-
-function project_stage_badge($stage) {
-    $stage = isset(project_stages()[$stage]) ? $stage : 'idea';
-    return '<span class="badge pj-stage s-' . e($stage) . '">' . e(project_stage_label($stage)) . '</span>';
 }
 
 // ---------- icons ----------
@@ -158,7 +137,7 @@ function project_status($p, $roles) {
 // One project with its founder and club. Returns the row or null.
 function project_get($conn, $projectId) {
     $r = db_run($conn,
-        "SELECT p.id, p.owner_id, p.club_id, p.title, p.tagline, p.description, p.category, p.stage, p.skills, p.link, p.is_open,
+        "SELECT p.id, p.owner_id, p.club_id, p.title, p.tagline, p.description, p.category, p.skills, p.link, p.is_open,
                 " . (projects_banner_ready($conn) ? "p.banner," : "") . "
                 UNIX_TIMESTAMP(p.created_at) AS created_ts, UNIX_TIMESTAMP(p.updated_at) AS updated_ts,
                 u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility,
@@ -175,7 +154,7 @@ function project_get($conn, $projectId) {
 // $where may use ? marks (pass their types and values). Columns are prefixed p. (projects).
 // Every row gets: roles (with filled), faces (a few team members), team_n, my_role, my_status.
 function project_query($conn, $meId, $where, $types, $params, $order, $limit) {
-    $sql = "SELECT p.id, p.owner_id, p.club_id, p.title, p.tagline, p.category, p.stage, p.skills, p.is_open,
+    $sql = "SELECT p.id, p.owner_id, p.club_id, p.title, p.tagline, p.category, p.skills, p.is_open,
                    " . (projects_banner_ready($conn) ? "p.banner," : "") . "
                    UNIX_TIMESTAMP(p.created_at) AS created_ts,
                    u.username, u.first_name, u.last_name, u.photo, u.profile_visibility,
@@ -261,12 +240,10 @@ function project_clean($post, &$err) {
     $desc    = trim(str_replace("\r\n", "\n", (string)($post['description'] ?? '')));
     $desc    = preg_replace("/\n{3,}/", "\n\n", $desc);
     $cat     = (string)($post['category'] ?? '');
-    $stage   = (string)($post['stage'] ?? 'idea');
 
     if (str_len($title) < 3 || str_len($title) > 80) { $err = "Give your project a name between 3 and 80 characters."; return null; }
     if (str_len($tagline) < 10 || str_len($tagline) > 120) { $err = "Write a one-line pitch between 10 and 120 characters."; return null; }
     if (!isset(project_categories()[$cat])) { $err = "Please pick a category."; return null; }
-    if (!isset(project_stages()[$stage])) { $err = "Please pick the stage your project is at."; return null; }
     if (str_len($desc) < 30) { $err = "Tell people a bit more about the project. A few sentences helps them decide."; return null; }
     if (str_len($desc) > 2000) { $err = "The description can be up to 2000 characters."; return null; }
 
@@ -314,7 +291,6 @@ function project_clean($post, &$err) {
         'tagline'     => $tagline,
         'description' => $desc,
         'category'    => $cat,
-        'stage'       => $stage,
         'skills'      => $skills,
         'link'        => $link,
         'is_open'     => empty($post['is_open']) ? 0 : 1,
@@ -357,14 +333,13 @@ function render_project_card($p, $interests = array()) {
     $isMember = (($p['my_status'] ?? '') === 'active');
     $isPending = (($p['my_status'] ?? '') === 'pending');
     $team   = (int)$p['team_n'];
-    $showRoles = array_slice($roles, 0, 3);
+    $showRoles = array_slice($roles, 0, 2);
     ?>
     <?php $bnUrl = project_banner_url($p); ?>
     <article class="pj-card">
         <div class="pj-cover t<?php echo $tone; ?><?php echo $bnUrl !== '' ? ' has-banner' : ''; ?>"<?php if ($bnUrl !== '') { ?> style="--pj-banner:url('<?php echo e($bnUrl); ?>')"<?php } ?>>
             <span class="pj-cover-ic"><?php echo project_category_icon($p['category']); ?></span>
             <div class="pj-cover-top">
-                <?php echo project_stage_badge($p['stage']); ?>
                 <?php if ($match) { ?><span class="badge pj-match" title="Matches: <?php echo e(implode(', ', array_slice($match, 0, 3))); ?>"><?php echo project_icon('sparkle'); ?>Matches your interests</span><?php } ?>
             </div>
             <span class="pj-cover-cat"><?php echo e($p['category']); ?></span>
@@ -380,8 +355,8 @@ function render_project_card($p, $interests = array()) {
 
             <?php if ($tags) { ?>
                 <div class="pj-skills">
-                    <?php foreach (array_slice($tags, 0, 4) as $t) { ?><span class="chip"><?php echo e($t); ?></span><?php } ?>
-                    <?php if (count($tags) > 4) { ?><span class="chip more">+<?php echo count($tags) - 4; ?></span><?php } ?>
+                    <?php foreach (array_slice($tags, 0, 3) as $t) { ?><span class="pj-skill"><?php echo e($t); ?></span><?php } ?>
+                    <?php if (count($tags) > 3) { ?><span class="pj-skill more">+<?php echo count($tags) - 3; ?> more</span><?php } ?>
                 </div>
             <?php } ?>
 
@@ -392,9 +367,9 @@ function render_project_card($p, $interests = array()) {
                         <?php foreach ($showRoles as $r) {
                             $left = max(0, (int)$r['spots'] - (int)$r['filled']);
                         ?>
-                            <span class="pj-role-pill<?php echo $left === 0 ? ' full' : ''; ?>"><?php echo e($r['title']); ?><b><?php echo $left === 0 ? 'Filled' : '×' . $left; ?></b></span>
+                            <span class="pj-role<?php echo $left === 0 ? ' full' : ''; ?>"><span class="pj-role-t"><?php echo e($r['title']); ?></span><span class="pj-role-n"><?php echo $left === 0 ? 'Filled' : '×' . $left; ?></span></span>
                         <?php } ?>
-                        <?php if (count($roles) > 3) { ?><span class="pj-role-pill more">+<?php echo count($roles) - 3; ?> more</span><?php } ?>
+                        <?php if (count($roles) > 2) { ?><span class="pj-role more">+<?php echo count($roles) - 2; ?> more</span><?php } ?>
                     </div>
                 </div>
             <?php } ?>
@@ -415,15 +390,15 @@ function render_project_card($p, $interests = array()) {
                 </div>
 
                 <?php if ($isOwner) { ?>
-                    <span class="badge approved">You're the founder</span>
+                    <span class="status-text status-role">You're the founder</span>
                 <?php } elseif ($isMember) { ?>
-                    <span class="badge approved">On the team</span>
+                    <span class="status-text status-role">On the team</span>
                 <?php } elseif ($isPending) { ?>
-                    <span class="badge pending">Applied</span>
+                    <span class="status-text status-sent">Applied</span>
                 <?php } elseif ($status[1] === 'open') { ?>
-                    <span class="badge pj-open"><?php echo $roles ? ($spots === 1 ? '1 spot open' : $spots . ' spots open') : 'Open'; ?></span>
+                    <span class="status-text"><?php echo $roles ? ($spots === 1 ? '1 spot open' : $spots . ' spots open') : 'Open'; ?></span>
                 <?php } else { ?>
-                    <span class="badge ended"><?php echo e($status[0]); ?></span>
+                    <span class="status-text"><?php echo e($status[0]); ?></span>
                 <?php } ?>
             </div>
         </div>

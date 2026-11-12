@@ -118,13 +118,15 @@ function dir_name($r) {
         <h1 class="page-title">Students</h1>
         <p class="page-sub">Find classmates by name, course or interest, and open their profiles.</p>
 
-        <form method="GET" action="students" class="dir-search" role="search">
-            <div class="dir-field">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
-                <input type="search" name="q" maxlength="60" placeholder="Search by name, course or interest" value="<?php echo e($q); ?>" aria-label="Search students" autocomplete="off">
+        <form method="GET" action="students" class="dir-row cl-row" role="search">
+            <div class="dir-search">
+                <div class="dir-field">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+                    <input type="search" name="q" maxlength="60" placeholder="Search by name, course or interest" value="<?php echo e($q); ?>" aria-label="Search students" autocomplete="off">
+                </div>
             </div>
-
             <button type="submit" class="btn-sm btn-dark">Search</button>
+            <?php if ($filtered) { ?><a href="students" class="cancel">Clear search</a><?php } ?>
         </form>
     </header>
 
@@ -137,10 +139,6 @@ function dir_name($r) {
         <div class="msg error" style="margin-top:20px">The directory needs the profile fields. Run <strong>profile.sql</strong> in phpMyAdmin first.</div>
 
     <?php } else { ?>
-
-        <div class="dir-bar">
-            <?php if ($filtered) { ?><a href="students" class="cancel">Clear search</a><?php } ?>
-        </div>
 
         <?php if (!$students) { ?>
 

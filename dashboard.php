@@ -25,7 +25,7 @@ $unread = $urow ? unread_count($conn, $urow['id']) : 0;
 $unreadMsg = $urow ? unread_messages($conn, $urow['id']) : 0;
 
 // newest projects that are looking for teammates
-$freshRes = project_query($conn, $urow ? $urow['id'] : 0, "p.is_open = 1 AND p.stage <> 'launched'", "", array(), "p.created_at DESC, p.id DESC", 50);
+$freshRes = project_query($conn, $urow ? $urow['id'] : 0, "p.is_open = 1", "", array(), "p.created_at DESC, p.id DESC", 50);
 $freshProjects = $freshRes['rows'];
 
 // ---- home feed: news from the clubs this person has joined ----

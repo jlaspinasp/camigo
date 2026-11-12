@@ -207,7 +207,7 @@ function admin_projects_search($conn, $q, $limit, $offset) {
     $rows = array();
     if ($total > 0 && $limit > 0) {
         $r = db_run($conn,
-            "SELECT p.id, p.title, p.category, p.stage, p.created_at, u.username, u.first_name, u.last_name " . $from . "
+            "SELECT p.id, p.title, p.category, p.created_at, u.username, u.first_name, u.last_name " . $from . "
              ORDER BY p.title ASC, p.id ASC LIMIT ? OFFSET ?",
             $types . "ii", array_merge($params, array((int)$limit, (int)$offset)));
         $rows = $r['rows'];
@@ -251,7 +251,6 @@ function admin_project_row($p, $back = '') {
     $by = trim(($p['first_name'] ?? '') . ' ' . ($p['last_name'] ?? ''));
     $h  = '<div class="club-item"><div class="club-head"><strong>';
     $h .= '<a href="project?id=' . (int)$p['id'] . '">' . e($p['title']) . '</a></strong>';
-    if (!empty($p['stage'])) $h .= '<span class="badge approved">' . e(function_exists('project_stage_label') ? project_stage_label($p['stage']) : ucfirst($p['stage'])) . '</span>';
     $h .= '</div>';
     $h .= '<div class="club-meta">' . e($p['category']);
     if ($by !== '') {

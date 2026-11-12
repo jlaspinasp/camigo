@@ -132,10 +132,11 @@ function club_media_html($c, $class) {
 }
 
 // ---- featured club: the same daily pick the dashboard shows (rail_featured) ----
-// Only on the plain "All clubs" view. Its cover and details come from the list below.
+// Always at the top of "All clubs", including while searching or filtering (even when it
+// doesn't match the search). Not shown on "My clubs".
 $featured = null;
 $gridClubs = $clubs;
-if (!$tableMissing && !$filtered && !$mine) {
+if (!$tableMissing && !$mine) {
     $pick = rail_featured($conn, $me['id']);
     if ($pick) {
         foreach ($clubs as $fc) {
@@ -143,6 +144,19 @@ if (!$tableMissing && !$filtered && !$mine) {
                 $featured = $fc;
                 break;
             }
+        }
+        // the search or category left it out of the list: load it on its own
+        if (!$featured) {
+            $fr = db_run($conn,
+                "SELECT c.*,
+                        (SELECT COUNT(*) FROM club_members m WHERE m.club_id = c.id AND m.status = 'active') AS members,
+                        (SELECT COUNT(*) FROM club_members p WHERE p.club_id = c.id AND p.status = 'pending') AS pending_n,
+                        mine.role AS my_role, mine.status AS my_status
+                 FROM clubs c
+                 LEFT JOIN club_members mine ON mine.club_id = c.id AND mine.user_id = ?
+                 WHERE c.status = 'approved' AND c.id = ?",
+                "ii", array($me['id'], (int)$pick['id']));
+            if ($fr['ok'] && $fr['rows']) $featured = $fr['rows'][0];
         }
     }
     if ($featured) {
@@ -168,6 +182,10 @@ if (!$tableMissing && !$filtered && !$mine) {
 
 <main class="main">
 
+    <?php if ($mine) { ?>
+        <p class="crumb"><a href="clubs">&larr; All clubs</a></p>
+    <?php } ?>
+
     <div class="page-top">
         <div>
             <h1 class="page-title">Clubs</h1>
@@ -177,6 +195,7 @@ if (!$tableMissing && !$filtered && !$mine) {
             <?php if ($reqCount > 0) { ?>
                 <a href="club-requests" class="create-link join-link">Join requests <span class="count"><?php echo $reqCount; ?></span></a>
             <?php } ?>
+            <a href="clubs?mine=1" class="create-link join-link">My clubs</a>
             <a href="create-club" class="create-link">Create a club</a>
         </div>
     </div>
@@ -231,23 +250,23 @@ if (!$tableMissing && !$filtered && !$mine) {
 
 
 
-    <form method="GET" class="filters">
+    <form method="GET" class="dir-row cl-row" role="search">
         <?php if ($mine) { ?><input type="hidden" name="mine" value="1"><?php } ?>
-        <input type="text" name="q" maxlength="60" placeholder="Search clubs" value="<?php echo e($q); ?>">
-        <select name="cat">
+        <div class="dir-search">
+            <div class="dir-field">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+                <input type="search" name="q" maxlength="60" placeholder="Search clubs" value="<?php echo e($q); ?>" aria-label="Search clubs" autocomplete="off">
+            </div>
+        </div>
+        <select name="cat" aria-label="Category">
             <option value="">All categories</option>
             <?php foreach ($categories as $c) { ?>
                 <option value="<?php echo e($c); ?>" <?php echo ($cat === $c) ? 'selected' : ''; ?>><?php echo e($c); ?></option>
             <?php } ?>
         </select>
         <button type="submit" class="btn-sm btn-dark">Search</button>
-        <?php if ($filtered) { ?><a href="clubs<?php echo $mine ? '?mine=1' : ''; ?>" class="cancel">Clear</a><?php } ?>
+        <?php if ($filtered) { ?><a href="clubs<?php echo $mine ? '?mine=1' : ''; ?>" class="cancel">Clear search</a><?php } ?>
     </form>
-
-    <div class="tabs">
-        <a href="clubs" class="<?php echo $mine ? '' : 'active'; ?>">All clubs</a>
-        <a href="clubs?mine=1" class="<?php echo $mine ? 'active' : ''; ?>">My clubs</a>
-    </div>
 
     <?php if ($tableMissing) { ?>
 

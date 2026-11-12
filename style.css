@@ -1824,16 +1824,18 @@ a.hs:hover { text-decoration: none; background: rgba(255, 255, 255, 0.15); }
 
 .pj-card {
     position: relative; display: flex; flex-direction: column; overflow: hidden;
+    height: 365px; /* fixed size: every project card is identical */
     background: var(--white);
     border: 1px solid var(--line); border-radius: 20px;
     transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
 }
-.pj-card:hover { border-color: #c2c5e0; box-shadow: 0 16px 36px rgba(20, 22, 58, 0.08); transform: translateY(-2px); }
+/* same hover as the club cards: lift + soft shadow + banner zoom */
+.pj-card:has(.pj-stretch:hover) { border-color: #c2c5e0; box-shadow: 0 20px 44px -18px rgba(20, 22, 58, 0.22); transform: translateY(-3px); }
 
 .pj-cover {
     position: relative; overflow: hidden;
     display: flex; flex-direction: column; justify-content: space-between;
-    height: 96px; padding: 14px 16px;
+    height: 96px; flex: none; padding: 14px 16px;
     color: var(--midnight);
     background: linear-gradient(135deg, #ffc857, #ff9d6b);
 }
@@ -1849,50 +1851,41 @@ a.hs:hover { text-decoration: none; background: rgba(255, 255, 255, 0.15); }
 .pj-cover-top { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: 6px; }
 .pj-cover-cat { position: relative; z-index: 1; font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.7; }
 
-/* stage badge: a light pill with a coloured dot, readable on any cover */
-.badge.pj-stage { display: inline-flex; align-items: center; color: var(--midnight); background: rgba(255, 255, 255, 0.92); }
-.badge.pj-stage::before { content: ""; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--dot, #ffb020); }
-.badge.pj-stage.s-idea     { --dot: #ffb020; }
-.badge.pj-stage.s-planning { --dot: #6f7bff; }
-.badge.pj-stage.s-building { --dot: #1f8a52; }
-.badge.pj-stage.s-launched { --dot: #ff6b6b; }
 .badge.pj-match { display: inline-flex; align-items: center; gap: 5px; color: #fff; background: rgba(12, 15, 58, 0.78); }
 .badge.pj-match svg { width: 12px; height: 12px; color: var(--amber); }
 .badge.pj-open { color: #176b40; background: #effaf3; }
 
-.pj-body { flex: 1; display: flex; flex-direction: column; padding: 18px 20px; min-width: 0; }
-.pj-club { position: relative; z-index: 2; align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
-.pj-club svg { width: 14px; height: 14px; }
+.pj-body { flex: 1; display: flex; flex-direction: column; padding: 18px 20px; min-width: 0; min-height: 0; }
+.pj-club { position: relative; z-index: 2; align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 12.5px; font-weight: 600; color: var(--muted); max-width: 100%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pj-club svg { flex: none; width: 14px; height: 14px; }
 .pj-club:hover { color: var(--indigo); text-decoration: none; }
-.pj-body h3 { font-family: var(--display); font-size: 20px; font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; overflow-wrap: anywhere; }
+.pj-body h3 { font-family: var(--display); font-size: 20px; font-weight: 700; line-height: 1.2; letter-spacing: -0.015em; overflow-wrap: anywhere; flex: none;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .pj-stretch { color: var(--ink); }
 .pj-stretch::after { content: ""; position: absolute; inset: 0; z-index: 1; }
-.pj-stretch:hover { color: var(--indigo); text-decoration: none; }
+.pj-stretch:hover { color: var(--ink); text-decoration: none; }
 .pj-tag {
-    margin-top: 8px; font-size: 14px; line-height: 1.55; color: var(--muted);
+    margin-top: 8px; font-size: 14px; line-height: 1.55; color: var(--muted); flex: none; min-height: 3.1em;
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
 }
-.pj-skills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
-.pj-skills .chip { padding: 4px 10px; font-size: 12px; }
-.pj-skills .chip.more { color: var(--muted); background: #f0f1fb; }
+.pj-skills { display: flex; flex-wrap: nowrap; align-items: baseline; margin-top: 14px; flex: none; overflow: hidden; white-space: nowrap; font-size: 13px; color: var(--muted); }
+.pj-skill { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pj-skill ~ .pj-skill::before { content: "\00b7"; margin: 0 8px; }
+.pj-skill.more { flex: none; font-weight: 500; }
 
-.pj-looking { margin-top: 14px; }
+.pj-looking { margin-top: 14px; flex: none; }
 .pj-looking small { display: block; margin-bottom: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.pj-roles-mini { display: flex; flex-wrap: wrap; gap: 6px; }
-.pj-role-pill {
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 4px 5px 4px 11px;
-    border: 1px solid var(--line); border-radius: 999px;
-    font-size: 12.5px; font-weight: 600; color: var(--ink); background: var(--white);
-}
-.pj-role-pill b { padding: 2px 8px; border-radius: 999px; font-size: 11px; color: var(--indigo-dark); background: #eceefd; }
-.pj-role-pill.full { color: var(--muted); background: var(--paper); }
-.pj-role-pill.full b { color: var(--muted); background: #eeeff7; }
-.pj-role-pill.more { padding: 4px 11px; color: var(--muted); font-weight: 500; }
+.pj-roles-mini { display: flex; flex-wrap: nowrap; align-items: baseline; overflow: hidden; white-space: nowrap; font-size: 13px; color: var(--ink); }
+.pj-role { display: inline-flex; align-items: baseline; flex: 0 1 auto; min-width: 0; font-weight: 600; }
+.pj-role ~ .pj-role::before { content: "\00b7"; flex: none; margin: 0 8px; font-weight: 400; color: var(--muted); }
+.pj-role-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pj-role-n { flex: none; margin-left: 5px; font-size: 12px; font-weight: 700; color: var(--indigo-dark); }
+.pj-role.full, .pj-role.full .pj-role-n { color: var(--muted); }
+.pj-role.more { flex: none; color: var(--muted); font-weight: 500; }
 
 .pj-spacer { flex: 1; min-height: 16px; }
-.pj-foot { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); pointer-events: none; }
-.pj-foot .badge { white-space: nowrap; flex: none; }
+.pj-foot { flex: none; position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); pointer-events: none; }
+.pj-foot .status-text { white-space: nowrap; flex: none; }
 .pj-by { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .pj-by-txt { min-width: 0; }
 .pj-by-txt strong { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1930,7 +1923,7 @@ a.hs:hover { text-decoration: none; background: rgba(255, 255, 255, 0.15); }
 .pj-app-head strong a { color: var(--ink); }
 .pj-quote {
     margin: 12px 0 0; padding: 12px 14px;
-    border-left: 3px solid var(--amber); border-radius: 0 10px 10px 0;
+    border-radius: 10px;
     background: #fff8e6; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere;
 }
 .pj-app-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
@@ -1966,7 +1959,6 @@ a.hs:hover { text-decoration: none; background: rgba(255, 255, 255, 0.15); }
 .pj-mini-txt { flex: 1; min-width: 0; }
 .pj-mini-txt strong { display: block; font-size: 14.5px; overflow-wrap: anywhere; }
 .pj-mini-txt em { display: block; margin-top: 2px; font-style: normal; font-size: 12.5px; color: var(--muted); }
-.pj-mini .badge.pj-stage { background: #f0f1fb; }
 
 /* ---- create / edit form ---- */
 .pj-tips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
@@ -2022,7 +2014,8 @@ a.hs:hover { text-decoration: none; background: rgba(255, 255, 255, 0.15); }
     .user { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .pj-card, .pj-card:hover { transition: none; transform: none; }
+    .pj-card, .pj-cover.has-banner::before { transition: none; }
+    .pj-card:has(.pj-stretch:hover), .pj-card:has(.pj-stretch:hover) .pj-cover.has-banner::before { transform: none; }
     .pj-switch-ui, .pj-switch-ui::after { transition: none; }
 }
 
@@ -2721,7 +2714,6 @@ a.tool:hover { text-decoration: none; background: #f4f5fc; }
 }
 .pf-pj-watermark { position: absolute; right: -4px; bottom: -26px; width: 104px; height: 104px; color: rgba(255, 255, 255, 0.42); }
 .pf-pj-watermark svg { width: 100%; height: 100%; stroke-width: 1.1; }
-.pf-pj-stage { position: absolute; top: 10px; right: 10px; z-index: 1; }
 .pf-pj-ic.pj-mini-ic { position: relative; width: 42px; height: 42px; margin-top: -18px; border: 3px solid var(--white); border-radius: 13px; box-shadow: 0 6px 14px -4px rgba(20, 22, 58, 0.35); }
 .pf-pj-ic svg { width: 20px; height: 20px; }
 /* edit profile: "Currently into" fields */
@@ -3099,15 +3091,12 @@ button.pf-pill { cursor: pointer; }
 
 /* ---- header: same hero + search box as the Students page (.dir-hero / .dir-search) ---- */
 .ev-page .dir-hero .page-top { align-items: flex-start; }
-.ev-page .dir-hero .top-actions { padding-top: 2px; }
+.ev-page .dir-hero .top-actions { padding-top: 0; }
 
-/* ---- filter row under the search box (tabs left, "Clear search" right) ---- */
-.dir-bar.ev-bar { align-items: center; margin: 26px 0 0; }
-.main.ev-page .ev-bar .tabs { margin-top: 0; }
 
 /* ---- month headings span the whole grid ---- */
 .main.ev-page .ev-month { grid-column: 1 / -1; margin: 32px 0 -2px; }
-.main.ev-page .ev-month:first-child { margin-top: 10px; }
+.main.ev-page .ev-month:first-child { margin-top: 0; }
 .main.ev-page .ev-list {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 22px; margin-top: 16px; align-items: stretch;
@@ -3116,36 +3105,37 @@ button.pf-pill { cursor: pointer; }
 /* ---- card ---- */
 .evc {
     position: relative; display: flex; flex-direction: column; overflow: hidden;
+    height: 420px; /* fixed size: every event card is identical */
     background: var(--white);
     border: 1px solid #e6e8f5; border-radius: 22px;
     box-shadow: 0 1px 2px rgba(20, 22, 58, 0.04), 0 14px 32px -24px rgba(20, 22, 58, 0.22);
-    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
-.evc:hover {
-    transform: translateY(-3px); border-color: #d6d9f0;
-    box-shadow: 0 2px 4px rgba(20, 22, 58, 0.04), 0 30px 50px -28px rgba(20, 22, 58, 0.36);
+/* same hover as the club and project cards: lift + soft shadow + image zoom */
+.evc:has(.evc-title a:hover) {
+    border-color: #c2c5e0; box-shadow: 0 20px 44px -18px rgba(20, 22, 58, 0.22); transform: translateY(-3px);
 }
 .evc:has(.evc-title a:focus-visible) { outline: 3px solid rgba(51, 56, 201, 0.4); outline-offset: 2px; }
 .evc.is-exclusive { border-color: #efdfae; }
-.evc.is-exclusive:hover { border-color: #e4cc85; }
+.evc.is-exclusive:has(.evc-title a:hover) { border-color: #e4cc85; }
 .evc.is-over { opacity: 0.8; }
 .evc.is-over .evc-cover { filter: grayscale(0.7); }
-.evc.is-over:hover { opacity: 1; }
+.evc.is-over:has(.evc-title a:hover) { opacity: 1; }
 
 /* ---- cover ---- */
 .evc-cover {
-    position: relative; aspect-ratio: 2.15 / 1; overflow: hidden;
+    position: relative; height: 136px; flex: none; overflow: hidden;
     background: linear-gradient(135deg, #0c0f3a, #3338c9);
 }
 .evc-cover img {
     position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
-    transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+    transition: transform 0.6s ease;
 }
 .evc-cover::after {
     content: ""; position: absolute; inset: 0; pointer-events: none;
     background: linear-gradient(180deg, rgba(12, 15, 58, 0.36) 0%, rgba(12, 15, 58, 0) 40%, rgba(12, 15, 58, 0) 65%, rgba(12, 15, 58, 0.16) 100%);
 }
-.evc:hover .evc-cover img { transform: scale(1.045); }
+.evc:has(.evc-title a:hover) .evc-cover img { transform: scale(1.04); }
 /* quiet dot texture so photo-less covers don't read as flat slabs (sits under the image) */
 .evc-cover::before {
     content: ""; position: absolute; inset: 0; pointer-events: none;
@@ -3175,26 +3165,24 @@ button.pf-pill { cursor: pointer; }
 /* status flags on the cover */
 .evc-flags {
     position: absolute; right: 14px; top: 16px; z-index: 1;
-    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px;
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 12px;
     max-width: calc(100% - 104px);
 }
 .evc-flag {
-    display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px;
-    border-radius: 999px; white-space: nowrap;
-    font-size: 12px; font-weight: 600; color: var(--indigo-dark);
-    background: rgba(255, 255, 255, 0.94);
-    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-    box-shadow: 0 6px 16px -8px rgba(12, 15, 58, 0.55);
+    display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0;
+    white-space: nowrap;
+    font-size: 12.5px; font-weight: 600; color: #fff;
+    text-shadow: 0 1px 8px rgba(12, 15, 58, 0.7), 0 0 2px rgba(12, 15, 58, 0.45);   /* plain text on the cover, no pill */
 }
 .evc-flag svg { width: 12px; height: 12px; stroke-width: 2.2; }
-.evc-flag.members { color: #ffe2a0; background: rgba(12, 15, 58, 0.74); box-shadow: inset 0 0 0 1px rgba(255, 200, 87, 0.5); }
-.evc-flag.live { color: #fff; background: var(--coral); }
-.evc-flag.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: ev-pulse 1.6s infinite ease-in-out; }
-.evc-flag.full { color: #8a5a00; background: #fff3d6; }
-.evc-flag.ended { color: var(--muted); }
+.evc-flag.members { color: #ffe2a0; }
+.evc-flag.live { color: #fff; }
+.evc-flag.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9); animation: ev-pulse 1.6s infinite ease-in-out; }
+.evc-flag.full { color: #ffd98a; }
+.evc-flag.ended { color: rgba(255, 255, 255, 0.85); }
 
 /* ---- body ---- */
-.evc-body { flex: 1; display: flex; flex-direction: column; padding: 20px 22px 20px; }
+.evc-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 20px 22px 20px; }
 
 .evc-club {
     position: relative; z-index: 2; align-self: flex-start;
@@ -3206,7 +3194,7 @@ button.pf-pill { cursor: pointer; }
 span.evc-club:hover { color: var(--muted); }
 
 .evc-title {
-    margin: 10px 0 0;
+    flex: none; margin: 10px 0 0;
     font-family: var(--display); font-size: 21px; font-weight: 700; line-height: 1.22; letter-spacing: -0.018em;
     overflow-wrap: anywhere;
     display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -3214,34 +3202,34 @@ span.evc-club:hover { color: var(--muted); }
 .evc-title a { color: var(--ink); transition: color 0.15s; }
 .evc-title a:hover { text-decoration: none; }
 .evc-title a::after { content: ""; position: absolute; inset: 0; z-index: 1; } /* whole card is the link */
-.evc:hover .evc-title a { color: var(--indigo); }
 
 .evc-blurb {
-    margin: 8px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); overflow-wrap: anywhere;
+    margin: 8px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted); overflow-wrap: anywhere; flex: none; min-height: 3.2em;
     display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 
-.evc-meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 16px 0 20px; font-size: 13.5px; color: #4a4e78; }
+.evc-meta { display: flex; flex-wrap: nowrap; gap: 8px 20px; margin: auto 0 16px; padding-top: 14px; flex: none; font-size: 13.5px; color: #4a4e78; }
 .evc-meta span { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.evc-meta span:first-child { flex: none; }   /* time stays whole; the location is the one that gets cut with … */
 .evc-meta svg { flex: none; width: 16px; height: 16px; color: var(--indigo); opacity: 0.75; }
 .evc-meta i { font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- footer: who's going + RSVP ---- */
 .evc-foot {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    margin-top: auto; padding-top: 16px; border-top: 1px solid #eef0f9;
+    flex: none; margin-top: 0; padding-top: 16px; border-top: 1px solid #eef0f9;
 }
 .evc-going { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 13px; color: var(--muted); }
 .evc-going b { font-weight: 600; color: var(--ink); }
 .evc .face { width: 26px; height: 26px; margin-left: -8px; font-size: 10.5px; border-color: var(--white); }
 .evc .face:first-child { margin-left: 0; }
-.evc-rsvp { position: relative; z-index: 2; margin: 0; flex: none; }
+.evc-rsvp { position: relative; z-index: 2; margin: 0; flex: none; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.evc-rsvp .text-action { color: var(--muted); }   /* same as the club cards: muted text, underline on hover */
 .evc .btn-sm { height: 40px; padding: 0 20px; border-radius: 12px; font-size: 13.5px; }
 
 /* ---- responsive ---- */
 @media (max-width: 760px) {
     .main.ev-page .ev-list { grid-template-columns: 1fr; gap: 18px; }
-    .evc-cover { aspect-ratio: 2 / 1; }
 }
 @media (max-width: 600px) {
     .evc { border-radius: 20px; }
@@ -3251,8 +3239,8 @@ span.evc-club:hover { color: var(--muted); }
     .evc-flags { right: 12px; top: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .evc, .evc:hover { transition: none; transform: none; }
-    .evc-cover img, .evc:hover .evc-cover img { transition: none; transform: none; }
+    .evc, .evc:has(.evc-title a:hover) { transition: none; transform: none; }
+    .evc-cover img, .evc:has(.evc-title a:hover) .evc-cover img { transition: none; transform: none; }
     .evc-flag.live::before { animation: none; }
 }
 
@@ -3736,12 +3724,17 @@ body.cfm-lock { overflow: hidden; }
 /* card cover: the uploaded banner under a light wash; without one the coloured cover above is unchanged */
 .pj-cover.has-banner {
     color: #fff;
+    background: var(--midnight);
+}
+/* the banner sits on its own layer so it can zoom on hover like the club banners */
+.pj-cover.has-banner::before {
     background:
         linear-gradient(180deg, rgba(12, 15, 58, 0.22) 0%, rgba(12, 15, 58, 0.55) 100%),
-        var(--pj-banner) center / cover no-repeat,
-        var(--midnight);
+        var(--pj-banner) center / cover no-repeat;
+    transition: transform 0.6s ease;
 }
-.pj-cover.has-banner::before, .pj-cover.has-banner .pj-cover-ic { display: none; }
+.pj-card:has(.pj-stretch:hover) .pj-cover.has-banner::before { transform: scale(1.04); }
+.pj-cover.has-banner .pj-cover-ic { display: none; }
 .pj-cover.has-banner .pj-cover-cat { opacity: 0.92; }
 /* picker on Post / Edit project: shows today's colour until a banner is chosen */
 .pj-banner-prev { background: linear-gradient(135deg, #ffc857, #ff9d6b); }
@@ -3924,6 +3917,11 @@ body.cfm-lock { overflow: hidden; }
 .pj-page .pj-plain .pj-team .member strong { font-family: var(--display); font-size: 15px; font-weight: 700; line-height: 1.25; }
 .pj-page .pj-plain .pj-team .member .club-meta { margin-top: 2px; font-size: 12px; line-height: 1.4; }
 .pj-page .pj-plain .pj-team .member:focus-within { outline: 2px solid #191c1f; outline-offset: 2px; }
+/* Remove: plain text button, same hover as the topbar links */
+.pj-member .pj-remove { font-family: inherit; cursor: pointer; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.pj-page .pj-plain .pj-team .member:hover .pj-remove:hover { background: #d4d4d4; }
+/* founder crown lines up with the Remove text (same 10px side inset as the button) */
+.pj-member .lead-badge { margin-right: 10px; }
 
 /* dashboard join requests: same solid green / red buttons as the club page */
 .rail .req-btns .btn-approve { color: #fff; background: #1f8a52; border: 0; }
@@ -3941,3 +3939,100 @@ body.cfm-lock { overflow: hidden; }
 
 /* projects page: same gap from the top banner to the search row as Clubs has from its featured card (48px) */
 .pj-banner + .filters, .pj-banner + .msg + .filters { margin-top: 48px; }
+
+/* project applications: same look as the club join requests */
+.pj-page .rq-item.pj-rq { border: 0; background: #f3f5f7; }
+.pj-rq .req { flex-wrap: wrap; }
+.pj-rq .req-who { flex: 1 1 240px; }
+.pj-rq .req-actions { flex-wrap: wrap; }
+.rq-select { width: auto; min-width: 160px; max-width: 220px; height: 40px; border: 0; border-radius: 10px; background: var(--white); font-size: 13px; }
+
+/* "View application" button + popup (uses the shared .cfm- dialog look) */
+.rq-item .req-actions .rq-view { color: var(--ink); background: var(--white); }
+.rq-item .req-actions .rq-view:hover { background: #e9ecf0; }
+.dz-modal.ap-modal { width: min(440px, calc(100vw - 32px)); max-width: 440px; }
+.ap-modal .cfm-body { padding: 30px 24px 22px; }
+.ap-avatar { width: 64px; height: 64px; margin: 0 auto 12px; font-size: 24px; border-width: 3px; }
+.ap-letter { margin-top: 18px; padding: 16px 18px; text-align: left; border-radius: 14px; background: #f3f5f7; max-height: min(300px, 45vh); overflow-y: auto; }
+.ap-role { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e3e6ea; font-size: 12.5px; color: var(--muted); }
+.ap-role b { padding: 3px 10px; border-radius: 999px; background: #eceefd; color: var(--indigo-dark); font-size: 12px; font-weight: 600; }
+.ap-letter p { margin: 0; font-size: 14px; line-height: 1.65; color: var(--ink); overflow-wrap: anywhere; }
+.ap-letter p.ap-none { color: var(--muted); font-style: italic; }
+.ap-msg { display: grid; place-items: center; text-decoration: none; }
+.ap-msg:hover { text-decoration: none; color: var(--cfm-btn-ink); }
+@media (max-width: 600px) { .pj-rq .rq-select { flex: 1 1 100%; max-width: none; } }
+/* the founder's Team chat / Edit project links sit outside the sticky side column, over the team card, and scroll with the page; the left column starts at the top untouched */
+.pj-actions > a.btn-ghost,
+.pj-actions form button.btn-ghost {
+    height: 32px; padding: 0 10px;
+    border: 0; border-radius: 8px;
+    font-size: 14px; font-weight: 400; line-height: 1; white-space: nowrap;
+    color: #191c1f; background: transparent; box-shadow: none;
+    transition: background 0.15s;
+}
+.pj-actions form { display: inline-flex; margin: 0; }
+.pj-actions > a.btn-ghost:hover,
+.pj-actions form button.btn-ghost:hover { background: #e5e5e5; box-shadow: none; text-decoration: none; }
+.pj-actions > a.btn-ghost:focus-visible,
+.pj-actions form button.btn-ghost:focus-visible { outline: 2px solid #191c1f; outline-offset: 2px; }
+.ev-layout.pj-has-actions { grid-template-rows: auto 1fr; }
+.ev-layout.pj-has-actions > .pj-actions { grid-column: 2; grid-row: 1; margin: 14px 0 6px -10px; gap: 4px; }
+.ev-layout.pj-has-actions > .ev-main { grid-column: 1; grid-row: 1 / span 2; }
+.ev-layout.pj-has-actions > .ev-side { grid-column: 2; grid-row: 2; }
+@media (max-width: 860px) {
+    .ev-layout.pj-has-actions { grid-template-rows: none; }
+    .ev-layout.pj-has-actions > .pj-actions,
+    .ev-layout.pj-has-actions > .ev-main,
+    .ev-layout.pj-has-actions > .ev-side { grid-column: 1; grid-row: auto; }
+    .ev-layout.pj-has-actions > .pj-actions { margin: 0 0 0 -10px; }
+}
+/* Project link: no border, same soft grey hover as the topbar links */
+.pj-link.link-pill { padding: 6px 10px; margin-left: -10px; border: 0; border-radius: 8px; background: transparent; transition: background 0.15s; }
+.pj-link.link-pill:hover { background: #e5e5e5; text-decoration: none; }
+.pj-link.link-pill:focus-visible { outline: 2px solid #191c1f; outline-offset: 2px; }
+
+/* Project banner: no pills. Category, status, club and role are plain text (with their icon), and the Founder / Team facts have no boxes or borders */
+.pj-hero .ev-badges { gap: 8px 18px; }
+.pj-hero .ev-badges .chip,
+.pj-hero .ev-badges .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 0; border: 0; border-radius: 0; box-shadow: none;
+    background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none;
+    font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.92);
+}
+.pj-hero .ev-badges a.chip:hover { background: transparent; text-decoration: underline; }
+.pj-hero .ev-facts { display: flex; flex-wrap: wrap; gap: 14px 56px; }
+.pj-hero .fact { padding: 0; border: 0; border-radius: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.pj-hero .fact .fi { width: auto; height: auto; border-radius: 0; background: transparent; }
+
+/* Projects + Clubs use the same search box as Events and Students (.dir-search), with the category picker kept inside it */
+.dir-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+.dir-row .dir-search { flex: 1 1 320px; margin-top: 0; }
+.dir-row select { width: auto; min-width: 170px; }
+.dir-row > .btn-sm { height: 44px; padding: 0 20px; border-radius: 12px; font-size: 13.5px; }
+.cf + .dir-row { margin-top: 48px; }
+
+/* Clubs, Projects and Students: tighter space between the search row and the cards */
+.dir-row.cl-row { margin-bottom: 20px; }
+
+/* "Clear search" sits right beside the Search button on Clubs, Projects, Students and Events */
+.dir-row .cancel { align-self: flex-end; margin-left: 30px; font-size: 14px; line-height: 1; color: var(--muted); white-space: nowrap; }
+.dir-row .cancel:hover { color: var(--indigo); }
+/* project page: Skills & tools are plain text, not pills (React · Figma · Marketing) */
+.pj-about-foot .chip-row { gap: 4px 0; }
+.pj-about-foot .chip-row .chip { padding: 0; border-radius: 0; background: transparent; font-size: 15px; font-weight: 400; color: var(--ink); }
+.pj-about-foot .chip-row .chip ~ .chip::before { content: "\00b7"; margin: 0 10px; color: var(--muted); }
+
+/* project page: Looking for = a simple list (role name + spots open), no icons, bars or Apply buttons */
+.pj-page .pj-role-list { gap: 0; margin-top: 10px; }
+.pj-role-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.pj-role-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.pj-role-row strong { min-width: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.pj-role-row .club-meta { flex: none; margin: 0; white-space: nowrap; }
+.pj-role-row.is-full strong { color: var(--muted); font-weight: 500; }
+
+/* reduced motion: no banner zoom on project cards (this has to come after the banner rules above, otherwise they win) */
+@media (prefers-reduced-motion: reduce) {
+    .pj-cover.has-banner::before { transition: none; }
+    .pj-card:has(.pj-stretch:hover) .pj-cover.has-banner::before { transform: none; }
+}
