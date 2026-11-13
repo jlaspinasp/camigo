@@ -46,7 +46,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $ready) {
                          WHERE id = ? AND status = 'pending'",
                         "ii", array($me['id'], $id));
                     if ($r['ok'] && $r['affected'] > 0) {
-                        db_run($conn, "UPDATE users SET is_verified = 1, verified_at = NOW() WHERE id = ?", "i", array($v['user_id']));
+                        // the name they typed and you approved becomes their permanent name (edit-profile locks it for verified accounts)
+                        db_run($conn, "UPDATE users SET is_verified = 1, verified_at = NOW(), first_name = ?, last_name = ? WHERE id = ?",
+                            "ssi", array($v['first_name'], $v['last_name'], $v['user_id']));
                         delete_proof($v['proof']);
                         delete_proof($v['proof2'] ?? '');
                         notify($conn, $v['user_id'], 'verify_approved',
@@ -163,7 +165,7 @@ $adminActive = 'verifications';
         <div class="msg error" style="margin-top:20px">Verification isn't set up yet. Run <strong>verification.sql</strong> in phpMyAdmin first.</div>
     <?php } else { ?>
 
-    <section class="panel">
+    <section class="panel hf-flat">
         <h2>Waiting for review (<?php echo count($pending); ?>)</h2>
 
         <?php if (!$pending) { ?>
@@ -259,7 +261,7 @@ $adminActive = 'verifications';
         <?php } ?>
     </section>
 
-    <section class="panel">
+    <section class="panel hf-flat">
         <div class="va-panel-head">
             <h2>Verified students (<?php echo (int)$verifiedTotal; ?>)</h2>
             <a href="admin-verified" class="btn-sm btn-ghost">View all verified students</a>

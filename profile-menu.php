@@ -73,13 +73,9 @@ function pm_item($href, $icon, $label, $sub = '', $cls = '') {
             pm_item('events?tab=going', 'cal', "Events I'm going to");
             pm_item('notification-preferences', 'gear', 'Notification preferences');
             if ($pmAdmin) pm_item('admin-verifications', 'admin', 'Admin');
+            pm_item('logout', 'out', 'Log out', '', 'pm-out');
             ?>
         </div>
-
-        <a href="logout" class="pm-foot" role="menuitem">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><?php echo $pmIcons['out']; ?></svg>
-            Log out
-        </a>
     </div>
 </div>
 <?php if (empty($GLOBALS['pm_js_done'])) { $GLOBALS['pm_js_done'] = true; ?>

@@ -436,10 +436,10 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                     <?php echo csrf_field(); ?>
                     <input type="hidden" name="club_id" value="<?php echo (int)$club['id']; ?>">
                     <?php if ($isPending) { ?>
-                        <span class="badge pending">Request sent</span>
-                        <button type="submit" name="action" value="cancel" class="btn-sm btn-ghost">Cancel</button>
+                        <span class="status-text status-sent">Request sent</span>
+                        <button type="submit" name="action" value="cancel" class="text-action">Cancel</button>
                     <?php } elseif ($isMember || $isOfficer) { ?>
-                        <?php if (!$isOfficer) { ?><span class="badge approved">Member</span><?php } ?>
+                        <?php if (!$isOfficer) { ?><span class="status-text">Member</span><?php } ?>
                         <button type="submit" name="action" value="leave" class="btn-sm btn-ghost" data-confirm="<?php echo $isOfficer ? 'You will lose your officer role and leave this club.' : 'You will no longer be a member of this club.'; ?>" data-confirm-title="Leave this club?" data-confirm-ok="Leave club" data-confirm-tone="warning" data-confirm-icon="exit">Leave</button>
                     <?php } else { ?>
                         <?php if ($inviteOnly && !$hasValidInvite) { ?>
@@ -631,7 +631,7 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                     <?php } ?>
                 </div>
                 <?php if ($postsMore) { ?>
-                    <p style="margin-top:16px"><a href="club?id=<?php echo (int)$club['id']; ?>&amp;more=1#updates">Show older announcements</a></p>
+                    <div class="hf-end"><a href="club?id=<?php echo (int)$club['id']; ?>&amp;more=1#updates">Show older announcements</a></div>
                 <?php } else { ?>
                     <div class="hf-end">You're all caught up</div>
                 <?php } ?>

@@ -99,6 +99,9 @@ if (isset($_SESSION['username'])) {
             animation: land 0.7s 1s var(--ease) forwards;
         }
 
+        /* students settle into the C, same as the site logo */
+        .stu { opacity: 0; animation: fadein 0.8s 0.9s ease forwards; }
+
         /* wordmark */
         .word {
             font-family: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
@@ -111,6 +114,20 @@ if (isset($_SESSION['username'])) {
             transform: translateY(14px);
             filter: blur(8px);
             animation: reveal 1.1s 1.05s var(--ease) forwards;
+        }
+
+        /* little navigation triangle inside the "o", same as the site logo */
+        .word .o { position: relative; display: inline-block; font-style: normal; }
+        .word .o::after {
+            content: "";
+            position: absolute;
+            left: 50%; top: 56%;
+            width: 0.28em; height: 0.28em;
+            transform: translate(-50%, -50%) rotate(45deg);
+            background: #ff6b6b;
+            clip-path: polygon(50% 0, 100% 100%, 50% 74%, 0 100%);
+            opacity: 0;
+            animation: fadein 0.6s 1.9s ease forwards;
         }
 
         /* hairline + tagline */
@@ -132,7 +149,7 @@ if (isset($_SESSION['username'])) {
 
         @keyframes draw   { to { stroke-dashoffset: 0; } }
         @keyframes land   { from { opacity: 0; transform: translateX(-10px) scale(0.4); } to { opacity: 1; transform: none; } }
-        @keyframes reveal { to { opacity: 1; transform: none; filter: blur(0); letter-spacing: -0.03em; } }
+        @keyframes reveal { to { opacity: 1; transform: none; filter: blur(0); letter-spacing: -0.02em; } }
         @keyframes grow   { to { width: clamp(90px, 14vmin, 140px); } }
         @keyframes rise   { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
         @keyframes fadein { to { opacity: 1; } }
@@ -141,8 +158,8 @@ if (isset($_SESSION['username'])) {
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { animation: none !important; transition-duration: 0.01s !important; }
             .ring { stroke-dashoffset: 0; }
-            .dot, .tag, .glow { opacity: 1; }
-            .word { opacity: 1; transform: none; filter: none; letter-spacing: -0.03em; }
+            .dot, .tag, .glow, .stu, .word .o::after { opacity: 1; }
+            .word { opacity: 1; transform: none; filter: none; letter-spacing: -0.02em; }
             .rule { width: 110px; }
         }
     </style>
@@ -164,10 +181,19 @@ if (isset($_SESSION['username'])) {
             </defs>
             <path class="ring" pathLength="100" d="M34.72 33 A14 14 0 1 1 34.72 15" fill="none" stroke="url(#sg)" stroke-width="6" stroke-linecap="round"/>
             <circle class="dot" cx="39.5" cy="24" r="3.4" fill="#fff"/>
+            <!-- students inside the C -->
+            <g class="stu" transform="translate(24 25) scale(.78) translate(-24 -25)">
+                <circle cx="17.6" cy="22.2" r="2.1" fill="#fff"/>
+                <path d="M14.2 31 Q14.2 25.6 17.6 25.6 Q21 25.6 21 31 Z" fill="#fff"/>
+                <circle cx="30.4" cy="22.2" r="2.1" fill="#fff"/>
+                <path d="M27 31 Q27 25.6 30.4 25.6 Q33.8 25.6 33.8 31 Z" fill="#fff"/>
+                <circle cx="24" cy="19.6" r="2.8" fill="url(#sg)"/>
+                <path d="M19.4 31.6 Q19.4 23.6 24 23.6 Q28.6 23.6 28.6 31.6 Z" fill="url(#sg)"/>
+            </g>
         </svg>
     </div>
 
-    <h1 class="word" aria-label="Camigo">Camigo</h1>
+    <h1 class="word" aria-label="Camigo">Camig<span class="o">o</span></h1>
     <div class="rule"></div>
     <p class="tag">Your campus, all in one place</p>
 

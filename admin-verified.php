@@ -71,7 +71,7 @@ $adminActive = 'verifications';
         <div class="msg error" style="margin-top:20px">Verification isn't set up yet. Run <strong>verification.sql</strong> in phpMyAdmin first.</div>
     <?php } else { ?>
 
-    <section class="panel">
+    <section class="panel hf-flat">
         <?php echo admin_search_form('admin-verified', $q, 'Search by name, username or ID number', 'Search verified students'); ?>
 
         <div class="va-bar">

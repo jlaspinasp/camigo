@@ -66,7 +66,7 @@ $flash = flash_get();
 $flashText = $flash ? $flash[0] : "";
 $flashClass = $flash ? $flash[1] : "";
 
-$first = $_SESSION['first_name'];
+$first = $me['first_name'] ?? $_SESSION['first_name'];
 $initial = strtoupper(substr($first, 0, 1));
 ?>
 <!DOCTYPE html>
@@ -146,7 +146,7 @@ $initial = strtoupper(substr($first, 0, 1));
                 <p class="empty hf-none" id="hfNone" hidden>Nothing of that kind yet.</p>
                 <div class="hf-end" id="hfEnd" aria-live="polite"></div>
                 <script>
-                // endless scroll: the next 10 posts load as you near the bottom; the tabs reload from the server
+                // "Show older announcements" loads the next 10 posts; the tabs reload from the server
                 (function () {
                     var list = document.getElementById("hfList"),
                         none = document.getElementById("hfNone"),
@@ -154,11 +154,14 @@ $initial = strtoupper(substr($first, 0, 1));
                         btns = document.querySelectorAll("[data-filter]"),
                         offset = list.querySelectorAll(".hf").length,
                         type = "all", done = <?php echo $feedMore ? 'false' : 'true'; ?>,
-                        loading = false, gen = 0, io = null;
+                        loading = false, gen = 0;
 
                     function status() {
                         if (loading) { end.textContent = "Loading…"; return; }
-                        end.textContent = (done && offset > 0) ? "You're all caught up" : "";
+                        if (done) { end.textContent = offset > 0 ? "You're all caught up" : ""; return; }
+                        end.innerHTML = offset > 0
+                            ? '<a href="#" class="hf-older">Show older ' + (type === "event" ? "events" : "announcements") + '</a>'
+                            : "";
                     }
 
                     function load() {
@@ -176,7 +179,6 @@ $initial = strtoupper(substr($first, 0, 1));
                                 loading = false;
                                 none.hidden = offset > 0;
                                 status();
-                                recheck();
                             })
                             .catch(function () {
                                 if (g !== gen) return;
@@ -185,13 +187,9 @@ $initial = strtoupper(substr($first, 0, 1));
                             });
                     }
 
-                    function recheck() {                                       // fires again if the end is still on screen
-                        if (!io) return;
-                        io.unobserve(end); io.observe(end);
-                    }
-
                     end.addEventListener("click", function (e) {
-                        if (e.target.classList && e.target.classList.contains("hf-retry")) { status(); load(); }
+                        var t = e.target;
+                        if (t.classList && (t.classList.contains("hf-retry") || t.classList.contains("hf-older"))) { e.preventDefault(); load(); }
                     });
 
                     btns.forEach(function (b) {
@@ -206,12 +204,6 @@ $initial = strtoupper(substr($first, 0, 1));
                         });
                     });
 
-                    if ("IntersectionObserver" in window) {
-                        io = new IntersectionObserver(function (entries) {
-                            if (entries[0].isIntersecting) load();
-                        }, { rootMargin: "600px 0px" });
-                        io.observe(end);
-                    }
                     status();
                 })();
                 </script>
@@ -409,5 +401,6 @@ $initial = strtoupper(substr($first, 0, 1));
 })();
 </script>
 
+<?php include("footer.php"); ?>
 </body>
 </html>

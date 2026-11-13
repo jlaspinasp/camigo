@@ -184,7 +184,7 @@ $icCross  = '<path d="M6 6l12 12M18 6L6 18"/>';
 
     <?php } elseif ($isAdmin) { ?>
 
-        <section class="panel">
+        <section class="panel hf-flat">
             <div class="vf-state">
                 <div class="vf-state-ic good"><?php echo $svg($icCheck); ?></div>
                 <div>
@@ -197,7 +197,7 @@ $icCross  = '<path d="M6 6l12 12M18 6L6 18"/>';
 
     <?php } elseif ($isVerified) { ?>
 
-        <section class="panel">
+        <section class="panel hf-flat">
             <div class="vf-state">
                 <div class="vf-state-ic good"><?php echo $svg($icCheck); ?></div>
                 <div>
@@ -214,7 +214,7 @@ $icCross  = '<path d="M6 6l12 12M18 6L6 18"/>';
 
     <?php } elseif ($isPending) { ?>
 
-        <section class="panel">
+        <section class="panel hf-flat">
             <div class="vf-state">
                 <div class="vf-state-ic wait"><?php echo $svg($icClock); ?></div>
                 <div>
@@ -256,7 +256,7 @@ $icCross  = '<path d="M6 6l12 12M18 6L6 18"/>';
 
         <?php if ($waitLeft > 0) { ?>
 
-            <section class="panel">
+            <section class="panel hf-flat">
                 <div class="vf-state">
                     <div class="vf-state-ic bad"><?php echo $svg($icClock); ?></div>
                     <div>

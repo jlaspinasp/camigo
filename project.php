@@ -221,12 +221,16 @@ if ($p) {
         if ($mr['rows']) { $myApp = $mr['rows'][0]; $isPending = true; }
     }
 
+    $updLimit = !empty($_GET['more']) ? 30 : 5;
+    $updatesMore = false;
     $ur = db_run($conn,
         "SELECT up.id, up.user_id, up.body, UNIX_TIMESTAMP(up.created_at) AS ts, u.username, u.first_name, u.last_name, u.photo" . vsel($conn) . "
          FROM project_updates up LEFT JOIN users u ON u.id = up.user_id
-         WHERE up.project_id = ? ORDER BY up.id DESC LIMIT 20",
+         WHERE up.project_id = ? ORDER BY up.id DESC LIMIT " . ($updLimit + 1),
         "i", array($pid));
     $updates = $ur['rows'];
+    $updatesMore = count($updates) > $updLimit;   // one extra row tells us there are older ones
+    $updates = array_slice($updates, 0, $updLimit);
 }
 
 $flash = flash_get();
@@ -502,7 +506,7 @@ $profileLink = function ($row) use ($me) {
                     </div>
                 </section>
 
-                <section class="panel hf-flat">
+                <section class="panel hf-flat" id="updates">
                     <h2>Progress updates</h2>
 
                     <?php if ($canPost) { ?>
@@ -553,7 +557,9 @@ $profileLink = function ($row) use ($me) {
                                 ));
                             } ?>
                         </div>
-                        <?php if (count($updates) < 20) { ?>
+                        <?php if ($updatesMore) { ?>
+                            <div class="hf-end"><a href="project?id=<?php echo (int)$pid; ?>&amp;more=1#updates">Show older updates</a></div>
+                        <?php } else { ?>
                             <div class="hf-end">You're all caught up</div>
                         <?php } ?>
                     <?php } ?>

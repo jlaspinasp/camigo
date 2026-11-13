@@ -1,4 +1,19 @@
-<?php // Shared top bar for profile pages. Expects $me (the logged-in user's row). ?>
+<?php // Shared top bar for profile pages. Expects $me (the logged-in user's row).
+// Also adds the site footer just before </body>, so pages don't need to include it themselves.
+if (!defined("CAMIGO_FOOTER_HOOK")) {
+    define("CAMIGO_FOOTER_HOOK", true);
+    ob_start(function ($html) {
+        $i = strripos($html, "</body>");
+        if ($i === false || strpos($html, 'class="site-footer"') !== false) return $html;
+        // (output buffers can't be opened inside this callback, so read the markup directly)
+        $f = @file_get_contents(__DIR__ . "/footer.php");
+        if ($f === false) return $html;
+        $f = preg_replace('/^<\?php.*?\?>\s*/s', '', $f, 1);
+        $f = str_replace("<?php echo date('Y'); ?>", date('Y'), $f);
+        return substr($html, 0, $i) . $f . substr($html, $i);
+    });
+}
+?>
 <header class="topbar">
     <?php include("logo.php"); ?>
     <div class="user">

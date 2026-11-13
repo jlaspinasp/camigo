@@ -58,32 +58,43 @@ if (isset($_SESSION['username'])) {
             transition: transform 0.6s ease;
         }
 
-        .mark {
-            --mk: clamp(130px, 21vmin, 210px);
+        /* the lockup is the same one used in the site logo: mark on the left, wordmark on the right
+           (logo.php: 38px mark next to 26px text, 10px gap, same proportions here in em) */
+        .lockup {
+            --fs: clamp(44px, 9vmin, 88px);
             position: relative;
-            width: var(--mk);
-            height: var(--mk);
-            margin: 0 auto clamp(10px, 2.2vmin, 22px);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.385em;
+            font-size: var(--fs);
         }
-        .mark svg { position: relative; z-index: 2; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 12px 40px rgba(255, 130, 90, 0.35)); }
+        .lockup > svg {
+            position: relative; z-index: 2;
+            flex: none;
+            width: 1.4615em; height: 1.4615em;
+            overflow: visible;
+            filter: drop-shadow(0 12px 40px rgba(255, 130, 90, 0.35));
+        }
+        .lockup > .word { position: relative; z-index: 2; }
 
         /* pulsing glow */
         .glow {
             position: absolute; left: 50%; top: 50%;
-            width: 220%; height: 220%;
+            width: 8em; height: 5em;
             transform: translate(-50%, -50%);
-            background: radial-gradient(circle, rgba(255, 160, 110, 0.32), transparent 62%);
+            background: radial-gradient(closest-side, rgba(255, 160, 110, 0.28), transparent);
             opacity: 0;
             animation: fadein 1.4s 0.2s ease forwards, breathe 4s 1.6s ease-in-out infinite;
         }
 
         /* ripples sent out when the dot lands */
         .ripple {
+            --rp: 2.6em;
             position: absolute; left: 50%; top: 50%;
-            width: 100%; height: 100%;
-            margin: calc(var(--mk) / -2 + 0px) 0 0 calc(var(--mk) / -2);
+            width: var(--rp); height: var(--rp);
+            margin: calc(var(--rp) / -2) 0 0 calc(var(--rp) / -2);
             border-radius: 50%;
-            border: 2px solid rgba(255, 200, 140, 0.55);
+            border: 2px solid rgba(255, 200, 140, 0.45);
             opacity: 0;
             animation: ripple 3.2s ease-out infinite;
             z-index: 1;
@@ -100,8 +111,8 @@ if (isset($_SESSION['username'])) {
             opacity: 0;
             animation: orbitin 1.6s 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
         }
-        .w1 { --r: clamp(140px, 21vmin, 250px); }
-        .w2 { --r: clamp(215px, 33vmin, 380px); animation-delay: 0.7s; }
+        .w1 { --r: calc(var(--fs) * 3.3); }
+        .w2 { --r: calc(var(--fs) * 4.9); animation-delay: 0.7s; }
         .track {
             position: absolute; left: 0; top: 0;
             width: calc(var(--r) * 2); height: calc(var(--r) * 2);
@@ -147,8 +158,8 @@ if (isset($_SESSION['username'])) {
             padding: 0.04em 0.06em 0.16em;
             font-family: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
             font-weight: 800;
-            font-size: clamp(46px, 9.5vmin, 96px);
-            letter-spacing: -0.035em;
+            font-size: 1em;
+            letter-spacing: -0.02em;
             line-height: 1;
         }
         .word span {
@@ -173,7 +184,7 @@ if (isset($_SESSION['username'])) {
         }
 
         .tag {
-            margin-top: clamp(4px, 1.4vmin, 14px);
+            margin-top: clamp(14px, 3vmin, 28px);
             font-size: clamp(14px, 2.1vmin, 18px);
             color: rgba(255, 255, 255, 0.72);
             opacity: 0;
@@ -205,7 +216,7 @@ if (isset($_SESSION['username'])) {
         @keyframes fill    { to { width: 100%; } }
         @keyframes spin    { to { transform: rotate(360deg); } }
         @keyframes orbitin { from { opacity: 0; transform: scale(0.55); } to { opacity: 1; transform: scale(1); } }
-        @keyframes ripple  { 0% { opacity: 0.55; transform: scale(1); } 100% { opacity: 0; transform: scale(3.4); } }
+        @keyframes ripple  { 0% { opacity: 0.55; transform: scale(1); } 100% { opacity: 0; transform: scale(3.2); } }
         @keyframes breathe { 0%, 100% { transform: translate(-50%, -50%) scale(1); } 50% { transform: translate(-50%, -50%) scale(1.12); } }
         @keyframes drift1  { to { transform: translate(6vmax, -5vmax) scale(1.1); } }
         @keyframes drift2  { to { transform: translate(-6vmax, 5vmax) scale(1.08); } }
@@ -231,7 +242,7 @@ if (isset($_SESSION['username'])) {
 
 <div class="stage">
 
-    <div class="mark">
+    <div class="lockup">
         <div class="glow"></div>
 
         <!-- two orbits of "students" gathering around Camigo -->
@@ -274,11 +285,11 @@ if (isset($_SESSION['username'])) {
                 <path d="M19.4 31.6 Q19.4 23.6 24 23.6 Q28.6 23.6 28.6 31.6 Z" fill="url(#sg)"/>
             </g>
         </svg>
+        <h1 class="word" aria-label="Camigo">
+            <span style="--i:0">C</span><span style="--i:1">a</span><span style="--i:2">m</span><span style="--i:3">i</span><span style="--i:4">g</span><span class="o" style="--i:5">o</span>
+        </h1>
     </div>
 
-    <h1 class="word" aria-label="Camigo">
-        <span style="--i:0">C</span><span style="--i:1">a</span><span style="--i:2">m</span><span style="--i:3">i</span><span style="--i:4">g</span><span class="o" style="--i:5">o</span>
-    </h1>
     <p class="tag">Campus Amigo. Your campus, all in one place.</p>
 
     <div class="bar"><i></i></div>

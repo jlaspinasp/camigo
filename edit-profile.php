@@ -16,6 +16,7 @@ $moreLinks   = count($networks) === count($allNetworks);
 $hasCurrently = array_key_exists('currently_into', $me);
 $message = "";
 $message_class = "";
+$nameLocked = !empty($me['is_verified']);   // verified accounts keep the name that was approved
 $coverCol = array_key_exists('cover', $me);   // true once profile-cover.sql has been run
 
 if (isset($_POST['delete_account'])) {
@@ -48,8 +49,14 @@ if (isset($_POST['delete_account'])) {
 
     $error = "";
 
-    $first = proper_name($_POST['first_name'] ?? '');
-    $last  = proper_name($_POST['last_name'] ?? '');
+    if ($nameLocked) {
+        // verified: the approved name is permanent, ignore anything posted
+        $first = (string)$me['first_name'];
+        $last  = (string)($me['last_name'] ?? '');
+    } else {
+        $first = proper_name($_POST['first_name'] ?? '');
+        $last  = proper_name($_POST['last_name'] ?? '');
+    }
     $mi    = trim($_POST['middle_initial'] ?? '');
     if ($mi !== "") {
         $mi = function_exists('mb_strtoupper') ? mb_strtoupper($mi, 'UTF-8') : strtoupper($mi);
@@ -318,17 +325,18 @@ $coverImg = ($coverCol && club_image_ok($me['cover'] ?? '')) ? $me['cover'] : ''
                 <div class="row-name">
                     <div>
                         <label for="first_name">First name</label>
-                        <input type="text" name="first_name" id="first_name" maxlength="100" required value="<?php echo fv('first_name', $me); ?>">
+                        <input type="text" name="first_name" id="first_name" maxlength="100" required value="<?php echo $nameLocked ? e($me['first_name']) : fv('first_name', $me); ?>"<?php echo $nameLocked ? ' readonly class="name-locked" title="Your verified name can\'t be changed"' : ''; ?>>
                     </div>
                     <div>
                         <label for="last_name">Last name</label>
-                        <input type="text" name="last_name" id="last_name" maxlength="100" required value="<?php echo fv('last_name', $me); ?>">
+                        <input type="text" name="last_name" id="last_name" maxlength="100" required value="<?php echo $nameLocked ? e($me['last_name'] ?? '') : fv('last_name', $me); ?>"<?php echo $nameLocked ? ' readonly class="name-locked" title="Your verified name can\'t be changed"' : ''; ?>>
                     </div>
                     <div>
                         <label for="middle_initial">M.I.</label>
                         <input type="text" name="middle_initial" id="middle_initial" maxlength="1" autocomplete="off" placeholder="Opt." value="<?php echo fv('middle_initial', $me); ?>">
                     </div>
                 </div>
+                <?php if ($nameLocked) { ?><p class="hint">Your first and last name were confirmed when you verified your account, so they can't be changed.</p><?php } ?>
             </div>
 
             <div class="field">

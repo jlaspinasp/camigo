@@ -287,7 +287,7 @@ a.file-card:hover { text-decoration: none; transform: translateY(-1px); }
 .send-btn.like { color: var(--indigo); background: transparent; }
 .send-btn.like:hover { background: #e8eaff; }
 .send-btn:active { transform: scale(0.92); }
-.composer-error { padding: 10px 18px; font-size: 13px; color: #a82d2d; background: #fff1f1; border-top: 1px solid #f3c4c4; }
+.composer-error { padding: 10px 18px; font-size: 13px; color: #c4363b; background: none; border-top: 0; }
 .composer-note { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 20px; text-align: center; font-size: 14px; color: var(--muted); }
 .composer-note.blocked { text-align: left; }
 .composer-note.blocked strong { display: block; color: var(--ink); font-size: 14.5px; }
@@ -400,7 +400,7 @@ body.modal-open { overflow: hidden; }
 .gi-name { flex: 1; min-width: 0; display: grid; gap: 8px; justify-items: start; }
 .gi-name .name-input { height: 42px; }
 .gi-title { font-family: var(--display); font-size: 20px; font-weight: 700; }
-.note { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px; padding: 12px 14px; font-size: 13.5px; line-height: 1.5; color: #5b4300; background: #fff8e6; border-radius: 14px; }
+.note { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px; padding: 0; font-size: 13.5px; line-height: 1.5; color: #8a5a00; background: none; border-radius: 0; }
 .note p { margin: 0; }
 .note .ico svg { width: 18px; height: 18px; margin-top: 1px; color: #c78a00; }
 .gi-head { display: flex; align-items: center; justify-content: space-between; margin: 6px 0 6px; }
