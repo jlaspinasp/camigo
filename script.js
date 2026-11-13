@@ -145,7 +145,7 @@ if (bd && document.getElementById("birthday-error")) {
 }
 
 // block submit while the username or birthday is invalid (the server checks again anyway)
-var regBtn = document.querySelector("form button[name='register']");
+var regBtn = document.querySelector("form button[name='register'], form button[name='save']");
 if (regBtn) {
     regBtn.closest("form").addEventListener("submit", function (e) {
         if (un) usernameFeedback(true);

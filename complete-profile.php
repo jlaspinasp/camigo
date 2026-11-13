@@ -28,7 +28,7 @@ if (!$user) {
     exit();
 }
 
-$message = "";
+$errors = ["birthday" => "", "initial" => "", "username" => "", "general" => ""];
 
 if (isset($_POST['save'])) {
 
@@ -39,15 +39,18 @@ if (isset($_POST['save'])) {
         $middle_initial = function_exists('mb_strtoupper') ? mb_strtoupper($middle_initial, 'UTF-8') : strtoupper($middle_initial);
     }
 
-    $d = DateTime::createFromFormat('Y-m-d', $birthday);
-    $validDate = birthday_ok($birthday);
-
     if (!username_ok($username)) {
-        $message = "Usernames need 3 to 30 letters, numbers, dots or underscores.";
+
+        $errors["username"] = "Use 3–30 letters, numbers, dots or underscores only.";
+
+    } elseif (!birthday_ok($birthday)) {
+
+        $errors["birthday"] = "You need to be at least " . MIN_AGE . " to join Camigo.";
+
     } elseif ($middle_initial !== "" && !preg_match('/^\p{L}$/u', $middle_initial)) {
-        $message = "Middle initial must be a single letter.";
-    } elseif (!$validDate) {
-        $message = "You need to be at least " . MIN_AGE . " to join Camigo.";
+
+        $errors["initial"] = "Middle initial must be a single letter.";
+
     } else {
 
         $stmt = mysqli_prepare($conn, "UPDATE users SET username = ?, middle_initial = ?, birthday = ? WHERE id = ?");
@@ -62,9 +65,9 @@ if (isset($_POST['save'])) {
         }
 
         if (mysqli_stmt_errno($stmt) == 1062) {
-            $message = "That username is already taken. Try another one.";
+            $errors["username"] = "That username is taken. Try another one.";
         } else {
-            $message = "Something went wrong. Please try again.";
+            $errors["general"] = "Something went wrong. Please try again.";
         }
         mysqli_stmt_close($stmt);
     }
@@ -73,6 +76,22 @@ if (isset($_POST['save'])) {
 function val($post, $fallback) {
     return htmlspecialchars(isset($_POST[$post]) ? $_POST[$post] : (string)$fallback);
 }
+// helpers for the inline feedback markup (same as register.php)
+$icon_err = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="8"/><path d="M8 4.4v4.2" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="11.4" r="1" fill="#fff"/></svg>';
+
+function invalid_class($msg) { return $msg !== "" ? " is-invalid" : ""; }
+function invalid_attr($msg, $id) {
+    return $msg !== "" ? 'aria-invalid="true" aria-describedby="' . $id . '"' : "";
+}
+function error_slot($id, $msg, $icon) {
+    $inner = trim($msg) !== "" ? $icon . htmlspecialchars($msg) : "";
+    return '<p class="field-error" id="' . $id . '" role="alert">' . $inner . '</p>';
+}
+
+$focus = "";
+if ($errors["username"] !== "") $focus = "username";
+elseif ($errors["birthday"] !== "") $focus = "birthday";
+elseif ($errors["initial"] !== "") $focus = "middle_initial";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -107,28 +126,28 @@ function val($post, $fallback) {
             <h1>Finish your profile</h1>
             <p class="lead">This only takes a moment.</p>
 
-            <?php if ($message != "") { ?>
-                <div class="msg error"><?php echo htmlspecialchars($message); ?></div>
-            <?php } ?>
-
             <form method="POST">
 
-                <div class="field">
-                    <label for="username">Username</label>
-                    <input type="text" name="username" id="username" required
-                           value="<?php echo val('username', $user['username']); ?>">
-                </div>
+                <?php if ($errors["general"] !== "") { ?>
+                    <p class="form-error" role="alert"><?php echo $icon_err . htmlspecialchars($errors["general"]); ?></p>
+                <?php } ?>
 
-                <div class="field">
+                <div class="field has-slot<?php echo invalid_class($errors["initial"]); ?>">
                     <label for="middle_initial">Middle initial <span class="opt">(optional)</span></label>
-                    <input type="text" name="middle_initial" id="middle_initial" maxlength="1" autocomplete="off"
-                           value="<?php echo val('middle_initial', $user['middle_initial']); ?>">
+                    <input type="text" name="middle_initial" id="middle_initial" maxlength="1" autocomplete="off" <?php echo invalid_attr($errors["initial"], "initial-error"); ?><?php echo $focus === "middle_initial" ? " autofocus" : ""; ?> value="<?php echo val('middle_initial', $user['middle_initial']); ?>">
+                    <?php echo error_slot("initial-error", $errors["initial"], $icon_err); ?>
                 </div>
 
-                <div class="field">
+                <div class="field has-slot<?php echo invalid_class($errors["birthday"]); ?>">
                     <label for="birthday">Birthday</label>
-                    <input type="date" name="birthday" id="birthday" max="<?php echo min_birthday_date(); ?>" required
-                           value="<?php echo val('birthday', $user['birthday']); ?>">
+                    <input type="date" name="birthday" id="birthday" max="<?php echo min_birthday_date(); ?>" data-min-age="<?php echo MIN_AGE; ?>" required <?php echo invalid_attr($errors["birthday"], "birthday-error"); ?><?php echo $focus === "birthday" ? " autofocus" : ""; ?> value="<?php echo val('birthday', $user['birthday']); ?>">
+                    <?php echo error_slot("birthday-error", $errors["birthday"], $icon_err); ?>
+                </div>
+
+                <div class="field has-slot<?php echo invalid_class($errors["username"]); ?>">
+                    <label for="username">Username</label>
+                    <input type="text" name="username" id="username" placeholder="Letters, numbers, . and _" maxlength="30" autocomplete="username" required <?php echo invalid_attr($errors["username"], "username-error"); ?><?php echo $focus === "username" ? " autofocus" : ""; ?> value="<?php echo val('username', $user['username']); ?>">
+                    <?php echo error_slot("username-error", $errors["username"], $icon_err); ?>
                 </div>
 
                 <button type="submit" name="save" class="btn">
