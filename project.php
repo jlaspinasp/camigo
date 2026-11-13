@@ -198,7 +198,7 @@ if ($p) {
 
     $tr = db_run($conn,
         "SELECT m.id AS mid, m.user_id, m.role, m.role_label, m.role_id, UNIX_TIMESTAMP(m.created_at) AS ts,
-                u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility
+                u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility" . vsel($conn) . "
          FROM project_members m JOIN users u ON u.id = m.user_id
          WHERE m.project_id = ? AND m.status = 'active'
          ORDER BY (m.role = 'owner') DESC, m.created_at ASC LIMIT 60",
@@ -210,7 +210,7 @@ if ($p) {
     if ($isOwner) {
         $ar = db_run($conn,
             "SELECT m.id AS mid, m.user_id, m.role_id, m.role_label, m.message, UNIX_TIMESTAMP(m.created_at) AS ts,
-                    u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo
+                    u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo" . vsel($conn) . "
              FROM project_members m JOIN users u ON u.id = m.user_id
              WHERE m.project_id = ? AND m.status = 'pending'
              ORDER BY m.created_at ASC LIMIT 100",
@@ -222,7 +222,7 @@ if ($p) {
     }
 
     $ur = db_run($conn,
-        "SELECT up.id, up.user_id, up.body, UNIX_TIMESTAMP(up.created_at) AS ts, u.username, u.first_name, u.last_name, u.photo
+        "SELECT up.id, up.user_id, up.body, UNIX_TIMESTAMP(up.created_at) AS ts, u.username, u.first_name, u.last_name, u.photo" . vsel($conn) . "
          FROM project_updates up LEFT JOIN users u ON u.id = up.user_id
          WHERE up.project_id = ? ORDER BY up.id DESC LIMIT 20",
         "i", array($pid));
@@ -266,6 +266,9 @@ $profileLink = function ($row) use ($me) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?php echo $p ? e($p['title']) . ' | ' : ''; ?>Project | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -308,7 +311,7 @@ $profileLink = function ($row) use ($me) {
             <p class="pj-hero-tag"><?php echo e($p['tagline']); ?></p>
 
             <div class="ev-facts">
-                <div class="fact"><span class="fi"><?php echo event_icon('crown'); ?></span><div><small>Founder</small><strong><?php echo e(full_name($p)); ?></strong></div></div>
+                <div class="fact"><span class="fi"><?php echo event_icon('crown'); ?></span><div><small>Founder</small><strong><?php echo name_badge($p); ?></strong></div></div>
                 <div class="fact"><span class="fi"><?php echo event_icon('users'); ?></span><div><small>Team</small><strong><?php echo count($team); ?> <?php echo count($team) === 1 ? 'person' : 'people'; ?></strong></div></div>
             </div>
         </section>
@@ -348,7 +351,7 @@ $profileLink = function ($row) use ($me) {
                                     <div class="req-who">
                                         <div class="p-avatar tiny"><?php echo avatar_inner($a); ?></div>
                                         <div class="rq-text">
-                                            <a class="rq-name" href="<?php echo e($profileLink($a)); ?>"><?php echo e(full_name($a)); ?></a>
+                                            <a class="rq-name" href="<?php echo e($profileLink($a)); ?>"><?php echo name_badge($a); ?></a>
                                             <div class="rq-meta">@<?php echo e($a['username']); ?><?php if ($line) { ?> &middot; <?php echo e(implode(' · ', $line)); ?><?php } ?></div>
                                         </div>
                                     </div>
@@ -379,7 +382,7 @@ $profileLink = function ($row) use ($me) {
                                             <div class="cfm-head">
                                                 <div class="p-avatar ap-avatar"><?php echo avatar_inner($a); ?></div>
                                                 <div class="cfm-copy">
-                                                    <h3 class="cfm-title" id="<?php echo e($apId); ?>-t"><?php echo e(full_name($a)); ?></h3>
+                                                    <h3 class="cfm-title" id="<?php echo e($apId); ?>-t"><?php echo name_badge($a); ?></h3>
                                                     <p class="cfm-text">@<?php echo e($a['username']); ?><?php if ($line) { ?> &middot; <?php echo e(implode(' · ', $line)); ?><?php } ?> &middot; <?php echo e(time_ago($a['ts'])); ?></p>
                                                 </div>
                                             </div>
@@ -481,7 +484,7 @@ $profileLink = function ($row) use ($me) {
                             <div class="member pj-member">
                                 <div class="p-avatar tiny"><?php echo avatar_inner($t); ?></div>
                                 <div class="grow">
-                                    <strong><a href="<?php echo e($profileLink($t)); ?>" class="plain"><?php echo e(full_name($t)); ?></a></strong>
+                                    <strong><a href="<?php echo e($profileLink($t)); ?>" class="plain"><?php echo name_badge($t); ?></a></strong>
                                     <div class="club-meta"><?php echo e(!empty($t['role_label']) ? $t['role_label'] : ($tOwner ? 'Founder' : 'Teammate')); ?><?php if ($line) { ?> &middot; <?php echo e(implode(' · ', $line)); ?><?php } ?></div>
                                 </div>
                                 <?php if ($tOwner) { ?>
@@ -537,7 +540,7 @@ $profileLink = function ($row) use ($me) {
 
                                 feed_post_full(array(
                                     'dom_id'      => 'update-' . (int)$u['id'],
-                                    'tile'        => '<span class="pj-mini-ic t' . project_tone($p['id']) . '">' . project_category_icon($p['category']) . '</span>',
+                                    'tile'        => '<span class="pj-mini-ic t' . project_tone($p['id']) . project_tile_class($p) . '">' . project_tile_inner($p) . '</span>',
                                     'name'        => $p['title'],
                                     'meta'        => array(
                                         '<span class="hf-kind">' . project_icon('rocket') . 'Progress update</span>',
@@ -634,7 +637,7 @@ $profileLink = function ($row) use ($me) {
                     <a class="ev-host-row" href="<?php echo e($profileLink($p)); ?>">
                         <div class="p-avatar tiny"><?php echo avatar_inner($p); ?></div>
                         <div>
-                            <strong><?php echo e(full_name($p)); ?></strong>
+                            <strong><?php echo name_badge($p); ?></strong>
                             <em><?php
                                 $line = array();
                                 if (!empty($p['course'])) $line[] = $p['course'];
@@ -660,6 +663,33 @@ $profileLink = function ($row) use ($me) {
     set();
     window.addEventListener("resize", set);
     window.addEventListener("load", set);
+})();
+
+// Posting or deleting a progress update reloads the page: remember the scroll and put it back
+(function () {
+    var KEY = "pj-scroll";
+    function save() {
+        try { sessionStorage.setItem(KEY, JSON.stringify({ u: location.pathname + location.search, y: Math.round(window.pageYOffset), t: Date.now() })); } catch (e) {}
+    }
+    // post: a normal form submit
+    document.addEventListener("submit", function (e) {
+        var f = e.target;
+        if (f && f.querySelector && f.querySelector('button[value="post_update"]')) save();
+    });
+    // delete: the confirm box submits the form from script (no submit event), so save on the click
+    document.addEventListener("click", function (e) {
+        if (e.target.closest && e.target.closest('button[value="delete_update"]')) save();
+    });
+
+    var saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem(KEY) || "null"); sessionStorage.removeItem(KEY); } catch (e) {}
+    if (!saved || saved.u !== location.pathname + location.search || !(saved.y > 0) || Date.now() - saved.t > 15000) return;
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    var tries = 0;
+    (function go() {
+        window.scrollTo(0, saved.y);
+        if (Math.abs(window.pageYOffset - saved.y) > 2 && tries++ < 8) setTimeout(go, 100);
+    })();
 })();
 </script>
 

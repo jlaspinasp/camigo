@@ -13,6 +13,9 @@ if (isset($_SESSION['username'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <noscript><meta http-equiv="refresh" content="2;url=index.php"></noscript>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -56,7 +59,7 @@ if (isset($_SESSION['username'])) {
         }
 
         .mark {
-            --mk: clamp(96px, 15vmin, 150px);
+            --mk: clamp(130px, 21vmin, 210px);
             position: relative;
             width: var(--mk);
             height: var(--mk);
@@ -97,8 +100,8 @@ if (isset($_SESSION['username'])) {
             opacity: 0;
             animation: orbitin 1.6s 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
         }
-        .w1 { --r: clamp(100px, 15vmin, 180px); }
-        .w2 { --r: clamp(160px, 24vmin, 290px); animation-delay: 0.7s; }
+        .w1 { --r: clamp(140px, 21vmin, 250px); }
+        .w2 { --r: clamp(215px, 33vmin, 380px); animation-delay: 0.7s; }
         .track {
             position: absolute; left: 0; top: 0;
             width: calc(var(--r) * 2); height: calc(var(--r) * 2);
@@ -130,6 +133,12 @@ if (isset($_SESSION['username'])) {
             animation: drop 0.8s 1.3s cubic-bezier(0.3, 1.7, 0.5, 1) forwards;
         }
 
+        /* students settle into the C */
+        .stu {
+            opacity: 0;
+            animation: fadein 0.7s 1.0s ease forwards;
+        }
+
         /* wordmark, letter by letter */
         .word {
             display: flex;
@@ -147,6 +156,20 @@ if (isset($_SESSION['username'])) {
             transform: translateY(110%);
             animation: up 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
             animation-delay: calc(1.5s + var(--i) * 0.07s);
+        }
+
+        /* slanted navigation triangle inside the "o" */
+        .word .o { position: relative; }
+        .word .o::after {
+            content: "";
+            position: absolute;
+            left: 50%; top: 56%;
+            width: 0.28em; height: 0.28em;
+            transform: translate(-50%, -50%) rotate(45deg);
+            background: #ff6b6b;
+            clip-path: polygon(50% 0, 100% 100%, 50% 74%, 0 100%);
+            opacity: 0;
+            animation: fadein 0.6s 2.3s ease forwards;
         }
 
         .tag {
@@ -190,7 +213,7 @@ if (isset($_SESSION['username'])) {
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { animation: none !important; }
             .ring { stroke-dashoffset: 0; }
-            .dot, .tag, .bar, .glow, .wrap { opacity: 1; }
+            .dot, .stu, .tag, .bar, .glow, .wrap, .word .o::after { opacity: 1; }
             .word span { transform: none; }
             .bar i { width: 100%; }
             .ripple { display: none; }
@@ -241,11 +264,20 @@ if (isset($_SESSION['username'])) {
             </defs>
             <path class="ring" pathLength="100" d="M34.72 33 A14 14 0 1 1 34.72 15" fill="none" stroke="url(#sg)" stroke-width="6" stroke-linecap="round"/>
             <circle class="dot" cx="39.5" cy="24" r="3.4" fill="#fff"/>
+            <!-- students inside the C -->
+            <g class="stu" transform="translate(24 25) scale(.78) translate(-24 -25)">
+                <circle cx="17.6" cy="22.2" r="2.1" fill="#fff"/>
+                <path d="M14.2 31 Q14.2 25.6 17.6 25.6 Q21 25.6 21 31 Z" fill="#fff"/>
+                <circle cx="30.4" cy="22.2" r="2.1" fill="#fff"/>
+                <path d="M27 31 Q27 25.6 30.4 25.6 Q33.8 25.6 33.8 31 Z" fill="#fff"/>
+                <circle cx="24" cy="19.6" r="2.8" fill="url(#sg)"/>
+                <path d="M19.4 31.6 Q19.4 23.6 24 23.6 Q28.6 23.6 28.6 31.6 Z" fill="url(#sg)"/>
+            </g>
         </svg>
     </div>
 
     <h1 class="word" aria-label="Camigo">
-        <span style="--i:0">C</span><span style="--i:1">a</span><span style="--i:2">m</span><span style="--i:3">i</span><span style="--i:4">g</span><span style="--i:5">o</span>
+        <span style="--i:0">C</span><span style="--i:1">a</span><span style="--i:2">m</span><span style="--i:3">i</span><span style="--i:4">g</span><span class="o" style="--i:5">o</span>
     </h1>
     <p class="tag">Campus Amigo. Your campus, all in one place.</p>
 

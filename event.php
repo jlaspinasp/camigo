@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ================= THE EVENT =================
 $er = db_run($conn,
     "SELECT e.id, e.club_id, e.created_by, e.title, e.description, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility,
-            hu.username AS host_username, hu.first_name AS host_first, hu.last_name AS host_last, hu.photo AS host_photo,
+            hu.username AS host_username, hu.first_name AS host_first, hu.last_name AS host_last, hu.photo AS host_photo" . vsel($conn, 'hu', 'host_') . ",
             c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo, c.cover AS club_cover" : "") . (events_banner_ready($conn) ? ", e.banner" : "") . ", c.category AS club_category
      FROM events e LEFT JOIN clubs c ON c.id = e.club_id LEFT JOIN users hu ON hu.id = e.created_by
      WHERE e.id = ? AND (e.club_id IS NULL OR c.status = 'approved') LIMIT 1", "i", array($eid));
@@ -91,7 +91,7 @@ $hiddenCount = 0;
 $guestsPrivate = ($ev && !$isMember && ($me['role'] ?? 'user') !== 'admin' && club_is_invite_only($conn, $ev['club_id']));
 if ($ev && !$locked) {
     $ar = db_run($conn,
-        "SELECT u.id, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility
+        "SELECT u.id, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility" . vsel($conn) . "
          FROM event_rsvps r JOIN users u ON u.id = r.user_id
          WHERE r.event_id = ? ORDER BY r.created_at ASC LIMIT 300", "i", array($eid));
     $all = $ar['rows'];
@@ -141,6 +141,9 @@ $selfBack = 'event?id=' . $eid;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?php echo ($ev && !$locked) ? e($ev['title']) . ' | ' : ($locked ? 'Members-only event | ' : ''); ?>Event | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -150,7 +153,7 @@ $selfBack = 'event?id=' . $eid;
 
 <?php include("topbar.php"); ?>
 
-<main class="main">
+<main class="main evd-page">
 
     <?php if ($message != "") { ?>
         <div class="msg <?php echo e($message_class); ?>"><?php echo e($message); ?></div>
@@ -192,17 +195,18 @@ $selfBack = 'event?id=' . $eid;
 
         <section class="ev-hero<?php echo $exclusive ? ' is-exclusive' : ''; ?><?php echo $heroImg !== '' ? ' has-banner' : ''; ?>" data-g="<?php echo event_gradient($ev); ?>"<?php if ($heroImg !== '') { ?> style="--ev-banner:url('<?php echo e($heroImg); ?>')"<?php } ?>>
             <div class="ev-badges">
-                <?php if ($noClub) { ?>
-                    <?php $ht = event_host_tags($ev, 'chip'); echo $ht[0]; ?>Hosted by <?php echo e(event_host_name($ev)); ?><?php echo $ht[1]; ?>
+                <?php if ($isHosting) { ?>
+                    <span class="chip">You're hosting</span>
+                <?php } elseif ($noClub) { ?>
+                    <?php $ht = event_host_tags($ev, 'chip'); echo $ht[0]; ?>Hosted by <?php echo e(event_host_name($ev)); ?><?php echo event_host_badge($ev); ?><?php echo $ht[1]; ?>
                 <?php } else { ?>
-                    <a class="chip" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo e($ev['club_name']); ?></a>
+                    <a class="chip" href="club?id=<?php echo (int)$ev['club_id']; ?>">Hosted by <?php echo e($ev['club_name']); ?></a>
                 <?php } ?>
                 <?php if ($exclusive) { ?><span class="badge members"><?php echo event_icon('lock'); ?>Members only</span><?php } ?>
                 <?php if ($cancelled) { ?><span class="badge rejected">Cancelled</span>
                 <?php } elseif ($state === 'live') { ?><span class="badge live">Live now</span>
                 <?php } elseif ($isOver) { ?><span class="badge ended">Ended</span>
                 <?php } elseif ($when !== '') { ?><span class="badge soon"><?php echo e($when); ?></span><?php } ?>
-                <?php if ($isHosting) { ?><span class="badge approved">You're hosting</span><?php } ?>
             </div>
 
             <h1><?php echo e($ev['title']); ?></h1>
@@ -213,16 +217,15 @@ $selfBack = 'event?id=' . $eid;
                 <div class="fact"><span class="fi"><?php echo event_icon('pin'); ?></span><div><small>Where</small><strong><?php echo e($ev['location']); ?></strong></div></div>
             </div>
 
-            <?php if ($isHosting || $canCancel) { ?>
-                <div class="ev-owner">
-                    <?php if ($isHosting) { ?>
-                        <a href="edit-event?id=<?php echo $eid; ?>" class="btn-sm btn-light">Edit event</a>
-                    <?php } ?>
-                </div>
-            <?php } ?>
         </section>
 
-        <div class="ev-layout">
+        <div class="ev-layout<?php echo $isHosting ? ' pj-has-actions' : ''; ?>">
+
+            <?php if ($isHosting) { ?>
+            <div class="top-actions pj-actions">
+                <a href="edit-event?id=<?php echo $eid; ?>" class="btn-sm btn-ghost">Edit event</a>
+            </div>
+            <?php } ?>
 
             <div class="ev-main">
                 <section class="panel" style="margin-top:0">
@@ -247,7 +250,7 @@ $selfBack = 'event?id=' . $eid;
                                     <div class="member">
                                         <div class="p-avatar tiny"><?php echo avatar_inner($a); ?></div>
                                         <div class="grow">
-                                            <strong><a href="<?php echo e($link); ?>" class="plain"><?php echo e(full_name($a)); ?></a></strong>
+                                            <strong><a href="<?php echo e($link); ?>" class="plain"><?php echo name_badge($a); ?></a></strong>
                                             <div class="club-meta">@<?php echo e($a['username']); ?><?php if ($line) { ?> &middot; <?php echo e(implode(' · ', $line)); ?><?php } ?></div>
                                         </div>
                                     </div>
@@ -324,7 +327,7 @@ $selfBack = 'event?id=' . $eid;
                     <?php if ($noClub) { ?>
 <?php $ht = event_host_tags($ev, 'ev-host-row'); echo $ht[0]; ?>
                             <span class="p-avatar tiny"><?php echo avatar_inner(array('username' => $ev['host_username'] ?? null, 'photo' => $ev['host_photo'] ?? null, 'first_name' => $ev['host_first'] ?? '?')); ?></span>
-                            <span><strong><?php echo e(event_host_name($ev)); ?></strong><em>Student host</em></span>
+                            <span><strong><?php echo e(event_host_name($ev)); ?><?php echo event_host_badge($ev); ?></strong><em>Student host</em></span>
                         <?php echo $ht[1]; ?>
                     <?php } else { ?>
                     <a href="club?id=<?php echo (int)$ev['club_id']; ?>" class="ev-host-row">
@@ -339,6 +342,8 @@ $selfBack = 'event?id=' . $eid;
     <?php } ?>
 
 </main>
+
+<script src="keep-scroll.js?v=<?php echo (int)@filemtime(__DIR__ . '/keep-scroll.js'); ?>"></script>
 
 </body>
 </html>

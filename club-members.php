@@ -102,7 +102,7 @@ $hiddenCount = 0;
 if ($club) {
     if ($canSeeMembers) {
         $members = db_run($conn,
-            "SELECT m.id AS mid, m.role, m.joined_at, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility
+            "SELECT m.id AS mid, m.role, m.joined_at, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility" . vsel($conn) . "
              FROM club_members m JOIN users u ON u.id = m.user_id
              WHERE m.club_id = ? AND m.status = 'active'
              ORDER BY (m.role = 'owner') DESC, (m.role = 'officer') DESC, m.joined_at ASC LIMIT 500",
@@ -150,7 +150,7 @@ $renderMember = function ($m) use ($club, $me, $isOwner, $officersReady) {
     <div class="member<?php echo $role === 'owner' ? ' is-owner' : ($role === 'officer' ? ' is-officer' : ''); ?>" data-find="<?php echo e($find); ?>">
         <div class="p-avatar tiny"><?php echo avatar_inner($m); ?></div>
         <div class="grow">
-            <strong><a href="<?php echo e($link); ?>" class="plain"><?php echo e($full); ?></a></strong>
+            <strong><a href="<?php echo e($link); ?>" class="plain"><?php echo name_badge($m, $full); ?></a></strong>
             <div class="club-meta">@<?php echo e($m['username']); ?><?php if ($line !== '') { ?> &middot; <?php echo e($line); ?><?php } ?></div>
         </div>
 
@@ -192,6 +192,9 @@ $renderMember = function ($m) use ($club, $me, $isOwner, $officersReady) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Members<?php echo $club ? ' · ' . e($club['name']) : ''; ?> | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">

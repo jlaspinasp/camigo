@@ -93,7 +93,7 @@ if ($row && !$hidden) {
 
     // projects this person founded or joined
     $pjr = db_run($conn,
-        "SELECT p.id, p.title, p.tagline, p.category, m.role, m.role_label
+        "SELECT p.id, p.title, p.tagline, p.category" . (projects_banner_ready($conn) ? ", p.banner" : "") . (projects_logo_ready($conn) ? ", p.logo" : "") . ", m.role, m.role_label
          FROM project_members m JOIN projects p ON p.id = m.project_id
          WHERE m.user_id = ? AND m.status = 'active' ORDER BY p.updated_at DESC LIMIT 12",
         "i", array($row['id']));
@@ -205,6 +205,9 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?php echo ($row && !$hidden) ? e($full) . ' | ' : ''; ?>Profile | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -430,7 +433,7 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
                                         <div class="pf-club-body">
                                             <?php echo club_tile_html($mc, 'pf-club-logo', 'span'); ?>
                                             <span class="pf-club-txt">
-                                                <strong><?php echo e($mc['name']); ?></strong>
+                                                <strong title="<?php echo e($mc['name']); ?>"><?php echo e($mc['name']); ?></strong>
                                                 <em><?php echo ($mc['role'] === 'owner') ? 'Owner' : (($mc['role'] === 'officer') ? 'Officer' : e($mc['category'])); ?></em>
                                             </span>
                                         </div>
@@ -461,13 +464,14 @@ $currently = ($row && !$hidden && !empty($row['currently_into'])) ? currently_li
                                 <div class="pf-track">
                                     <?php foreach ($myProjects as $mp) { ?>
                                         <a class="pf-club pf-pj" href="project?id=<?php echo (int)$mp['id']; ?>">
-                                            <div class="pf-pj-media t<?php echo project_tone($mp['id']); ?>">
+                                            <?php $mpBanner = project_banner_url($mp); ?>
+                                            <div class="pf-pj-media t<?php echo project_tone($mp['id']); ?><?php echo $mpBanner !== '' ? ' has-banner' : ''; ?>"<?php if ($mpBanner !== '') { ?> style="--pj-banner:url('<?php echo e($mpBanner); ?>')"<?php } ?>>
                                                 <span class="pf-pj-watermark"><?php echo project_category_icon($mp['category']); ?></span>
                                             </div>
                                             <div class="pf-club-body">
-                                                <span class="pj-mini-ic pf-pj-ic t<?php echo project_tone($mp['id']); ?>"><?php echo project_category_icon($mp['category']); ?></span>
+                                                <span class="pj-mini-ic pf-pj-ic t<?php echo project_tone($mp['id']); ?><?php echo project_tile_class($mp); ?>"><?php echo project_tile_inner($mp); ?></span>
                                                 <span class="pf-club-txt">
-                                                    <strong><?php echo e($mp['title']); ?></strong>
+                                                    <strong title="<?php echo e($mp['title']); ?>"><?php echo e($mp['title']); ?></strong>
                                                     <em><?php echo e($mp['role'] === 'owner' ? 'Founder' : (!empty($mp['role_label']) ? $mp['role_label'] : 'Teammate')); ?></em>
                                                 </span>
                                             </div>

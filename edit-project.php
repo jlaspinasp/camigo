@@ -24,6 +24,9 @@ $bannerReady = projects_banner_ready($conn);
 $oldBanner   = ($bannerReady && $p && !empty($p['banner']) && club_image_ok($p['banner'])) ? $p['banner'] : '';
 $bannerCur   = $oldBanner;
 $bannerTone  = $pid > 0 ? project_tone($pid) : 0;
+$logoReady   = projects_logo_ready($conn);   // the small square project icon
+$oldLogo     = ($logoReady && $p && !empty($p['logo']) && club_image_ok($p['logo'])) ? $p['logo'] : '';
+$logoCur     = $oldLogo;
 
 if ($allowed) {
     $roles = project_roles($conn, $pid);
@@ -56,6 +59,7 @@ if ($allowed) {
             $r = db_run($conn, "DELETE FROM projects WHERE id = ? AND owner_id = ?", "ii", array($pid, $me['id']));
             if ($r['ok'] && $r['affected'] > 0) {
                 if ($oldBanner !== '') project_banner_delete($oldBanner);
+                if ($oldLogo !== '')   project_logo_delete($oldLogo);
                 flash_set("Your project was deleted.", "success");
                 header("Location: projects");
                 exit();
@@ -118,13 +122,29 @@ if ($allowed) {
                 }
             }
 
+            // the logo works the same way: a new upload replaces the old one, the x removes it
+            $newLogo   = null;
+            $logoFinal = $oldLogo !== '' ? $oldLogo : null;
+            if ($clean && $error === "") {
+                if ($logoReady) {
+                    $newLogo = project_logo_upload('logo', $error);
+                    if ($error === "") {
+                        if ($newLogo !== null)                   $logoFinal = $newLogo;
+                        elseif (!empty($_POST['remove_logo']))   $logoFinal = null;
+                    }
+                } elseif (!empty($_FILES['logo']['name'])) {
+                    $error = "Project logos need a one-time upgrade. Run projects-logo.sql in phpMyAdmin.";
+                }
+            }
+
             if ($clean && $error === "") {
                 $sql    = "UPDATE projects SET title = ?, tagline = ?, description = ?, category = ?, skills = ?, link = ?, is_open = ?, club_id = ?"
-                        . ($bannerReady ? ", banner = ?" : "") . " WHERE id = ? AND owner_id = ?";
-                $types  = "ssssssii" . ($bannerReady ? "s" : "") . "ii";
+                        . ($bannerReady ? ", banner = ?" : "") . ($logoReady ? ", logo = ?" : "") . " WHERE id = ? AND owner_id = ?";
+                $types  = "ssssssii" . ($bannerReady ? "s" : "") . ($logoReady ? "s" : "") . "ii";
                 $params = array($clean['title'], $clean['tagline'], $clean['description'], $clean['category'],
                                 $clean['skills'], $clean['link'], $clean['is_open'], $newClub > 0 ? $newClub : null);
                 if ($bannerReady) $params[] = $bannerFinal;
+                if ($logoReady)   $params[] = $logoFinal;
                 $params[] = $pid;
                 $params[] = $me['id'];
                 $r = db_run($conn, $sql, $types, $params);
@@ -132,6 +152,7 @@ if ($allowed) {
                 if ($r['ok']) {
                     // the old image is no longer used once the new one (or none) is saved
                     if ($bannerReady && $oldBanner !== '' && $bannerFinal !== $oldBanner) project_banner_delete($oldBanner);
+                    if ($logoReady && $oldLogo !== '' && $logoFinal !== $oldLogo) project_logo_delete($oldLogo);
 
                     // roles: update the ones we know, add new ones, drop the ones that were removed
                     $keep = array();
@@ -164,6 +185,7 @@ if ($allowed) {
 
         // a failed save shouldn't leave stray uploads behind
         if ($error !== "" && !empty($newBanner)) project_banner_delete($newBanner);
+        if ($error !== "" && !empty($newLogo))   project_logo_delete($newLogo);
 
         $message = $error;
     }
@@ -175,6 +197,9 @@ if ($allowed) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Edit project | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">

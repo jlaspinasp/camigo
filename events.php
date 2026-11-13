@@ -71,6 +71,9 @@ $emptyText = array(
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Events | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -94,7 +97,7 @@ $emptyText = array(
             </div>
             <?php // always shown: unverified students are sent to the verification page by create-event ?>
             <div class="top-actions">
-                <a href="<?php echo e(tab_url('going', '')); ?>" class="create-link join-link">I'm going</a>
+                <a href="<?php echo e(tab_url('going', '')); ?>" class="create-link join-link<?php echo $tab === 'going' ? ' is-active' : ''; ?>"<?php echo $tab === 'going' ? ' aria-current="page"' : ''; ?>>I'm going</a>
                 <a href="create-event" class="create-link">Post an event</a>
             </div>
         </div>
@@ -151,6 +154,8 @@ $emptyText = array(
     <?php } ?>
 
 </main>
+
+<script src="keep-scroll.js?v=<?php echo (int)@filemtime(__DIR__ . '/keep-scroll.js'); ?>"></script>
 
 </body>
 </html>

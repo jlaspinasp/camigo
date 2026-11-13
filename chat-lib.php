@@ -271,9 +271,19 @@ function chat_group_sys($conn, $gid, $actor, $text) {
 }
 // colour for a group avatar, stable per group
 function chat_group_photo_dir() { return __DIR__ . '/uploads/groups'; }
-// the picture for a group: the club's logo for club chats, otherwise the photo an admin chose ('' = none)
-function chat_group_logo_url($clubLogo, $photo) {
+// has projects-logo.sql been run? (projects.logo = the project's uploaded logo)
+function chat_project_logo_ready($conn) {
+    static $ok = null;
+    if ($ok === null) {
+        $a = @mysqli_query($conn, "SHOW COLUMNS FROM projects LIKE 'logo'");
+        $ok = ($a && mysqli_num_rows($a) > 0);
+    }
+    return $ok;
+}
+// the picture for a group: the club's logo for club chats, the project's logo for team chats, otherwise the photo an admin chose ('' = none)
+function chat_group_logo_url($clubLogo, $photo, $projectLogo = '') {
     if (function_exists('club_image_ok') && club_image_ok($clubLogo)) return 'uploads/clubs/' . $clubLogo;
+    if (function_exists('club_image_ok') && club_image_ok($projectLogo)) return 'uploads/projects/' . $projectLogo;
     if (function_exists('club_image_ok') && club_image_ok($photo))    return 'uploads/groups/' . $photo;
     return '';
 }
@@ -331,7 +341,8 @@ function chat_sync_managed($conn, $type) {
         $t = db_run($conn, "SELECT 1 FROM $tbl LIMIT 1");
         if (!$t['ok']) return;                                   // that feature isn't installed yet
     }
-    $logoOk = ($type === 'club' && function_exists('club_identity_ready') && club_identity_ready($conn));
+    $logoOk = ($type === 'club' && function_exists('club_identity_ready') && club_identity_ready($conn))
+              || ($type === 'project' && chat_project_logo_ready($conn));
 
     // 1. a group for each one, and keep the name in step
     db_run($conn, "INSERT INTO chat_groups (name, created_by, $col)
@@ -385,7 +396,7 @@ function chat_sync_managed($conn, $type) {
             "ii" . str_repeat('i', count($newIds)), array_merge(array($sid, $gid), $newIds));
 
         $total = count(chat_group_member_ids($conn, $gid));
-        $convo = chat_group_convo($gid, $rows[0]['name'], $total, $text, chat_group_logo_url($rows[0]['logo'], ''),
+        $convo = chat_group_convo($gid, $rows[0]['name'], $total, $text, chat_group_logo_url($type === 'club' ? $rows[0]['logo'] : '', '', $type === 'project' ? $rows[0]['logo'] : ''),
                                   $type === 'club' ? (int)$rows[0]['cid'] : 0, $type === 'project' ? (int)$rows[0]['cid'] : 0);
         chat_push($newIds, 'group-added', array('convo' => $convo));
         $others = array_diff(chat_group_member_ids($conn, $gid), $newIds);

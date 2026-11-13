@@ -171,6 +171,9 @@ if (!$tableMissing && !$mine) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Clubs | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -195,7 +198,7 @@ if (!$tableMissing && !$mine) {
             <?php if ($reqCount > 0) { ?>
                 <a href="club-requests" class="create-link join-link">Join requests <span class="count"><?php echo $reqCount; ?></span></a>
             <?php } ?>
-            <a href="clubs?mine=1" class="create-link join-link">My clubs</a>
+            <a href="clubs?mine=1" class="create-link join-link<?php echo $mine ? ' is-active' : ''; ?>"<?php echo $mine ? ' aria-current="page"' : ''; ?>>My clubs</a>
             <a href="create-club" class="create-link">Create a club</a>
         </div>
     </div>
@@ -351,6 +354,8 @@ if (!$tableMissing && !$mine) {
     <?php } ?>
 
 </main>
+
+<script src="keep-scroll.js?v=<?php echo (int)@filemtime(__DIR__ . '/keep-scroll.js'); ?>"></script>
 
 </body>
 </html>

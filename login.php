@@ -75,6 +75,9 @@ $err_icon = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Log in | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -91,23 +94,6 @@ $err_icon = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r
             <h2 class="headline">Your campus, all in one place.</h2>
             <p class="sub">Find clubs, join student projects, and meet the people building things at your university.</p>
 
-            <div class="feed">
-                <div class="feed-card">
-                    <div class="av">RC</div>
-                    <div class="txt"><strong>Robotics Club</strong><small>Build night this Thursday</small></div>
-                    <span class="chip">Open</span>
-                </div>
-                <div class="feed-card">
-                    <div class="av">CS</div>
-                    <div class="txt"><strong>Capstone Showcase</strong><small>Looking for 2 designers</small></div>
-                    <span class="chip">Recruiting</span>
-                </div>
-                <div class="feed-card">
-                    <div class="av">DS</div>
-                    <div class="txt"><strong>Debate Society</strong><small>New members welcome</small></div>
-                    <span class="chip">Open</span>
-                </div>
-            </div>
         </div>
     </aside>
 

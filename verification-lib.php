@@ -35,7 +35,8 @@ function verify_two_ready($conn) {
 
 // Admins count as verified from the start.
 function user_is_verified($row) {
-    return (($row['role'] ?? 'user') === 'admin') || !empty($row['is_verified']);
+    // acct_role: the account's role when a query had to alias it (club_members also has a "role" column)
+    return (($row['role'] ?? 'user') === 'admin') || (($row['acct_role'] ?? 'user') === 'admin') || !empty($row['is_verified']);
 }
 
 function can_create($conn, $me) {
@@ -250,6 +251,38 @@ function delete_proof($name) {
 function verified_badge($row, $extraClass = '') {
     if (!user_is_verified($row)) return '';
     return '<span class="vbadge' . ($extraClass !== '' ? ' ' . e($extraClass) : '') . '" title="Verified student" role="img" aria-label="Verified student">'
-         . '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/>'
-         . '<path d="M7.2 12.4l3.2 3.2 6.4-6.8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+         . '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="12.00,0.40 14.48,2.73 17.80,1.95 18.79,5.21 22.05,6.20 21.27,9.52 23.60,12.00 21.27,14.48 22.05,17.80 18.79,18.79 17.80,22.05 14.48,21.27 12.00,23.60 9.52,21.27 6.20,22.05 5.21,18.79 1.95,17.80 2.73,14.48 0.40,12.00 2.73,9.52 1.95,6.20 5.21,5.21 6.20,1.95 9.52,2.73" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/>'
+         . '<path d="M7.4 12.4l3.1 3.1 6.1-6.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+}
+
+// ---- helpers so the badge can follow a name everywhere ----
+
+// Do the users table columns the badge needs exist? (checked once per request)
+function badge_cols_ready($conn) {
+    static $ok = null;
+    if ($ok === null) {
+        $a = @mysqli_query($conn, "SHOW COLUMNS FROM users LIKE 'is_verified'");
+        $b = @mysqli_query($conn, "SHOW COLUMNS FROM users LIKE 'role'");
+        $ok = ($a && mysqli_num_rows($a) > 0 && $b && mysqli_num_rows($b) > 0);
+    }
+    return $ok;
+}
+
+// SQL to add to a SELECT list so rows carry what the badge needs.
+//   vsel($conn)                  -> ", u.is_verified, u.role AS acct_role"
+//   vsel($conn, 'hu', 'host_')   -> ", hu.is_verified AS host_is_verified, hu.role AS host_acct_role"
+function vsel($conn, $alias = 'u', $prefix = '') {
+    if (!badge_cols_ready($conn)) return '';
+    return ', ' . $alias . '.is_verified' . ($prefix !== '' ? ' AS ' . $prefix . 'is_verified' : '')
+         . ', ' . $alias . '.role AS ' . $prefix . 'acct_role';
+}
+
+// Pulls a prefixed pair of columns back into a plain row the badge can read.
+function badge_row($row, $prefix = '') {
+    return array('is_verified' => $row[$prefix . 'is_verified'] ?? 0, 'acct_role' => $row[$prefix . 'acct_role'] ?? 'user');
+}
+
+// A name followed by the badge (when verified). Pass $name to show something other than full_name().
+function name_badge($row, $name = null) {
+    return e($name !== null ? $name : full_name($row)) . (user_gone($row) ? '' : verified_badge($row));
 }

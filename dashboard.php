@@ -75,6 +75,9 @@ $initial = strtoupper(substr($first, 0, 1));
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Dashboard | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -87,7 +90,7 @@ $initial = strtoupper(substr($first, 0, 1));
 
     <div class="user">
         <nav class="tb-nav" aria-label="Main">
-            <a href="dashboard" class="tb-link">Home</a>
+            <a href="dashboard" class="tb-link is-active" aria-current="page">Home</a>
             <a href="clubs" class="tb-link">Clubs</a>
             <a href="projects" class="tb-link">Projects</a>
             <a href="events" class="tb-link">Events</a>
@@ -228,7 +231,7 @@ $initial = strtoupper(substr($first, 0, 1));
                         <div class="req-row">
                             <a class="req-who" href="profile?u=<?php echo e(urlencode($rq['username'])); ?>">
                                 <span class="faces"><span class="face lg"><?php echo avatar_inner($rq); ?></span></span>
-                                <span><strong><?php echo e(full_name($rq)); ?></strong><em>wants to join <?php echo e($rq['club_name']); ?></em></span>
+                                <span><strong><?php echo name_badge($rq); ?></strong><em>wants to join <?php echo e($rq['club_name']); ?></em></span>
                             </a>
                             <form method="POST" action="club" class="req-btns">
                                 <?php echo csrf_field(); ?>
@@ -248,7 +251,7 @@ $initial = strtoupper(substr($first, 0, 1));
 
             <?php if ($featured) { $fm = (int)$featured['members']; ?>
                 <section class="panel rail-feat">
-                    <span class="feat-badge">&#9733; Featured club</span>
+                    <span class="feat-flag"><?php echo event_icon('star'); ?>Featured club</span>
                     <a class="feat-main" href="club?id=<?php echo (int)$featured['id']; ?>">
                         <?php echo club_tile_html($featured, '', 'span'); ?>
                         <span>
@@ -292,7 +295,7 @@ $initial = strtoupper(substr($first, 0, 1));
                         $left = project_open_spots($fp['roles'] ?? array());
                     ?>
                         <a class="rail-pj-row" href="project?id=<?php echo (int)$fp['id']; ?>">
-                            <span class="pj-mini-ic t<?php echo project_tone($fp['id']); ?>"><?php echo project_category_icon($fp['category']); ?></span>
+                            <span class="pj-mini-ic t<?php echo project_tone($fp['id']); ?><?php echo project_tile_class($fp); ?>"><?php echo project_tile_inner($fp); ?></span>
                             <span class="rail-pj-txt">
                                 <strong><?php echo e($fp['title']); ?></strong>
                                 <em><?php echo e($fp['category']); ?><?php if ($left > 0) { echo ' &middot; ' . $left . ' spot' . ($left === 1 ? '' : 's') . ' open'; } ?></em>
@@ -379,6 +382,30 @@ $initial = strtoupper(substr($first, 0, 1));
     set();
     window.addEventListener("resize", set);
     window.addEventListener("load", set);
+})();
+
+// "Needs your attention": Accept / Decline reloads the page, so remember the scroll and put it back
+(function () {
+    var KEY = "dash-scroll";
+    function read() { try { return sessionStorage.getItem(KEY); } catch (e) { return null; } }
+    function clear() { try { sessionStorage.removeItem(KEY); } catch (e) {} }
+
+    document.addEventListener("submit", function (e) {
+        if (!e.target.closest || !e.target.closest(".rail-req")) return;
+        try { sessionStorage.setItem(KEY, String(Math.round(window.pageYOffset))); } catch (err) {}
+    });
+
+    var y = parseInt(read(), 10);
+    if (!isNaN(y) && y > 0) {
+        clear();
+        if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+        var tries = 0;
+        (function go() {
+            window.scrollTo(0, y);
+            // the feed can still be growing; keep trying briefly until we land
+            if (Math.abs(window.pageYOffset - y) > 2 && tries++ < 15) setTimeout(go, 100);
+        })();
+    }
 })();
 </script>
 

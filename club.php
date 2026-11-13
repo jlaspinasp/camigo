@@ -13,7 +13,7 @@ $cid = (int)($_GET['id'] ?? $_POST['club_id'] ?? 0);
 // ---- the club (approved clubs only) ----
 $cr = db_run($conn,
     "SELECT c.*,
-            u.username AS creator_username, u.first_name AS creator_first, u.last_name AS creator_last
+            u.username AS creator_username, u.first_name AS creator_first, u.last_name AS creator_last" . vsel($conn, 'u', 'creator_') . "
      FROM clubs c LEFT JOIN users u ON u.id = c.created_by
      WHERE c.id = ? AND c.status = 'approved' LIMIT 1",
     "i", array($cid));
@@ -176,7 +176,7 @@ if ($club && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             "INSERT INTO notifications (user_id, type, message, link)
                              SELECT user_id, 'club_update', ?, ? FROM club_members
                              WHERE club_id = ? AND status = 'active' AND user_id <> ?",
-                            "ssii", array($note, 'club?id=' . $cid . ($newPostId > 0 ? '&more=1#post-' . $newPostId : '#updates'), $cid, (int)$me['id']));
+                            "ssii", array($note, 'club?id=' . $cid . ($newPostId > 0 ? '&post=' . $newPostId . '#post-' . $newPostId : '#updates'), $cid, (int)$me['id']));
                     }
                     flash_set($c[2] === 'members' ? "Announcement posted. Only your club members can see it." : "Announcement posted.", "success");
                 } else {
@@ -255,7 +255,7 @@ if ($club && $_SERVER['REQUEST_METHOD'] === 'POST') {
 // ---- member count + (for the owner) pending requests ----
 $pending = array();
 if ($club) {
-    $sqlBase = "SELECT m.id AS mid, m.role, m.joined_at, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility
+    $sqlBase = "SELECT m.id AS mid, m.role, m.joined_at, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility" . vsel($conn) . "
                 FROM club_members m JOIN users u ON u.id = m.user_id
                 WHERE m.club_id = ? AND m.status = ";
 
@@ -269,6 +269,7 @@ if ($club) {
 
 // ---- club updates (the news feed) ----
 $postLimit = !empty($_GET['more']) ? 30 : 5;
+$focusPost  = (int)($_GET['post'] ?? 0);   // a post opened from the dashboard or a notification: shown first, scrolled to the top
 $posts = array();
 $postsMore = false;
 $postsSetupMissing = false;
@@ -277,10 +278,10 @@ if ($club) {
     if ($annReady) {
         $pr = db_run($conn,
             "SELECT p.id, p.title, p.kind, p.visibility, p.body, p.pinned, (p.edited_at IS NOT NULL) AS edited, UNIX_TIMESTAMP(p.created_at) AS ts,
-                    u.username, u.first_name, u.last_name, u.photo, pm.role AS author_role
+                    u.username, u.first_name, u.last_name, u.photo, pm.role AS author_role" . vsel($conn) . "
              FROM club_posts p LEFT JOIN users u ON u.id = p.user_id
              LEFT JOIN club_members pm ON pm.club_id = p.club_id AND pm.user_id = p.user_id AND pm.status = 'active'
-             WHERE p.club_id = ? AND (p.visibility = 'public' OR 1 = ?) ORDER BY p.pinned DESC, p.id DESC LIMIT " . ($postLimit + 1),
+             WHERE p.club_id = ? AND (p.visibility = 'public' OR 1 = ?) ORDER BY " . ($focusPost > 0 ? "(p.id = " . $focusPost . ") DESC, " : "") . "p.pinned DESC, p.id DESC LIMIT " . ($postLimit + 1),
             "ii", array($cid, $canSeePrivate ? 1 : 0));
 
         // outsiders only learn that members-only announcements exist (no titles or text)
@@ -291,10 +292,10 @@ if ($club) {
     } else {
         $pr = db_run($conn,
             "SELECT p.id, p.body, p.pinned, UNIX_TIMESTAMP(p.created_at) AS ts,
-                    u.username, u.first_name, u.last_name, u.photo, pm.role AS author_role
+                    u.username, u.first_name, u.last_name, u.photo, pm.role AS author_role" . vsel($conn) . "
              FROM club_posts p LEFT JOIN users u ON u.id = p.user_id
              LEFT JOIN club_members pm ON pm.club_id = p.club_id AND pm.user_id = p.user_id AND pm.status = 'active'
-             WHERE p.club_id = ? ORDER BY p.pinned DESC, p.id DESC LIMIT " . ($postLimit + 1),
+             WHERE p.club_id = ? ORDER BY " . ($focusPost > 0 ? "(p.id = " . $focusPost . ") DESC, " : "") . "p.pinned DESC, p.id DESC LIMIT " . ($postLimit + 1),
             "i", array($cid));
     }
     $postsSetupMissing = !$pr['ok'];
@@ -312,13 +313,13 @@ $leaders = array();
 $stackMembers = array();
 if ($club && $canSeeMembers) {
     $leaders = db_run($conn,
-        "SELECT m.role, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo
+        "SELECT m.role, u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo" . vsel($conn) . "
          FROM club_members m JOIN users u ON u.id = m.user_id
          WHERE m.club_id = ? AND m.status = 'active' AND m.role IN ('owner', 'officer')
          ORDER BY (m.role = 'owner') DESC, m.joined_at ASC",
         "i", array($cid))['rows'];
     $stackMembers = db_run($conn,
-        "SELECT u.username, u.first_name, u.last_name, u.photo
+        "SELECT u.username, u.first_name, u.last_name, u.photo" . vsel($conn) . "
          FROM club_members m JOIN users u ON u.id = m.user_id
          WHERE m.club_id = ? AND m.status = 'active'
          ORDER BY (m.role = 'owner') DESC, (m.role = 'officer') DESC, m.joined_at ASC LIMIT 5",
@@ -381,6 +382,9 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?php echo $club ? e($club['name']) . ' | ' : ''; ?>Club | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -414,7 +418,46 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
 
         <section class="profile-card">
             <div class="cover<?php echo $coverImg ? ' has-img' : ''; ?>"<?php if ($coverImg) { ?> style="background-image:url('uploads/clubs/<?php echo e($coverImg); ?>')"<?php } else { ?> data-g="<?php echo (int)$club['id'] % 6; ?>"<?php } ?>></div>
-            <div class="profile-body">
+        </section>
+
+        <div class="club-layout club-has-actions">
+
+        <div class="top-actions club-actions">
+            <?php if ($clubChatId) { ?>
+                <a href="messages?g=<?php echo (int)$clubChatId; ?>" class="btn-sm btn-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-8L6.5 20.5V16.5H5A1.5 1.5 0 013.5 15V6A1.5 1.5 0 015 4.5z"/></svg>Group chat</a>
+            <?php } ?>
+            <?php if ($isStaff) { ?>
+                <a href="create-event?club=<?php echo (int)$club['id']; ?>" class="btn-sm btn-ghost">Post an event</a>
+            <?php } ?>
+            <?php if ($isOwner) { ?>
+                <a href="edit-club?id=<?php echo (int)$club['id']; ?>" class="btn-sm btn-ghost">Edit club</a>
+            <?php } else { ?>
+                <form method="POST" class="foot-right">
+                    <?php echo csrf_field(); ?>
+                    <input type="hidden" name="club_id" value="<?php echo (int)$club['id']; ?>">
+                    <?php if ($isPending) { ?>
+                        <span class="badge pending">Request sent</span>
+                        <button type="submit" name="action" value="cancel" class="btn-sm btn-ghost">Cancel</button>
+                    <?php } elseif ($isMember || $isOfficer) { ?>
+                        <?php if (!$isOfficer) { ?><span class="badge approved">Member</span><?php } ?>
+                        <button type="submit" name="action" value="leave" class="btn-sm btn-ghost" data-confirm="<?php echo $isOfficer ? 'You will lose your officer role and leave this club.' : 'You will no longer be a member of this club.'; ?>" data-confirm-title="Leave this club?" data-confirm-ok="Leave club" data-confirm-tone="warning" data-confirm-icon="exit">Leave</button>
+                    <?php } else { ?>
+                        <?php if ($inviteOnly && !$hasValidInvite) { ?>
+                            <span class="badge invite"><?php echo event_icon('lock'); ?>Invite only</span>
+                        <?php } elseif ($hasValidInvite) { ?>
+                            <input type="hidden" name="invite" value="<?php echo e($givenInvite); ?>">
+                            <button type="submit" name="action" value="join" class="btn-sm btn-dark">Accept invite</button>
+                        <?php } else { ?>
+                            <button type="submit" name="action" value="join" class="btn-sm btn-dark">Request to join</button>
+                        <?php } ?>
+                    <?php } ?>
+                </form>
+            <?php } ?>
+        </div>
+
+        <div class="club-main">
+
+            <div class="club-ident">
                 <?php echo club_tile_html($club, 'big'); ?>
 
                 <div class="p-head">
@@ -428,46 +471,11 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                         </div>
                     </div>
 
-                    <div class="top-actions">
-                        <?php if ($clubChatId) { ?>
-                            <a href="messages?g=<?php echo (int)$clubChatId; ?>" class="btn-sm btn-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-8L6.5 20.5V16.5H5A1.5 1.5 0 013.5 15V6A1.5 1.5 0 015 4.5z"/></svg>Group chat</a>
-                        <?php } ?>
-                        <?php if ($isStaff) { ?>
-                            <a href="create-event?club=<?php echo (int)$club['id']; ?>" class="btn-sm btn-ghost">Post an event</a>
-                        <?php } ?>
-                        <?php if ($isOwner) { ?>
-                            <a href="edit-club?id=<?php echo (int)$club['id']; ?>" class="btn-sm btn-ghost">Edit club</a>
-                        <?php } else { ?>
-                            <form method="POST" class="foot-right">
-                                <?php echo csrf_field(); ?>
-                                <input type="hidden" name="club_id" value="<?php echo (int)$club['id']; ?>">
-                                <?php if ($isPending) { ?>
-                                    <span class="badge pending">Request sent</span>
-                                    <button type="submit" name="action" value="cancel" class="btn-sm btn-ghost">Cancel</button>
-                                <?php } elseif ($isMember || $isOfficer) { ?>
-                                    <?php if (!$isOfficer) { ?><span class="badge approved">Member</span><?php } ?>
-                                    <button type="submit" name="action" value="leave" class="btn-sm btn-ghost" data-confirm="<?php echo $isOfficer ? 'You will lose your officer role and leave this club.' : 'You will no longer be a member of this club.'; ?>" data-confirm-title="Leave this club?" data-confirm-ok="Leave club" data-confirm-tone="warning" data-confirm-icon="exit">Leave</button>
-                                <?php } else { ?>
-                                    <?php if ($inviteOnly && !$hasValidInvite) { ?>
-                                        <span class="badge invite"><?php echo event_icon('lock'); ?>Invite only</span>
-                                    <?php } elseif ($hasValidInvite) { ?>
-                                        <input type="hidden" name="invite" value="<?php echo e($givenInvite); ?>">
-                                        <button type="submit" name="action" value="join" class="btn-sm btn-dark">Accept invite</button>
-                                    <?php } else { ?>
-                                        <button type="submit" name="action" value="join" class="btn-sm btn-dark">Request to join</button>
-                                    <?php } ?>
-                                <?php } ?>
-                            </form>
-                        <?php } ?>
-                    </div>
                 </div>
 
                 <p class="p-bio"><?php echo nl2br(e($club['description'])); ?></p>
             </div>
-        </section>
 
-        <div class="club-layout">
-        <div class="club-main">
 
         <?php if ($isOwner && $pending) { ?>
             <section class="panel rq-panel" id="join-requests">
@@ -479,7 +487,7 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                                 <div class="req-who">
                                     <div class="p-avatar tiny"><?php echo avatar_inner($p); ?></div>
                                     <div class="rq-text">
-                                        <a class="rq-name" href="profile?u=<?php echo e(urlencode($p['username'])); ?>"><?php echo e(trim($p['first_name'] . ' ' . ($p['last_name'] ?? ''))); ?></a>
+                                        <a class="rq-name" href="profile?u=<?php echo e(urlencode($p['username'])); ?>"><?php echo name_badge($p, trim($p['first_name'] . ' ' . ($p['last_name'] ?? ''))); ?></a>
                                         <div class="rq-meta">@<?php echo e($p['username']); ?><?php if ($line !== '') { ?> &middot; <?php echo e($line); ?><?php } ?></div>
                                     </div>
                                 </div>
@@ -646,7 +654,7 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                             <a class="lead" href="<?php echo e(side_profile_link($l, $me['username'])); ?>">
                                 <span class="lead-av"><?php echo avatar_inner($l); ?></span>
                                 <span class="lead-info">
-                                    <strong><?php echo e(full_name($l)); ?></strong>
+                                    <strong><?php echo name_badge($l); ?></strong>
                                     <em><?php echo e($meta); ?></em>
                                 </span>
                                 <span class="lead-badge <?php echo $isOwn ? 'owner' : 'officer'; ?>" title="<?php echo $isOwn ? 'Club owner' : 'Officer'; ?>"><?php echo event_icon($isOwn ? 'crown' : 'star'); ?></span>
@@ -676,7 +684,7 @@ if ($club && $creator === '' && !empty($club['created_by'])) $creator = DELETED_
                 </a>
 
                 <p class="side-foot">
-                    Started<?php if ($creator !== '') { ?> by <?php echo e($creator); ?><?php } ?> on <?php echo e(date('M j, Y', strtotime($club['created_at']))); ?>
+                    Started<?php if ($creator !== '') { ?> by <?php echo e($creator); ?><?php echo ($creator !== DELETED_USER) ? verified_badge(badge_row($club, 'creator_')) : ''; ?><?php } ?> on <?php echo e(date('M j, Y', strtotime($club['created_at']))); ?>
                 </p>
             </section>
 

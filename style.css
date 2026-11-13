@@ -56,6 +56,18 @@ a:hover { text-decoration: underline; }
     letter-spacing: -0.02em;
 }
 
+/* little navigation triangle inside the "o" of the wordmark */
+.logo .o { position: relative; display: inline-block; font-style: normal; }
+.logo .o::after {
+    content: "";
+    position: absolute;
+    left: 50%; top: 56%;
+    width: 0.28em; height: 0.28em;
+    transform: translate(-50%, -50%) rotate(45deg);
+    background: var(--coral);
+    clip-path: polygon(50% 0, 100% 100%, 50% 74%, 0 100%);
+}
+
 /* ---------- AUTH LAYOUT (login + register) ---------- */
 /* one continuous canvas: brand story on one side, a compact card on the other */
 .auth {
@@ -2965,7 +2977,7 @@ button.pf-pill { cursor: pointer; }
     white-space: nowrap; overflow: hidden;
 }
 .dir-card .dir-id h3 a { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.dir-card .dir-id h3 .vbadge { margin-left: 6px; }
+.dir-card .dir-id h3 .vbadge { --vb-size: 14px; margin-left: 7px; }
 .dir-card .dir-user {
     height: 20px; margin-top: 6px; font-size: 14.5px; line-height: 20px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -3245,8 +3257,13 @@ span.evc-club:hover { color: var(--muted); }
 }
 
 /* ---------- verified badge + admin tabs ---------- */
-.vbadge { display: inline-flex; flex: none; margin-left: 7px; vertical-align: middle; color: var(--indigo); }
-.vbadge svg { width: clamp(16px, 0.72em, 24px); height: clamp(16px, 0.72em, 24px); }
+.vbadge { --vb-size: clamp(14px, 0.6em, 20px); display: inline-flex; flex: none; margin-left: 7px; vertical-align: middle; color: #16a34a; }
+.vbadge svg { width: var(--vb-size); height: var(--vb-size); }
+/* smaller badge where the name is small text: lists, cards, chat */
+.hf-by .vbadge, .rq-name .vbadge, .member strong .vbadge, .lead-info .vbadge, .ev-host-row .vbadge, .pj-by-txt .vbadge,
+.cfm-title .vbadge, .chip .vbadge, .evc-club .vbadge, .plain .vbadge, .convo-top .vbadge, .pick-who .vbadge, .pane-id .vbadge,
+.thread-empty .vbadge, .side-foot .vbadge { --vb-size: 13px; margin-left: 5px; }
+.sender .vbadge { --vb-size: 12px; margin-left: 4px; }
 
 .admin-tabs { display: flex; gap: 6px; width: fit-content; max-width: 100%; margin-bottom: 22px; padding: 5px; background: #eceefd; border-radius: 14px; overflow-x: auto; }
 .admin-tabs a { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: 14px; font-weight: 600; color: var(--muted); border-radius: 10px; text-decoration: none; }
@@ -3441,8 +3458,7 @@ body.cfm-lock { overflow: hidden; }
 .pm-head:hover { background: #f7f7fc; }
 .pm-name { display: flex; align-items: center; min-width: 0; font-family: var(--display); font-size: 16px; font-weight: 700; line-height: 1.3; letter-spacing: -0.01em; color: var(--ink); }
 .pm-name-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pm-name .vbadge { margin-left: 6px; }
-.pm-name .vbadge svg { width: 17px; height: 17px; }
+.pm-name .vbadge { --vb-size: 13px; margin-left: 7px; }
 .pm-item:hover { background: #f7f7fc; }
 .pm-foot { border-top: 1px solid #ebecf6; border-radius: 0 0 16px 16px; }
 
@@ -4036,3 +4052,141 @@ body.cfm-lock { overflow: hidden; }
     .pj-cover.has-banner::before { transition: none; }
     .pj-card:has(.pj-stretch:hover) .pj-cover.has-banner::before { transform: none; }
 }
+
+/* ---- project logo: the small square project icon ---- */
+/* small icon tiles (dashboard rail, profile cards, progress updates): the picture instead of the category icon */
+.pj-mini-ic.has-logo { background: var(--white); box-shadow: 0 0 0 1px var(--line); overflow: hidden; }
+.pj-mini-ic.has-logo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* ---- profile Clubs / Projects cards: fixed size, so long names can't break the alignment ---- */
+/* the logo tile always sits at the same spot on the cover edge, whatever the text does */
+.pf-club-body { align-items: flex-start; height: 82px; }
+.pf-club-txt { flex: 1 1 auto; }
+/* names show at most two lines, the role / category one line, each cut with an ellipsis */
+.pf-club-txt strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.pf-club-txt em { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- profile project cards: the project's banner as the cover, its logo in the small icon ---- */
+.pf-pj-media.has-banner {
+    background:
+        linear-gradient(180deg, rgba(12, 15, 58, 0.1) 0%, rgba(12, 15, 58, 0.34) 100%),
+        var(--pj-banner) center / cover no-repeat,
+        var(--midnight);
+}
+.pf-pj-media.has-banner::before, .pf-pj-media.has-banner .pf-pj-watermark { display: none; }
+.pf-pj-ic.pj-mini-ic.has-logo { box-shadow: 0 6px 14px -4px rgba(20, 22, 58, 0.35); }
+
+/* inside an event: same look as the project page (side cards tinted, About / Who's going borderless, grey pill hovers) */
+.evd-page .ev-side > .panel { padding: 20px 18px; border: 0; background: #f3f5f7; }
+.evd-page .ev-main > .panel { border: 0; }
+.evd-page .ev-main > .panel h2 { font-size: 16px; }
+.evd-page .ev-host small { margin-bottom: 14px; font-size: 11.5px; letter-spacing: 0.08em; }
+.evd-page .ev-cal { border-top-color: #e3e6ea; }
+.evd-page .ev-cal small { font-size: 11.5px; letter-spacing: 0.08em; }
+
+/* who's going rows = the "Led by" rows */
+.evd-page .member-list { gap: 4px 12px; margin: 0 -8px; }
+.evd-page .member-list .member { padding: 8px; gap: 11px; border: 0; border-radius: 14px; background: transparent; transition: background 0.15s; }
+.evd-page .member-list .member:hover { background: #e5e5e5; }
+.evd-page .member-list .member strong { font-family: var(--display); font-size: 15px; font-weight: 700; line-height: 1.25; }
+.evd-page .member-list .member .club-meta { margin-top: 2px; font-size: 12px; line-height: 1.4; }
+
+/* hosted-by row + calendar pills */
+.evd-page .ev-host-row { margin: 0 -8px; padding: 8px; border-radius: 14px; transition: background 0.15s; }
+.evd-page .ev-host-row:hover { background: #e5e5e5; }
+.evd-page .ev-host-row strong { font-size: 15px; font-weight: 700; line-height: 1.25; }
+.evd-page .ev-host-row em { font-size: 12px; line-height: 1.4; }
+.evd-page .ev-rsvp .link-pill { border: 0; background: var(--white); transition: background 0.15s; }
+.evd-page .ev-rsvp .link-pill:hover { background: #e5e5e5; }
+
+/* event banner: same as the project banner, no pills. Club, status and role are plain text and Date / Time / Where have no boxes or borders */
+.evd-page .ev-hero .ev-badges { gap: 8px 18px; }
+.evd-page .ev-hero .ev-badges .chip,
+.evd-page .ev-hero .ev-badges .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 0; border: 0; border-radius: 0; box-shadow: none;
+    background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none;
+    font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.92);
+}
+.evd-page .ev-hero .ev-badges a.chip:hover { background: transparent; text-decoration: underline; }
+.evd-page .ev-hero .ev-facts { display: flex; flex-wrap: wrap; gap: 14px 56px; }
+.evd-page .ev-hero .fact { padding: 0; border: 0; border-radius: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.evd-page .ev-hero .fact .fi { width: auto; height: auto; border-radius: 0; background: transparent; }
+
+/* event page: "You're going" and the reminder note are solid fills with white text */
+.evd-page .btn.going-big { color: #fff; background: #1f8a52; border: 0; box-shadow: none; }
+.evd-page .btn.going-big:hover { background: #187544; }
+.evd-page .ev-remind:not(.off) { color: #fff; background: var(--indigo-dark); box-shadow: none; }
+.evd-page .ev-remind:not(.off) svg { color: #fff; }
+.evd-page .ev-remind:not(.off) a { color: #fff; text-decoration: underline; }
+/* dashboard featured club: label has no pill, just the amber star + text (card keeps the calm rail look) */
+.feat-flag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; font-weight: 600; color: var(--ink);
+}
+.feat-flag svg { width: 14px; height: 14px; color: var(--amber); fill: var(--amber); }
+
+/* empty / not-found states: no box, just the content (clubs, events, projects, students, notifications...) */
+.panel.center:not(.locked-panel):not(.ev-locked) { border: 0; background: transparent; box-shadow: none; }
+
+/* "you are here": the current page's nav link keeps its hover look */
+.tb-link.is-active, .create-link.is-active { background: #e5e5e5; }
+
+/* ==========================================================
+   CLUB PAGE: Group chat / Post an event / Edit club / Leave sit under the banner,
+   over the side column, exactly like the project page's Team chat row
+   ========================================================== */
+.club-actions > a.btn-ghost,
+.club-actions form button.btn-ghost {
+    height: 32px; padding: 0 10px;
+    border: 0; border-radius: 8px;
+    font-size: 14px; font-weight: 400; line-height: 1; white-space: nowrap;
+    color: #191c1f; background: transparent; box-shadow: none;
+    transition: background 0.15s;
+}
+.club-actions form { display: inline-flex; margin: 0; }
+.club-actions > a.btn-ghost:hover,
+.club-actions form button.btn-ghost:hover { background: #e5e5e5; box-shadow: none; text-decoration: none; }
+.club-actions > a.btn-ghost:focus-visible,
+.club-actions form button.btn-ghost:focus-visible { outline: 2px solid #191c1f; outline-offset: 2px; }
+.club-layout.club-has-actions { grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto 1fr; }
+.club-layout.club-has-actions > .club-actions { grid-column: 2; grid-row: 1; margin: 14px 0 2px -10px; gap: 4px; }
+.club-layout.club-has-actions > .club-main { grid-column: 1; grid-row: 1 / span 2; }
+.club-layout.club-has-actions > .club-side { grid-column: 2; grid-row: 2; margin-top: 0; }
+@media (max-width: 900px) {
+    .club-layout.club-has-actions { grid-template-columns: 1fr; grid-template-rows: none; }
+    .club-layout.club-has-actions > .club-actions,
+    .club-layout.club-has-actions > .club-main,
+    .club-layout.club-has-actions > .club-side { grid-column: 1; grid-row: auto; }
+    .club-layout.club-has-actions > .club-actions { margin: 20px 0 0 -10px; flex-wrap: wrap; }
+    .club-layout.club-has-actions > .club-side { margin-top: 24px; }
+}
+
+
+/* club page: same layout as the project page. The banner is only the cover; the Group chat / Post an event / Edit club / Leave row sits
+   under it (over the Led by column) with the project page's gaps; logo, name and bio start in the left column and the logo overlaps the banner. */
+.club-layout.club-has-actions { margin-top: 20px; gap: 20px; }
+.club-layout.club-has-actions > .club-actions { margin: 14px 0 6px -10px; gap: 4px; }
+.club-layout.club-has-actions > .club-side { margin-top: 0; }
+.club-ident { padding-left: 44px; margin-bottom: 28px; }
+.club-ident .club-tile.big { margin-top: -64px; }
+.club-main > .club-ident + * { margin-top: 24px; }
+@media (max-width: 900px) {
+    .club-layout.club-has-actions > .club-actions { margin: 0 0 0 -10px; }
+    .club-ident { padding-left: 28px; }
+    .club-ident .club-tile.big { margin-top: 0; }
+}
+
+/* club header: category, Invite only, owner and officer labels are plain text (no pills); the icons keep their colors
+   (the identity block moved out of .profile-card, so these repeat the old .profile-card .p-user rules) */
+.club-ident .p-user { gap: 16px; }
+.club-ident .p-user .chip,
+.club-ident .p-user .badge {
+    padding: 0; border-radius: 0; background: none; box-shadow: none;
+    font-size: 14px; font-weight: 500; letter-spacing: 0;
+    color: var(--ink);
+}
+.club-ident .p-user .badge svg { width: 14px; height: 14px; }
+.club-ident .p-user .badge.invite svg  { color: var(--indigo); }
+.club-ident .p-user .badge.owner svg   { color: #b07d00; }
+.club-ident .p-user .badge.officer svg { color: var(--indigo); }

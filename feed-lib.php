@@ -23,7 +23,7 @@ function club_feed($conn, $userId, $limit, $offset = 0, $type = 'all') {
 
     $pr = db_run($conn,
         "SELECT p.id, p.club_id, p.body, UNIX_TIMESTAMP(p.created_at) AS ts" . $cols . ",
-                c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo" : "") . ", u.username, u.first_name, u.last_name, u.photo
+                c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo" : "") . ", u.username, u.first_name, u.last_name, u.photo" . vsel($conn) . "
          FROM club_posts p
          JOIN clubs c ON c.id = p.club_id AND c.status = 'approved'
          JOIN club_members m ON m.club_id = p.club_id AND m.user_id = ? AND m.status = 'active'
@@ -62,7 +62,7 @@ function render_feed_item($it) {
         $text    = preg_replace('/[ \t]+/u', ' ', $text);
         $text    = preg_replace('/\n{3,}/', "\n\n", $text);
         $text    = str_cut(trim($text), 1500);
-        $link    = 'club?id=' . $clubId . '#updates';
+        $link    = 'club?id=' . $clubId . '&post=' . (int)$it['id'] . '#post-' . (int)$it['id'];   // opens the club page on this exact post
         ?>
         <article class="hf" data-type="post">
             <a class="hf-open" href="<?php echo e($link); ?>" aria-label="Open this announcement in <?php echo e($it['club_name']); ?>"></a>
@@ -82,12 +82,12 @@ function render_feed_item($it) {
                 <?php if (user_gone($it)) { ?>
                 <span class="hf-by">
                     <span class="faces"><span class="face"><?php echo avatar_inner($it); ?></span></span>
-                    <span>By <?php echo e(full_name($it)); ?></span>
+                    <span>By <?php echo name_badge($it); ?></span>
                 </span>
                 <?php } else { ?>
                 <span class="hf-by">
                     <a class="hf-author" href="profile?u=<?php echo e(urlencode($it['username'])); ?>"><span class="faces"><span class="face"><?php echo avatar_inner($it); ?></span></span></a>
-                    <span>By <a class="hf-author" href="profile?u=<?php echo e(urlencode($it['username'])); ?>"><?php echo e(full_name($it)); ?></a></span>
+                    <span>By <a class="hf-author" href="profile?u=<?php echo e(urlencode($it['username'])); ?>"><?php echo e(full_name($it)); ?></a><?php echo verified_badge($it); ?></span>
                 </span>
                 <?php } ?>
             </div>
@@ -214,12 +214,12 @@ function feed_post_full($o) {
             <?php if (!$linked) { ?>
             <span class="hf-by">
                 <span class="faces"><span class="face"><?php echo avatar_inner($author); ?></span></span>
-                <span>By <?php echo e(full_name($author)); ?></span>
+                <span>By <?php echo name_badge($author); ?></span>
             </span>
             <?php } else { ?>
             <span class="hf-by">
                 <a class="hf-author" href="<?php echo e($href); ?>"><span class="faces"><span class="face"><?php echo avatar_inner($author); ?></span></span></a>
-                <span>By <a class="hf-author" href="<?php echo e($href); ?>"><?php echo e(full_name($author)); ?></a></span>
+                <span>By <a class="hf-author" href="<?php echo e($href); ?>"><?php echo e(full_name($author)); ?></a><?php echo verified_badge($author); ?></span>
             </span>
             <?php } ?>
             <?php echo $actions; ?>
@@ -259,7 +259,7 @@ function rail_week($conn, $userId) {
 function rail_requests($conn, $userId) {
     $r = db_run($conn,
         "SELECT m.id AS mid, m.club_id, c.name AS club_name,
-                u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo
+                u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo" . vsel($conn) . "
          FROM club_members m
          JOIN clubs c ON c.id = m.club_id AND c.status = 'approved'
          JOIN club_members o ON o.club_id = m.club_id AND o.user_id = ? AND o.role = 'owner' AND o.status = 'active'

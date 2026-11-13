@@ -17,6 +17,8 @@ foreach (event_postable_clubs($conn, $me['id']) as $c) {
 $bannerReady = projects_banner_ready($conn);
 $bannerCur   = '';
 $bannerTone  = 0;
+$logoReady   = projects_logo_ready($conn);   // the small square project icon
+$logoCur     = '';
 
 $message = "";
 // a file larger than the server's post limit arrives as an empty form
@@ -56,32 +58,34 @@ if (isset($_POST['post'])) {
             if ($rl['ok'] && $rl['rows'] && (int)$rl['rows'][0]['n'] >= 5) {
                 $error = "You've posted a lot of projects in the last hour. Please wait a bit.";
             } else {
-                // the banner: saved only once everything else checks out, so a rejected form leaves no stray file
+                // the banner and logo: saved only once everything else checks out, so a rejected form leaves no stray file
                 $bannerName = null;
+                $logoName   = null;
                 if ($bannerReady) {
                     $bannerName = project_banner_upload('banner', $error);
                 } elseif (!empty($_FILES['banner']['name'])) {
                     $error = "Project banners need a one-time upgrade. Run projects-banner.sql in phpMyAdmin.";
                 }
+                if ($error === "") {
+                    if ($logoReady) {
+                        $logoName = project_logo_upload('logo', $error);
+                    } elseif (!empty($_FILES['logo']['name'])) {
+                        $error = "Project logos need a one-time upgrade. Run projects-logo.sql in phpMyAdmin.";
+                    }
+                }
+                if ($error !== "") { project_banner_delete($bannerName); project_logo_delete($logoName); }
 
                 $r = array('ok' => false, 'errno' => 0);
                 if ($error === "") {
-                    if ($bannerReady) {
-                        $r = db_run($conn,
-                            "INSERT INTO projects (owner_id, club_id, title, tagline, description, category, skills, link, is_open, banner)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            "iissssssis",
-                            array($me['id'], $clubId > 0 ? $clubId : null, $clean['title'], $clean['tagline'], $clean['description'],
-                                  $clean['category'], $clean['skills'], $clean['link'], $clean['is_open'], $bannerName));
-                    } else {
-                        $r = db_run($conn,
-                            "INSERT INTO projects (owner_id, club_id, title, tagline, description, category, skills, link, is_open)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            "iissssssi",
-                            array($me['id'], $clubId > 0 ? $clubId : null, $clean['title'], $clean['tagline'], $clean['description'],
-                                  $clean['category'], $clean['skills'], $clean['link'], $clean['is_open']));
-                    }
-                    if (!$r['ok']) project_banner_delete($bannerName);   // nothing was posted, so don't keep the image
+                    $cols   = "owner_id, club_id, title, tagline, description, category, skills, link, is_open";
+                    $marks  = "?, ?, ?, ?, ?, ?, ?, ?, ?";
+                    $types  = "iissssssi";
+                    $vals   = array($me['id'], $clubId > 0 ? $clubId : null, $clean['title'], $clean['tagline'], $clean['description'],
+                                    $clean['category'], $clean['skills'], $clean['link'], $clean['is_open']);
+                    if ($bannerReady) { $cols .= ", banner"; $marks .= ", ?"; $types .= "s"; $vals[] = $bannerName; }
+                    if ($logoReady)   { $cols .= ", logo";   $marks .= ", ?"; $types .= "s"; $vals[] = $logoName; }
+                    $r = db_run($conn, "INSERT INTO projects ($cols) VALUES ($marks)", $types, $vals);
+                    if (!$r['ok']) { project_banner_delete($bannerName); project_logo_delete($logoName); }   // nothing was posted, so don't keep the images
                 }
 
                 if ($r['ok']) {
@@ -121,6 +125,9 @@ if (isset($_POST['post'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Post a project | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">

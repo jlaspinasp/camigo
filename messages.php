@@ -40,7 +40,8 @@ function safe_photo($row) {
 function person_out($u) {
     $gone = user_gone($u);   // their account was deleted: the chat stays, shown as "Deleted user"
     return array('id' => (int)$u['id'], 'username' => $gone ? '' : $u['username'], 'name' => full_name($u),
-                 'photo' => safe_photo($u), 'initial' => $gone ? '?' : first_letter($u['first_name']), 'deleted' => $gone);
+                 'photo' => safe_photo($u), 'initial' => $gone ? '?' : first_letter($u['first_name']), 'deleted' => $gone,
+                 'v' => (!$gone && user_is_verified($u)) ? 1 : 0);
 }
 
 // a private profile can't be messaged first, but an existing conversation can continue
@@ -69,14 +70,16 @@ function out_msg($r, $k) {
         $o['name'] = full_name($r); $o['username'] = $r['username'] ?? '';
         $o['photo'] = safe_photo($r); $o['initial'] = first_letter($r['first_name'] ?? '?');
         $o['deleted'] = user_gone($r);
+        $o['v'] = (!$o['deleted'] && user_is_verified($r)) ? 1 : 0;
     }
     return $o;
 }
 
 $DM_COLS  = "m.id, m.sender_id, m.body, m.is_read, m.deleted_at, m.file_path, m.file_name, m.file_mime, m.file_size, UNIX_TIMESTAMP(m.created_at) AS ts";
-$GRP_COLS = "m.id, m.sender_id, m.kind, m.body, m.deleted_at, m.file_path, m.file_name, m.file_mime, m.file_size, UNIX_TIMESTAMP(m.created_at) AS ts, u.first_name, u.last_name, u.username, u.photo";
+$GRP_COLS = "m.id, m.sender_id, m.kind, m.body, m.deleted_at, m.file_path, m.file_name, m.file_mime, m.file_size, UNIX_TIMESTAMP(m.created_at) AS ts, u.first_name, u.last_name, u.username, u.photo" . vsel($conn);
 $logoOk   = function_exists('club_identity_ready') && club_identity_ready($conn);
 $LOGO_SEL = $logoOk ? "cb.logo" : "NULL";
+$PLOGO_SEL = chat_project_logo_ready($conn) ? "pj.logo" : "NULL";   // project team chats show the project's logo
 
 // a group I'm in (club_id > 0 means the club manages who is in it)
 function load_group($conn, $gid, $meId) {
@@ -87,12 +90,16 @@ function load_group($conn, $gid, $meId) {
     return $r['rows'] ? $r['rows'][0] : null;
 }
 function group_logo($conn, $g, $logoOk) {
-    $club = '';
+    $club = ''; $proj = '';
     if (!empty($g['club_id']) && $logoOk) {
         $r = db_run($conn, "SELECT logo FROM clubs WHERE id = ? LIMIT 1", "i", array((int)$g['club_id']));
         if ($r['rows']) $club = $r['rows'][0]['logo'];
     }
-    return chat_group_logo_url($club, $g['photo'] ?? '');
+    if (!empty($g['project_id']) && chat_project_logo_ready($conn)) {
+        $r = db_run($conn, "SELECT logo FROM projects WHERE id = ? LIMIT 1", "i", array((int)$g['project_id']));
+        if ($r['rows']) $proj = $r['rows'][0]['logo'];
+    }
+    return chat_group_logo_url($club, $g['photo'] ?? '', $proj);
 }
 
 // ================= JSON ACTIONS =================
@@ -181,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['act'])) {
         $fpub = $file ? chat_file_public($fp, $fn, $fm, $fs) : null;
         if ($fpub) $fpub['url'] = 'messages?file=' . $mid . '&k=' . $k;
         $evt = array('k' => $k, 'id' => $mid, 'from' => $meId, 'body' => $body, 'ts' => $ts, 'file' => $fpub,
-                     'name' => full_name($me), 'username' => $me['username'], 'photo' => safe_photo($me), 'initial' => first_letter($me['first_name']));
+                     'name' => full_name($me), 'username' => $me['username'], 'photo' => safe_photo($me), 'initial' => first_letter($me['first_name']), 'v' => user_is_verified($me) ? 1 : 0);
 
         if ($k === 'u') {
             chat_push(array($partner['id']), 'new-message', $evt);
@@ -253,14 +260,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['act'])) {
         if ($k === 'g' && $tid) $skip = array_merge($skip, chat_group_member_ids($conn, $tid));
         if ($q !== '') {
             $like = '%' . str_replace(array('%', '_'), array('\\%', '\\_'), $q) . '%';
-            $r = db_run($conn, "SELECT id, username, first_name, last_name, photo FROM users
+            $r = db_run($conn, "SELECT id, username, first_name, last_name, photo" . vsel($conn, 'users') . " FROM users
                 WHERE CONCAT(first_name, ' ', last_name) LIKE ? OR username LIKE ? ORDER BY first_name LIMIT 30", "ss", array($like, $like));
         } else {
-            $r = db_run($conn, "SELECT u.id, u.username, u.first_name, u.last_name, u.photo FROM users u
+            $r = db_run($conn, "SELECT u.id, u.username, u.first_name, u.last_name, u.photo" . vsel($conn) . " FROM users u
                 JOIN (SELECT IF(sender_id = ?, recipient_id, sender_id) AS pid, MAX(id) AS mx FROM messages
                       WHERE sender_id = ? OR recipient_id = ? GROUP BY pid ORDER BY mx DESC LIMIT 20) t ON t.pid = u.id
                 ORDER BY t.mx DESC", "iii", array($meId, $meId, $meId));
-            if (!$r['rows']) $r = db_run($conn, "SELECT id, username, first_name, last_name, photo FROM users ORDER BY first_name LIMIT 20");
+            if (!$r['rows']) $r = db_run($conn, "SELECT id, username, first_name, last_name, photo" . vsel($conn, 'users') . " FROM users ORDER BY first_name LIMIT 20");
         }
         $out = array();
         foreach ($r['rows'] as $u) {
@@ -326,10 +333,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['act'])) {
         $others  = function () use ($conn, $tid, $meId) { return array_values(array_diff(chat_group_member_ids($conn, $tid), array($meId))); };
 
         if ($act === 'group_info') {
-            $r = db_run($conn, "SELECT u.id, u.username, u.first_name, u.last_name, u.photo, gm.role FROM chat_group_members gm
+            $r = db_run($conn, "SELECT u.id, u.username, u.first_name, u.last_name, u.photo, gm.role AS grole" . vsel($conn) . " FROM chat_group_members gm
                 JOIN users u ON u.id = gm.user_id WHERE gm.group_id = ? ORDER BY (gm.role = 'admin') DESC, gm.joined_at ASC", "i", array($tid));
             $mem = array();
-            foreach ($r['rows'] as $u) { $p = person_out($u); $p['role'] = $u['role']; $mem[] = $p; }
+            foreach ($r['rows'] as $u) { $p = person_out($u); $p['role'] = $u['grole']; $mem[] = $p; }
             json_out(array('ok' => true, 'name' => $g['name'], 'admin' => $isAdmin, 'club' => (int)$g['club_id'], 'project' => (int)$g['project_id'], 'members' => $mem));
         }
 
@@ -442,7 +449,7 @@ if (!$setupMissing) {
     // ---- direct chats: the latest message with each person ----
     $dm = db_run($conn,
         "SELECT IF(m.sender_id = ?, m.recipient_id, m.sender_id) AS pid,
-                u.username, u.first_name, u.last_name, u.photo,
+                u.username, u.first_name, u.last_name, u.photo" . vsel($conn) . ",
                 m.id AS mid, m.body, m.sender_id, m.deleted_at, m.file_path, m.file_mime, UNIX_TIMESTAMP(m.created_at) AS ts,
                 COALESCE(p.muted, 0) AS muted,
                 (SELECT COUNT(*) FROM messages x WHERE x.sender_id = IF(m.sender_id = ?, m.recipient_id, m.sender_id) AND x.recipient_id = ? AND x.is_read = 0 AND x.deleted_at IS NULL AND x.id > COALESCE(p.cleared_id, 0)) AS unread
@@ -471,7 +478,7 @@ if (!$setupMissing) {
 
     // ---- group chats ----
     $gr = db_run($conn,
-        "SELECT g.id, g.name, g.club_id, g.project_id, g.photo AS gphoto, $LOGO_SEL AS logo, COALESCE(p.muted, 0) AS muted,
+        "SELECT g.id, g.name, g.club_id, g.project_id, g.photo AS gphoto, $LOGO_SEL AS logo, $PLOGO_SEL AS plogo, COALESCE(p.muted, 0) AS muted,
                 lm.id AS mid, lm.sender_id, lm.kind, lm.body, lm.deleted_at, lm.file_path, lm.file_mime,
                 UNIX_TIMESTAMP(COALESCE(lm.created_at, g.created_at)) AS ts, su.first_name AS s_first,
                 (SELECT COUNT(*) FROM chat_group_members c2 WHERE c2.group_id = g.id) AS members,
@@ -479,6 +486,7 @@ if (!$setupMissing) {
          FROM chat_group_members gm
          JOIN chat_groups g ON g.id = gm.group_id
          LEFT JOIN clubs cb ON cb.id = g.club_id
+         LEFT JOIN projects pj ON pj.id = g.project_id
          LEFT JOIN chat_prefs p ON p.user_id = gm.user_id AND p.kind = 'g' AND p.target_id = g.id
          LEFT JOIN group_messages lm ON lm.id = (SELECT MAX(id) FROM group_messages WHERE group_id = g.id)
          LEFT JOIN users su ON su.id = lm.sender_id
@@ -487,7 +495,7 @@ if (!$setupMissing) {
         "ii", array($meId, $meId));
     foreach ($gr['rows'] as $c) {
         $boot['convos'][] = array('k' => 'g', 'id' => (int)$c['id'], 'name' => $c['name'], 'hue' => chat_group_hue($c['id']),
-            'logo' => chat_group_logo_url($c['logo'], $c['gphoto']), 'club' => (int)$c['club_id'], 'project' => (int)$c['project_id'],
+            'logo' => chat_group_logo_url($c['logo'], $c['gphoto'], $c['plogo']), 'club' => (int)$c['club_id'], 'project' => (int)$c['project_id'],
             'members' => (int)$c['members'], 'ts' => (int)$c['ts'], 'mid' => (int)$c['mid'], 'unread' => (int)$c['unread'], 'muted' => (bool)$c['muted'],
             'last' => array('mine' => ((int)$c['sender_id'] === $meId), 'kind' => $c['kind'] ?? 'msg', 'gone' => !empty($c['deleted_at']),
                             'body' => (string)($c['body'] ?? ''), 'file' => !empty($c['file_path']) ? (chat_is_image($c['file_mime']) ? 'image' : 'file') : false,
@@ -570,6 +578,9 @@ $hasThread = ($wantU !== '' || $wantI > 0 || $wantG > 0);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?php echo e($title); ?>Messages | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">

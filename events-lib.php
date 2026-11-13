@@ -235,6 +235,11 @@ function event_host_name($ev) {
     return $n !== '' ? $n : DELETED_USER;   // the host deleted their account; the event stays
 }
 
+// The badge for the person who posted a club-less event (empty when the account is gone or not verified)
+function event_host_badge($ev) {
+    return !empty($ev['host_username']) ? verified_badge(badge_row($ev, 'host_')) : '';
+}
+
 // Opening and closing tag for a host: a profile link, or a plain span when the host's account is gone.
 function event_host_tags($ev, $class) {
     if (!empty($ev['host_username'])) {
@@ -248,7 +253,7 @@ function event_host_tags($ev, $class) {
 // Every row has: going (count), me_going (0/1), faces (a few people who are going and have public profiles).
 function events_query($conn, $meId, $where, $types, $params, $order, $limit) {
     $sql = "SELECT e.id, e.club_id, e.title, e.description, e.location, e.start_at, e.end_at, e.capacity, e.status, e.visibility, UNIX_TIMESTAMP(e.created_at) AS created_ts," . (events_banner_ready($conn) ? " e.banner," : "") . "
-                   e.created_by, hu.username AS host_username, hu.first_name AS host_first, hu.last_name AS host_last, hu.photo AS host_photo,
+                   e.created_by, hu.username AS host_username, hu.first_name AS host_first, hu.last_name AS host_last, hu.photo AS host_photo" . vsel($conn, 'hu', 'host_') . ",
                    c.name AS club_name" . (club_identity_ready($conn) ? ", c.logo AS club_logo, c.cover AS club_cover" : "") . ",
                    (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id) AS going,
                    (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id AND r.user_id = ?) AS me_going,
@@ -453,7 +458,7 @@ function render_event_card($ev, $back) {
             <?php if (!empty($ev['club_id'])) { ?>
                 <a class="evc-club" href="club?id=<?php echo (int)$ev['club_id']; ?>"><?php echo club_tile_html(array('id' => $ev['club_id'], 'name' => $ev['club_name'], 'logo' => $ev['club_logo'] ?? null), 'xs', 'span'); ?><span><?php echo e($ev['club_name']); ?></span></a>
             <?php } else { ?>
-                <?php $ht = event_host_tags($ev, 'evc-club'); echo $ht[0]; ?><span class="p-avatar tiny"><?php echo avatar_inner(array('username' => $ev['host_username'] ?? null, 'photo' => $ev['host_photo'] ?? null, 'first_name' => $ev['host_first'] ?? '?')); ?></span><span>Hosted by <?php echo e(event_host_name($ev)); ?></span><?php echo $ht[1]; ?>
+                <?php $ht = event_host_tags($ev, 'evc-club'); echo $ht[0]; ?><span class="p-avatar tiny"><?php echo avatar_inner(array('username' => $ev['host_username'] ?? null, 'photo' => $ev['host_photo'] ?? null, 'first_name' => $ev['host_first'] ?? '?')); ?></span><span>Hosted by <?php echo e(event_host_name($ev)); ?><?php echo event_host_badge($ev); ?></span><?php echo $ht[1]; ?>
             <?php } ?>
 
             <h3 class="evc-title"><a href="event?id=<?php echo $id; ?>"><?php echo e($ev['title']); ?></a></h3>

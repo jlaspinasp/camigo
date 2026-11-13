@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'The project "' . $p['title'] . '" was removed by an admin.' . ($note !== '' ? ' Reason: ' . $note : ''), 'projects');
 
             $banner = project_banner_of($conn, $id);   // read before the row is gone
+            $logo   = project_logo_of($conn, $id);
 
             // children first, then the project itself
             db_run($conn, "DELETE FROM project_updates WHERE project_id = ?", "i", array($id));
@@ -36,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db_run($conn, "DELETE FROM notifications WHERE link = ?", "s", array('project?id=' . $id));  // old links would lead nowhere
             $r = db_run($conn, "DELETE FROM projects WHERE id = ?", "i", array($id));
             if ($r['ok'] && $r['affected'] > 0 && $banner) project_banner_delete($banner);
+            if ($r['ok'] && $r['affected'] > 0 && $logo)   project_logo_delete($logo);
 
             flash_set(($r['ok'] && $r['affected'] > 0) ? "Project deleted." : "Couldn't delete that project. Please try again.", ($r['ok'] && $r['affected'] > 0) ? "success" : "error");
         }
@@ -76,6 +78,9 @@ $adminActive = 'projects';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>All projects | Camigo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">

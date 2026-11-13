@@ -27,6 +27,17 @@
     }
 
     var listEl = document.getElementById("chat-items");
+
+    /* The chat list is its own scroll box. Opening a chat reloads the page, so remember how far it was
+       scrolled and put it back; renderList() also keeps it where it is when the list is redrawn. */
+    var LIST_KEY = "camigo_list_scroll";
+    var pendingTop = null;
+    try { var st = parseInt(sessionStorage.getItem(LIST_KEY), 10); if (!isNaN(st) && st > 0) pendingTop = st; sessionStorage.removeItem(LIST_KEY); } catch (x) {}
+    listEl.addEventListener("click", function (e) {
+        if (e.target.closest && e.target.closest("a.convo")) {
+            try { sessionStorage.setItem(LIST_KEY, String(Math.round(listEl.scrollTop))); } catch (x) {}
+        }
+    }, true);
     var paneEl = document.getElementById("chat-pane");
     var chatEl = document.getElementById("chat");
     var modalEl = document.getElementById("modal");
@@ -94,6 +105,12 @@
     function ico(name, cls) {
         return h("span", { class: "ico" + (cls ? " " + cls : ""), html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + "</svg>" });
     }
+    // the green "Verified" badge that follows a verified student's name (same artwork as verified_badge() in verification-lib.php)
+    function vbadge() {
+        return h("span", { class: "vbadge", title: "Verified student", role: "img", "aria-label": "Verified student",
+            html: '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="12.00,0.40 14.48,2.73 17.80,1.95 18.79,5.21 22.05,6.20 21.27,9.52 23.60,12.00 21.27,14.48 22.05,17.80 18.79,18.79 17.80,22.05 14.48,21.27 12.00,23.60 9.52,21.27 6.20,22.05 5.21,18.79 1.95,17.80 2.73,14.48 0.40,12.00 2.73,9.52 1.95,6.20 5.21,5.21 6.20,1.95 9.52,2.73" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/><path d="M7.4 12.4l3.1 3.1 6.1-6.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>' });
+    }
+    function nameWith(text, verified) { return [document.createTextNode(text), verified ? vbadge() : null]; }
     function iconBtn(name, label, fn, cls) {
         return h("button", { type: "button", class: "icon-btn" + (cls ? " " + cls : ""), title: label, "aria-label": label, onclick: fn }, [ico(name)]);
     }
@@ -241,6 +258,8 @@
     }
 
     function renderList() {
+        var keepTop = pendingTop !== null ? pendingTop : listEl.scrollTop;
+        pendingTop = null;
         var q = S.q.toLowerCase();
         var rows = S.convos.slice().sort(function (a, b) { return b.ts - a.ts; }).filter(function (c) {
             if (S.filter === "unread" && !(c.unread > 0)) return false;
@@ -264,7 +283,7 @@
             var a = h("a", { href: chatUrl(c.k, c.id, c.username), class: "convo" + (active ? " active" : "") + (c.unread > 0 ? " unread" : "") + (c.muted ? " muted" : ""), "data-k": c.k, "data-id": c.id });
             a.appendChild(avatar(c));
             var top = h("div", { class: "convo-top" }, [
-                h("strong", { text: c.name }),
+                h("strong", null, nameWith(c.name, c.k === "u" && c.v)),
                 c.k === "g" && (c.club || c.project) ? h("span", { class: "tag-club", text: c.club ? "Club" : "Project" }) : null,
                 c.muted ? ico("bellOff", "mute-ico") : null,
                 h("span", { class: "convo-time", text: listTime(c.ts) })
@@ -273,6 +292,7 @@
             if (c.unread > 0) a.appendChild(h("span", { class: "convo-badge", text: c.unread > 9 ? "9+" : c.unread }));
             listEl.appendChild(a);
         });
+        listEl.scrollTop = keepTop;
     }
 
     function findConvo(k, id) {
@@ -284,7 +304,7 @@
         if (!c) {
             c = k === "g"
                 ? { k: "g", id: id, name: info.name, hue: (id * 47) % 360, logo: info.logo || "", club: info.club || 0, project: info.project || 0, members: info.members || 0, unread: 0, muted: false, ts: 0, last: null }
-                : { k: "u", id: id, name: info.name, username: info.username, photo: info.photo, initial: info.initial, unread: 0, muted: false, blocked: false, ts: 0, last: null };
+                : { k: "u", id: id, name: info.name, username: info.username, photo: info.photo, initial: info.initial, v: info.v, unread: 0, muted: false, blocked: false, ts: 0, last: null };
             S.convos.push(c);
         }
         return c;
@@ -407,7 +427,7 @@
         }
 
         var stack = h("div", { class: "stack" });
-        if (isGroup && !mine && firstOf) stack.appendChild(h(m.deleted ? "span" : "a", { class: "sender" + (m.deleted ? " is-gone" : ""), href: m.deleted ? null : profileUrl(m.username), text: m.name }));
+        if (isGroup && !mine && firstOf) stack.appendChild(h(m.deleted ? "span" : "a", { class: "sender" + (m.deleted ? " is-gone" : ""), href: m.deleted ? null : profileUrl(m.username) }, nameWith(m.name, m.v)));
 
         var line = h("div", { class: "line" });
         var bubble;
@@ -465,7 +485,7 @@
         if (!msgs.length) {
             t.appendChild(h("div", { class: "thread-empty" }, [
                 personOrGroupAvatar(S.open, "lg"),
-                h("strong", { text: S.open.name }),
+                h("strong", null, nameWith(S.open.name, !isGroup && S.open.v)),
                 h("p", { text: isGroup ? "This is the start of the group. Say hello!" : "This is the start of your conversation with " + first(S.open.name) + ". Say hello." })
             ]));
         }
@@ -542,7 +562,7 @@
     function buildHead(o, isGroup) {
         var sub = isGroup ? (o.members + " member" + (o.members === 1 ? "" : "s") + (o.club ? " \u00b7 Club chat" : o.project ? " \u00b7 Team chat" : "")) : o.deleted ? "Account deleted" : "@" + o.username;
         var who = h("div", { class: "pane-who" }, [
-            h("strong", null, [document.createTextNode(o.name), o.deleted ? null : ico("chev", "pane-chev"), o.muted ? ico("bellOff", "mute-ico") : null]),
+            h("strong", null, [document.createTextNode(o.name), (!isGroup && o.v) ? vbadge() : null, o.deleted ? null : ico("chev", "pane-chev"), o.muted ? ico("bellOff", "mute-ico") : null]),
             h("small", { text: sub })
         ]);
         // clicking the name or photo opens the profile (people) or the group details (groups)
@@ -930,7 +950,7 @@
                 var on = !!sel[p.id];
                 results.appendChild(h("button", { type: "button", class: "pick-row" + (on ? " on" : ""), role: "option", "aria-selected": on ? "true" : "false", onclick: function () { toggle(p); } }, [
                     personAvatar(p, "sm"),
-                    h("span", { class: "pick-who" }, [h("strong", { text: p.name }), h("small", { text: "@" + p.username })]),
+                    h("span", { class: "pick-who" }, [h("strong", null, nameWith(p.name, p.v)), h("small", { text: "@" + p.username })]),
                     h("span", { class: "check" + (on ? " on" : "") }, [on ? ico("check", "tick") : null])
                 ]));
             });
@@ -1005,7 +1025,7 @@
                     });
                 });
                 var kids = [nm, save];
-                if (o.logo && !j.club) kids.push(h("button", { type: "button", class: "link-btn", text: "Remove photo", onclick: function () {
+                if (o.logo && !j.club && !j.project) kids.push(h("button", { type: "button", class: "link-btn", text: "Remove photo", onclick: function () {
                     api("group_photo_remove", { id: o.id }).then(function (r) {
                         if (!r.ok) { toast(r.error || "Couldn't remove the photo."); return; }
                         setGroupLogo(o.id, "", r.sys); toast("Photo removed"); groupInfoModal();
@@ -1027,7 +1047,7 @@
             var list = h("div", { class: "gi-list" });
             j.members.forEach(function (p) {
                 var row = h("div", { class: "gi-row" }, [
-                    h("a", { href: profileUrl(p.username), class: "gi-link" }, [personAvatar(p, "sm"), h("span", { class: "pick-who" }, [h("strong", { text: p.name + (p.id === B.me ? " (You)" : "") }), h("small", { text: "@" + p.username })])]),
+                    h("a", { href: profileUrl(p.username), class: "gi-link" }, [personAvatar(p, "sm"), h("span", { class: "pick-who" }, [h("strong", null, nameWith(p.name + (p.id === B.me ? " (You)" : ""), p.v)), h("small", { text: "@" + p.username })])]),
                     p.role === "admin" ? h("span", { class: "tag-admin", text: j.club ? "Staff" : j.project ? "Owner" : "Admin" }) : null
                 ]);
                 if (j.admin && p.id !== B.me) {
@@ -1103,8 +1123,8 @@
 
         RT.userChannel.bind("new-message", function (d) {
             var k = d.k === "g" ? "g" : "u", id = k === "g" ? d.gid : d.from;
-            var m = { id: d.id, from: d.from, ts: d.ts, kind: "msg", gone: false, body: d.body, file: d.file || null, name: d.name, username: d.username, photo: d.photo, initial: d.initial };
-            var info = k === "g" ? { name: d.gname } : { name: d.name, username: d.username, photo: d.photo, initial: d.initial };
+            var m = { id: d.id, from: d.from, ts: d.ts, kind: "msg", gone: false, body: d.body, file: d.file || null, name: d.name, username: d.username, photo: d.photo, initial: d.initial, v: d.v };
+            var info = k === "g" ? { name: d.gname } : { name: d.name, username: d.username, photo: d.photo, initial: d.initial, v: d.v };
             var c = ensureConvo(k, id, info);
             setLast(c, m, false);
             c.last.sender = first(d.name);

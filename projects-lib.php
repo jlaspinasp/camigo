@@ -99,6 +99,54 @@ function project_banner_url($p) {
     return (!empty($p['banner']) && club_image_ok($p['banner'])) ? 'uploads/projects/' . $p['banner'] : '';
 }
 
+// ---------- logos: the small square project icon (dashboard rail, cards, profile, project page) ----------
+
+// Has projects-logo.sql been run? (projects.logo holds the file name of an uploaded project logo)
+function projects_logo_ready($conn) {
+    static $ok = null;
+    if ($ok === null) {
+        $a = @mysqli_query($conn, "SHOW COLUMNS FROM projects LIKE 'logo'");
+        $ok = ($a && mysqli_num_rows($a) > 0);
+    }
+    return $ok;
+}
+
+// Reads the uploaded logo field. Returns the saved file name, or null (sets $error only if something went wrong;
+// no file chosen is not an error). Same square JPG re-draw as club logos (up to 1200px).
+function project_logo_upload($field, &$error) {
+    $up = $_FILES[$field] ?? null;
+    if (!$up || ($up['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+    if ($up['error'] !== UPLOAD_ERR_OK) { $error = "That logo couldn't be uploaded. Please try a smaller file."; return null; }
+    if ($up['size'] > 10 * 1024 * 1024) { $error = "Images can be up to 10 MB."; return null; }
+    return save_club_image($up['tmp_name'], 'logo', $error, project_banner_dir());
+}
+
+function project_logo_delete($name) {
+    delete_club_image($name, project_banner_dir());
+}
+
+// The file name of a project's logo (read it before the project row is deleted), or null.
+function project_logo_of($conn, $projectId) {
+    if (!projects_logo_ready($conn)) return null;
+    $r = db_run($conn, "SELECT logo FROM projects WHERE id = ? LIMIT 1", "i", array((int)$projectId));
+    return ($r['rows'] && !empty($r['rows'][0]['logo'])) ? $r['rows'][0]['logo'] : null;
+}
+
+// Web path of the uploaded logo, or '' (then the category icon is used).
+function project_logo_url($p) {
+    return (!empty($p['logo']) && club_image_ok($p['logo'])) ? 'uploads/projects/' . $p['logo'] : '';
+}
+
+// For the small project icon tiles (.pj-mini-ic): the extra class and what goes inside.
+// With a logo the tile shows the picture, without one it keeps the coloured category icon as before.
+function project_tile_class($p) {
+    return project_logo_url($p) !== '' ? ' has-logo' : '';
+}
+function project_tile_inner($p) {
+    $u = project_logo_url($p);
+    return $u !== '' ? '<img src="' . e($u) . '" alt="" loading="lazy" decoding="async">' : project_category_icon($p['category']);
+}
+
 function pj_lower($s) {
     return function_exists('mb_strtolower') ? mb_strtolower((string)$s, 'UTF-8') : strtolower((string)$s);
 }
@@ -138,9 +186,9 @@ function project_status($p, $roles) {
 function project_get($conn, $projectId) {
     $r = db_run($conn,
         "SELECT p.id, p.owner_id, p.club_id, p.title, p.tagline, p.description, p.category, p.skills, p.link, p.is_open,
-                " . (projects_banner_ready($conn) ? "p.banner," : "") . "
+                " . (projects_banner_ready($conn) ? "p.banner," : "") . (projects_logo_ready($conn) ? "p.logo," : "") . "
                 UNIX_TIMESTAMP(p.created_at) AS created_ts, UNIX_TIMESTAMP(p.updated_at) AS updated_ts,
-                u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility,
+                u.username, u.first_name, u.last_name, u.course, u.year_level, u.photo, u.profile_visibility" . vsel($conn) . ",
                 c.name AS club_name
          FROM projects p
          JOIN users u ON u.id = p.owner_id
@@ -155,9 +203,9 @@ function project_get($conn, $projectId) {
 // Every row gets: roles (with filled), faces (a few team members), team_n, my_role, my_status.
 function project_query($conn, $meId, $where, $types, $params, $order, $limit) {
     $sql = "SELECT p.id, p.owner_id, p.club_id, p.title, p.tagline, p.category, p.skills, p.is_open,
-                   " . (projects_banner_ready($conn) ? "p.banner," : "") . "
+                   " . (projects_banner_ready($conn) ? "p.banner," : "") . (projects_logo_ready($conn) ? "p.logo," : "") . "
                    UNIX_TIMESTAMP(p.created_at) AS created_ts,
-                   u.username, u.first_name, u.last_name, u.photo, u.profile_visibility,
+                   u.username, u.first_name, u.last_name, u.photo, u.profile_visibility" . vsel($conn) . ",
                    c.name AS club_name,
                    (SELECT COUNT(*) FROM project_members t WHERE t.project_id = p.id AND t.status = 'active') AS team_n,
                    mine.role AS my_role, mine.status AS my_status
@@ -384,7 +432,7 @@ function render_project_card($p, $interests = array()) {
                         </span>
                     <?php } ?>
                     <span class="pj-by-txt">
-                        <strong><?php echo e(full_name($p)); ?></strong>
+                        <strong><?php echo name_badge($p); ?></strong>
                         <em><?php echo $team; ?> on the team</em>
                     </span>
                 </div>

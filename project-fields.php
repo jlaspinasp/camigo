@@ -15,27 +15,51 @@ $rows = array_slice($rows, 0, PROJECT_MAX_ROLES);
 $bannerReady = !empty($bannerReady);
 $bannerCur   = (!empty($bannerCur) && club_image_ok($bannerCur)) ? $bannerCur : '';
 $bannerTone  = (int)($bannerTone ?? 0) % 3;
+// Logo picker (optional): $logoReady (projects-logo.sql has been run), $logoCur (uploaded logo file name, or '').
+$logoReady   = !empty($logoReady);
+$logoCur     = (!empty($logoCur) && club_image_ok($logoCur)) ? $logoCur : '';
+$logoLetter  = trim((string)($f['title'] ?? '')) !== '' ? first_letter($f['title']) : 'P';
 ?>
 <section class="pj-form-block">
     <div class="pj-block-head"><span class="pj-step">1</span><div><h2>The idea</h2><p>What are you building, and why would someone want to join?</p></div></div>
 
-    <?php if ($bannerReady) { ?>
+    <?php if ($bannerReady || $logoReady) { ?>
     <div class="field ev-banner-field">
-        <label>Banner <span class="opt">(optional)</span></label>
-        <p class="club-meta" style="margin:0 0 10px">Click the image to upload it, then drag and zoom to frame it. Use the &times; to remove it.</p>
-        <div class="ev-banner-up">
+        <label><?php echo ($bannerReady && $logoReady) ? 'Banner and logo' : ($logoReady ? 'Logo' : 'Banner'); ?> <span class="opt">(optional)</span></label>
+        <p class="club-meta" style="margin:0 0 10px">Click an image to upload it, then drag and zoom to frame it. Use the &times; to remove it.</p>
+        <div class="<?php echo $logoReady ? 'id-preview' . ($bannerReady ? '' : ' no-cover') : 'ev-banner-up'; ?>">
+            <?php if ($bannerReady) { ?>
             <div class="cover id-cover pj-banner-prev t<?php echo $bannerTone; ?><?php echo $bannerCur !== '' ? ' has-img' : ''; ?>" id="banner-preview" role="button" tabindex="0" aria-label="Change banner image"
                  <?php if ($bannerCur !== '') { ?>style="background-image:url('uploads/projects/<?php echo e($bannerCur); ?>')"<?php } ?>>
                 <div class="id-cta"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-9 9"/></svg><strong>Click to add a banner</strong><span>Without one, your project gets a color.</span></div>
                 <button type="button" class="id-x" id="banner-remove" aria-label="Remove banner image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
             </div>
+            <?php } ?>
+            <?php if ($logoReady) { ?>
+            <div class="id-logo-row">
+                <div class="id-logo-wrap">
+                    <div class="club-tile big t<?php echo $bannerTone; ?><?php echo $logoCur !== '' ? ' has-logo' : ''; ?>" id="logo-preview" role="button" tabindex="0" aria-label="Change project logo" data-letter="<?php echo e($logoLetter); ?>">
+                        <?php if ($logoCur !== '') { ?><img src="uploads/projects/<?php echo e($logoCur); ?>" alt=""><?php } else { echo e($logoLetter); } ?>
+                    </div>
+                    <button type="button" class="id-x" id="logo-remove" aria-label="Remove project logo" <?php echo $logoCur !== '' ? '' : 'hidden'; ?>><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+                </div>
+                <div class="id-logo-text"><strong>Project logo</strong><span>Click the logo to upload one. It's the icon shown on your dashboard and project cards.</span></div>
+            </div>
+            <?php } ?>
         </div>
+        <?php if ($bannerReady) { ?>
         <input type="file" name="banner" id="banner" accept="image/jpeg,image/png,image/webp" hidden>
         <input type="hidden" name="remove_banner" id="remove-banner" value="0">
-        <p class="hint" id="banner-msg">Shown on your project page and its card. JPG, PNG or WebP, up to 10 MB. You'll get to frame it after you choose it.</p>
+        <?php } ?>
+        <?php if ($logoReady) { ?>
+        <input type="file" name="logo" id="logo" accept="image/jpeg,image/png,image/webp" hidden>
+        <input type="hidden" name="remove_logo" id="remove-logo" value="0">
+        <?php } ?>
+        <p class="hint" id="banner-msg">JPG, PNG or WebP, up to 10 MB. You'll get to frame each image after you choose it.<?php echo $logoReady ? ' Without a logo, your project keeps its category icon.' : ''; ?></p>
     </div>
-    <?php } else { ?>
-    <div class="msg error" style="margin-bottom:18px">Project banners need a one-time upgrade. Run <strong>projects-banner.sql</strong> in phpMyAdmin to unlock them.</div>
+    <?php } ?>
+    <?php if (!$bannerReady || !$logoReady) { ?>
+    <div class="msg error" style="margin-bottom:18px">Project <?php echo (!$bannerReady && !$logoReady) ? 'banners and logos need' : (!$bannerReady ? 'banners need' : 'logos need'); ?> a one-time upgrade. Run <strong><?php echo (!$bannerReady && !$logoReady) ? 'projects-banner.sql and projects-logo.sql' : (!$bannerReady ? 'projects-banner.sql' : 'projects-logo.sql'); ?></strong> in phpMyAdmin to unlock <?php echo (!$bannerReady && !$logoReady) ? 'them' : 'it'; ?>.</div>
     <?php } ?>
 
     <div class="field">
@@ -225,19 +249,55 @@ $bannerTone  = (int)($bannerTone ?? 0) % 3;
 })();
 </script>
 
-<?php if ($bannerReady) { ?>
+<?php if ($bannerReady || $logoReady) { ?>
 <script>
-// the picker + framing editor come from image-framer.php (included at the end of the page), so wait for the page to load
+// the pickers + framing editor come from image-framer.php (included at the end of the page), so wait for the page to load
 document.addEventListener("DOMContentLoaded", function () {
-    var area = document.getElementById("banner-preview");
-    if (!area || !window.CamigoPicker) return;
+    if (!window.CamigoPicker) return;
 
-    CamigoPicker({
-        input: "banner", area: "banner-preview", removeField: "remove-banner", remove: "banner-remove", msg: "banner-msg",
-        shape: "wide", title: "Frame your banner", fileName: "banner.jpg",
-        show: function (url) { area.classList.add("has-img"); area.style.backgroundImage = "url('" + url + "')"; },
-        reset: function () { area.classList.remove("has-img"); area.style.backgroundImage = ""; }
-    });
+    var area = document.getElementById("banner-preview");
+    if (area) {
+        CamigoPicker({
+            input: "banner", area: "banner-preview", removeField: "remove-banner", remove: "banner-remove", msg: "banner-msg",
+            shape: "wide", title: "Frame your banner", fileName: "banner.jpg",
+            show: function (url) { area.classList.add("has-img"); area.style.backgroundImage = "url('" + url + "')"; },
+            reset: function () { area.classList.remove("has-img"); area.style.backgroundImage = ""; }
+        });
+    }
+
+    var logo = document.getElementById("logo-preview");
+    var logoX = document.getElementById("logo-remove");
+    if (logo) {
+        CamigoPicker({
+            input: "logo", area: "logo-preview", removeField: "remove-logo", remove: "logo-remove", msg: "banner-msg",
+            shape: "square", title: "Frame your project logo", fileName: "logo.jpg",
+            show: function (url) {
+                logo.classList.add("has-logo");
+                logo.innerHTML = "";
+                var img = document.createElement("img");
+                img.src = url;
+                img.alt = "";
+                logo.appendChild(img);
+                logoX.hidden = false;
+            },
+            reset: function () {
+                logo.classList.remove("has-logo");
+                logo.textContent = logo.getAttribute("data-letter");
+                logoX.hidden = true;
+            }
+        });
+
+        // the letter on the logo follows the project name while no logo is chosen
+        var nm = document.getElementById("title");
+        if (nm) {
+            nm.addEventListener("input", function () {
+                var t = nm.value.trim();
+                var l = t ? t.charAt(0).toUpperCase() : "P";
+                logo.setAttribute("data-letter", l);
+                if (!logo.classList.contains("has-logo")) logo.textContent = l;
+            });
+        }
+    }
 });
 </script>
 <?php } ?>
